@@ -1,0 +1,53 @@
+ASTRO:
+  'model_type' : 'LF'
+  'model_name' : 'SchCut'
+  model_par: 
+    'phistar' : 9.6e-11
+    'Lstar' : 2.1e+6
+    'alpha' : -1.87
+    'Lmin' : 5000
+  'hmf_model' : 'ST'
+  'bias_model' : 'ST99'
+  'bias_par' : 
+  'nu' : 115
+  'nuObs' : 30
+  'Mmin' : 1.e+9
+  'Mmax' : 1.e+15
+  'nM' : 500
+  'Lmin' : 10
+  'Lmax' : 1.e+8
+  'nL' : 5000
+  'v_of_M' : 'None'
+  'line_incli' : True
+VID:
+  'smooth_VID' : True
+  'Tmin_VID' : 1.0e-2
+  'Tmax_VID' : 100.
+  'Nbin_hist' : 100
+  'linear_VID_bin' : False
+  'subtract_VID_mean' : False
+  'Lsmooth_tol' : 7
+  'T0_Nlogsigma' : 4
+  'fT0_min' : 1.e-5
+  'fT0_max' : 1.e+4
+  'fT_min' : 1.e-5
+  'fT_max' : 1.e+5
+  'nfT0' : 1000
+  'lognT' : 12.47665
+  'n_leggauss_nodes_FT' : '../nodes1e5.txt'
+  'n_leggauss_nodes_IFT' : '../nodes1e4.txt'
+  'sigma_PT_stable' : 0.0
+OBS:
+  'Tsys_NEFD' : 40
+  'Nfeeds' : 19
+  'beam_FWHM' : 4.1
+  'Delta_nu' : 8
+  'dnu' : 15.6
+  'tobs' : 6000 
+  'Omega_field' : 2.25
+  'Nfield' : 1
+  'N_FG_par' : 1
+  'N_FG_perp' : 1
+  'do_FG_wedge' : False
+  'a_FG' : 0.
+  'b_FG' : 0.
