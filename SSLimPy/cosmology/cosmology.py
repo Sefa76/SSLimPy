@@ -262,6 +262,10 @@ class boltzmann_code:
             accurate_massive_neutrino_transfers=self.cambcosmopars["accurate_massive_neutrino_transfers"],
         )
 
+        ####TEXT VOMIT###
+        self.recap_camb()
+        #################
+
         cambres = camb.get_results(cambinstance)
         return cambres
 
@@ -280,8 +284,28 @@ class boltzmann_code:
         self.kmax_pk = self.classcosmopars["P_k_max_1/Mpc"]
         self.kmin_pk = 1e-4
 
+        ####TEXT VOMIT####
+        self.recap_class()
+        ##################
+
         classres.compute()
         return classres
+
+    def recap_camb(self):
+        print("")
+        print("----------CAMB Parameters--------")
+        print("")
+        for key in self.cambcosmopars:
+            print("   " + key + ": {}".format(self.cambcosmopars[key]))
+        print("")
+
+    def recap_class(self):
+        print("")
+        print("----------CLASS Parameters--------")
+        print("")
+        for key in self.classcosmopars:
+            print("   " + key + ": {}".format(self.classcosmopars[key]))
+        print("")
 
     def camb_results(self, camb, cosmopars):
         self.results = types.SimpleNamespace()

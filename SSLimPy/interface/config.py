@@ -60,6 +60,7 @@ def init(
     settings.setdefault("LP_rescale_ini_As", 2.1e-9)
     settings.setdefault("LP_rescale_boost", 2)
     settings.setdefault("nonlinear", True)
+    settings.setdefault("output", None)
 
     # Load Boltzmann solver files
     global input_type
