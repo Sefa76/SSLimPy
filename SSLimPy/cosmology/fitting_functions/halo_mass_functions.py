@@ -20,9 +20,17 @@ def ST(self, Mvec, rhoM):
     nu = (deltac / self.sigmaM) ** 2.0
     nup = 0.707 * nu
 
-    dndM = -2 * (rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) / self.sigmaM
-    dndM *= 0.3222 * (1.0 + 1.0 / nup**0.3) * np.sqrt(0.5 * nup)
-    dndM *= np.exp(-0.5 * nup) / np.sqrt(np.pi)
+    dndM = (
+        -2
+        * (rhoM / Mvec)
+        * self.dsigmaM_dM.to(self.Msunh**-1)
+        / self.sigmaM
+        * 0.3222
+        * (1.0 + 1.0 / nup**0.3)
+        * np.sqrt(0.5 * nup)
+        * np.exp(-0.5 * nup)
+        / np.sqrt(np.pi)
+    )
 
     return dndM
 
@@ -109,9 +117,11 @@ def Watson(self, Mvec, rhoM):
     b = 2.267
     c = 1.287
 
-    factor = np.exp(0.023 * (delta / 178.0 - 1.0))
-    factor *= (delta / 178.0) ** (-0.456 * OmegaM - 0.139)
-    factor *= np.exp(0.072 * (1 - delta / 178.0) / self.sigmaM**2.130)
+    factor = (
+        np.exp(0.023 * (delta / 178.0 - 1.0))
+        * (delta / 178.0) ** (-0.456 * OmegaM - 0.139)
+        * np.exp(0.072 * (1 - delta / 178.0) / self.sigmaM**2.130)
+    )
     fs = A * (self.sigmaM ** (-a) + b) * np.exp(-c / self.sigmaM**2) * factor
 
     dndM = -(rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) * fs / self.sigmaM

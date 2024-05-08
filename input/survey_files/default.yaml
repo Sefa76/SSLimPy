@@ -1,24 +1,3 @@
-ASTRO:
-  'model_type' : 'LF'
-  'model_name' : 'SchCut'
-  model_par: 
-    'phistar' : 9.6e-11
-    'Lstar' : 2.1e+6
-    'alpha' : -1.87
-    'Lmin' : 5000
-  'hmf_model' : 'ST'
-  'bias_model' : 'ST99'
-  'bias_par' : 
-  'nu' : 115
-  'nuObs' : 30
-  'Mmin' : 1.e+9
-  'Mmax' : 1.e+15
-  'nM' : 500
-  'Lmin' : 10
-  'Lmax' : 1.e+8
-  'nL' : 5000
-  'v_of_M' : 'None'
-  'line_incli' : True
 VID:
   'smooth_VID' : True
   'Tmin_VID' : 1.0e-2
@@ -33,7 +12,7 @@ VID:
   'fT_min' : 1.e-5
   'fT_max' : 1.e+5
   'nfT0' : 1000
-  'lognT' : 12.47665
+  'lognT' : 18
   'n_leggauss_nodes_FT' : '../nodes1e5.txt'
   'n_leggauss_nodes_IFT' : '../nodes1e4.txt'
   'sigma_PT_stable' : 0.0

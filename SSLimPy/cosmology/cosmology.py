@@ -8,7 +8,10 @@ from copy import deepcopy
 from warnings import warn
 
 import numpy as np
-import scipy.constants as sconst
+
+import astropy.units as u
+import astropy.constants as c
+
 from scipy.interpolate import (
     InterpolatedUnivariateSpline,
     RectBivariateSpline,
@@ -374,6 +377,14 @@ class boltzmann_code:
             ),
         )
 
+        self.results.Om_cb = InterpolatedUnivariateSpline(
+            self.results.zgrid,
+            (
+                cambres.get_Omega("cdm", z=self.results.zgrid)
+                + cambres.get_Omega("baryon", z=self.results.zgrid)
+            ),
+        )
+
         # Calculate the Non linear cb power spectrum using Gabrieles Approximation
         f_cdm = cambres.get_Omega("cdm", z=0) / self.results.Om_m(0)
         f_b = cambres.get_Omega("baryon", z=0) / self.results.Om_m(0)
@@ -540,6 +551,7 @@ class boltzmann_code:
             lambda zz: classres.sigma_cb(R=8 / h, z=zz)
         )
         self.results.Om_m = np.vectorize(classres.Om_m)
+        self.results.Om_cb= np.vectorize(lambda z: classres.Om_cdm(z)+classres.Om_b(z))
 
         # Calculate the Matter fractions for CB Powerspectrum
         f_cdm = classres.Omega0_cdm() / classres.Omega_m()
@@ -668,11 +680,11 @@ class boltzmann_code:
 
 
 class cosmo_functions:
-    c = sconst.speed_of_light / 1000  ##speed of light in km/s
+    celeritas = c.c
 
     def __init__(self, cosmopars, input=None):
         self.settings = cfg.settings
-        self.fiducialcosmopars = cfg.fiducialparams
+        self.fiducialcosmopars = cfg.fiducialcosmoparams
         self.input = input
         if input is None:
             input = cfg.input_type
@@ -711,9 +723,9 @@ class cosmo_functions:
         """
         prefactor = 1
         if physical:
-            prefactor = self.c
+            prefactor = cosmo_functions.celeritas
 
-        hubble = prefactor * self.results.h_of_z(z)
+        hubble = prefactor * self.results.h_of_z(z) * 1/u.Mpc
 
         return hubble
 
@@ -752,7 +764,7 @@ class cosmo_functions:
 
         """
 
-        dA = self.results.ang_dist(z)
+        dA = self.results.ang_dist(z) * u.Mpc
 
         return dA
 
@@ -789,11 +801,12 @@ class cosmo_functions:
         recognized and the function defaults to using `Pmm` to calculate the power spectrum of matter.
         """
         if tracer == "clustering":
-            return self.Pcb(z, k, nonlinear=nonlinear)
-
-        if tracer != "matter":
+            Ps = self.Pcb(z, k, nonlinear=nonlinear) * u.Mpc**3
+        elif tracer != "matter":
             warn("Did not recognize tracer: reverted to matter")
-        return self.Pmm(z, k, nonlinear=nonlinear)
+
+        Ps  = self.Pmm(z, k, nonlinear=nonlinear) * u.Mpc**3
+        return Ps
 
     def Pmm(self, z, k, nonlinear=False):
         """Compute the power spectrum of the total matter species  (MM) at a given redshift and wavenumber.
@@ -867,20 +880,20 @@ class cosmo_functions:
         dlnk_loc = np.mean(log_kgrid_loc[1:] - log_kgrid_loc[0:-1])
         savgol_width = self.settings["savgol_width"]
         n_savgol = int(np.round(savgol_width / np.log(1 + dlnk_loc)))
+
+        P = self.matpow(z, np.exp(log_kgrid_loc), nonlinear=nonlinear, tracer=tracer).flatten()
+        uP= P.unit
+
         intp_p = InterpolatedUnivariateSpline(
             log_kgrid_loc,
-            np.log(
-                self.matpow(
-                    z, np.exp(log_kgrid_loc), nonlinear=nonlinear, tracer=tracer
-                ).flatten()
-            ),
+            np.log(P.value),
             k=1,
         )
         pow_sg = savgol_filter(intp_p(log_kgrid_loc), n_savgol, poly_order)
         intp_pnw = InterpolatedUnivariateSpline(
             np.exp(log_kgrid_loc), np.exp(pow_sg), k=1
         )
-        return intp_pnw(k)
+        return intp_pnw(k) * uP
 
     def comoving(self, z):
         """Comoving distance
@@ -897,7 +910,7 @@ class cosmo_functions:
 
         """
 
-        chi = self.results.com_dist(z)
+        chi = self.results.com_dist(z) * u.Mpc
 
         return chi
 
@@ -921,6 +934,40 @@ class cosmo_functions:
         if tracer != "matter":
             warn("Did not recognize tracer: reverted to matter")
         return self.results.s8_of_z(z)
+
+    def sigmaR_of_z(self, z, R,tracer="matter"):
+        """sigma_8
+
+        Parameters
+        ----------
+        z     : float
+                redshift
+        R     : float, numpy.ndarray
+                Radii
+        tracer: String
+                either 'matter' if you want sigma_8 calculated from the total matter power spectrum or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
+        Returns
+        -------
+        float
+            The Variance of the matter perturbation smoothed over a scale of R in Mpc
+
+        """
+        R = np.atleast_1d(R)[None,:]
+        k = self.results.kgrid / u.Mpc
+
+
+        Pk = self.matpow(z,k,tracer=tracer)[:,None]
+        
+        x = (k[:,None] * R).to(1)
+
+        #Get Sigma window function
+        W = 3 /np.power(x,3)*(np.sin(x*u.rad)-x*np.cos(x*u.rad))
+        for ix, xi in enumerate(x):
+            if xi<0.01:
+                W[ix]=1-xi**2/10
+
+        Integr= np.power(k[:,None]*W,2)*Pk/(2*np.pi**2)
+        return np.sqrt(np.trapz(Integr,k,axis=0))
 
     def growth(self, z, k=None):
         """Growth factor
@@ -971,6 +1018,13 @@ class cosmo_functions:
             omz = self.results.Om_m(z)
 
         return omz
+
+    def Omega(self, z, tracer = "matter"):
+        if tracer == "clustering":
+            return self.results.Om_cb(z)
+        if tracer != "matter":
+            warn("Did not recognize tracer: reverted to matter")
+        return self.results.Om_m(z)
 
     def f_growthrate(self, z, k=None, gamma=False, tracer="matter"):
         """Growth rate in LCDM gamma approximation

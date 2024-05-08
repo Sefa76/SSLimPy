@@ -10,7 +10,8 @@ class sslimpy:
         camb_yaml_file = None,
         class_yaml_file = None,
         specifications = None,
-        cosmopars = dict()
+        cosmopars = dict(),
+        astropars = dict(),
     ):
 
         print("#--------------------------------------------------#")
@@ -30,12 +31,17 @@ class sslimpy:
         camb_yaml_file = camb_yaml_file,
         class_yaml_file = class_yaml_file,
         specifications = specifications,
-        cosmopars = cosmopars)
+        cosmopars = cosmopars,
+        astropars = astropars,
+        )
 
         self.settings = cfg.settings
         self.fiducialcosmo = cfg.fiducialcosmo
-        self.fiducialparams = cfg.fiducialparams
-        self.astropars = cfg.astropars
+        self.fiducialcosmoparams = cfg.fiducialcosmoparams
+
+        self.fiducialastro = cfg.fiducialastro
+        self.fiducialastroparams = cfg.fiducialastroparams
+
         self.obspars = cfg.obspars
         self.vidpars = cfg.vidpars
         self.output = cfg.settings["output"]
@@ -74,9 +80,6 @@ class sslimpy:
         for key in cfg.settings:
             print("   " + key + ": {}".format(cfg.settings[key]))
         print("")
-        print("Astronomical Parameters:")
-        for key in cfg.astropars:
-            print("   " + key + ": {}".format(cfg.astropars[key]))
         print("Observational Parameters:")
         for key in cfg.obspars:
             print("   " + key + ": {}".format(cfg.obspars[key]))

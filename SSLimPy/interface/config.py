@@ -11,13 +11,15 @@ from astropy import units as u
 import numpy as np
 
 from SSLimPy.cosmology import cosmology
+from SSLimPy.cosmology import astro
 
 def init(
     settings_dict = dict(),
     camb_yaml_file = None,
     class_yaml_file = None,
     specifications = None,
-    cosmopars = dict()
+    cosmopars = dict(),
+    astropars = dict()
 ):
     """This class is to handle the configuration for the computation as well as the fiducial parameters. It then gives access to all global variables
 
@@ -62,6 +64,12 @@ def init(
     settings.setdefault("nonlinear", True)
     settings.setdefault("output", None)
 
+    settings.setdefault('savgol_window', 101)
+    settings.setdefault('savgol_polyorder', 3)
+    settings.setdefault('savgol_width', 1.358528901113328)
+    settings.setdefault('savgol_internalsamples', 800)
+    settings.setdefault('savgol_internalkmin', 0.001)
+
     # Load Boltzmann solver files
     global input_type
     input_type = settings["code"]
@@ -103,20 +111,6 @@ def init(
         file_content_specs = yaml.safe_load(open(os.path.join(file_location,"../../input/survey_files/default.yaml")))
 
     # restore units and fill seperate spec dirs
-    global astropars
-    astropars = copy(file_content_specs["ASTRO"])
-
-    astropars["nu"] *= u.GHz
-    astropars["nuObs"] *= u.GHz
-    astropars["Mmin"] *= u.Msun
-    astropars["Mmax"] *= u.Msun
-    astropars["Lmin"] *= u.Lsun
-    astropars["Lmax"] *= u.Lsun
-
-    if astropars["model_name"] == "SchCut" or astropars["model_name"] == "Sch":
-        astropars["model_par"]["phistar"] *= u.Lsun**-1*u.Mpc**-3
-        astropars["model_par"]["Lstar"] *= u.Lsun
-        astropars["model_par"]["Lmin"] *= u.Lsun
 
     global vidpars
     vidpars = copy(file_content_specs["VID"])
@@ -128,7 +122,7 @@ def init(
     vidpars["fT_min"] *= u.uK**-1
     vidpars["fT_max"] *= u.uK**-1
     vidpars["sigma_PT_stable"] *= u.uK
-    vidpars["nT"]=np.exp(vidpars["lognT"])
+    vidpars["nT"]=int(np.power(2,vidpars["lognT"]))
 
     global obspars
     obspars = copy(file_content_specs["OBS"])
@@ -141,8 +135,14 @@ def init(
     obspars["Omega_field"] *= u.deg**2
     obspars["a_FG"] *= u.Mpc**-1
 
-    global fiducialparams
-    fiducialparams = cosmopars
+    global fiducialcosmoparams
+    fiducialcosmoparams = cosmopars
+
+    global fiducialastroparams
+    fiducialastroparams = astropars
 
     global fiducialcosmo
     fiducialcosmo = cosmology.cosmo_functions(cosmopars,input_type)
+
+    global fiducialastro
+    fiducialastro = astro.astro_functions(cosmopars, astropars)

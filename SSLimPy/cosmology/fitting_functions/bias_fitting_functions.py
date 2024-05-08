@@ -178,7 +178,7 @@ def Seljak04_Cosmo(self, dc, nu):
         * (
             a1 * (Om0m - 0.3 + ns - 1.0)
             + a2 * (self.s8 - 0.9 + self.hubble - 0.7)
-            + a4 * nrun
+            + a3 * nrun
         )
     )
 
