@@ -85,7 +85,11 @@ class boltzmann_code:
         # Set default value for ns if it is not found in cosmopars
         primordial_tilt = ["ns", "n_s"]
         if not any(par in self.cosmopars for par in primordial_tilt):
-            self.cosmopars["ns"] = self.cosmopars.get("ns", 0.96)
+            self.cosmopars["ns"] = 0.96
+
+        primordial_running = ["alpha_s", "nrun"]
+        if not any(par in self.cosmopars for par in primordial_running):
+            self.cosmopars["alpha_s"] = 0.0
 
         # Set default value for sigma8 if neither sigma8 or As or logAs or 10^9As are passed
         primordial_amplitude = ["sigma8", "As", "logAs", "10^9As", "ln_A_s_1e10"]
@@ -126,6 +130,9 @@ class boltzmann_code:
 
         if "ns" in classpars:
             classpars["n_s"] = classpars.pop("ns")
+
+        if "nrun" in classpars:
+            classpars["alpha_s"] = classpars.pop("nrun")
 
         if "w0" in classpars:
             classpars["w0_fld"] = classpars.pop("w0")
@@ -176,6 +183,9 @@ class boltzmann_code:
             cambpars["omk"] = cambpars.pop("Omegak")
         if "w0" in cambpars:
             cambpars["w"] = cambpars.pop("w0")
+
+        if "alpha_s" in cambpars:
+            cambpars["nrun"] = cambpars.pop("alpha_s")
 
         if "Neff" in cambpars:
             Neff = cambpars.pop("Neff")
@@ -265,9 +275,10 @@ class boltzmann_code:
             accurate_massive_neutrino_transfers=self.cambcosmopars["accurate_massive_neutrino_transfers"],
         )
 
-        ####TEXT VOMIT###
-        self.recap_camb()
-        #################
+        ### TEXT VOMIT ###
+        if cfg.settings["verbosity"]>1:
+            self.recap_camb()
+        ##################
 
         cambres = camb.get_results(cambinstance)
         return cambres
@@ -287,8 +298,9 @@ class boltzmann_code:
         self.kmax_pk = self.classcosmopars["P_k_max_1/Mpc"]
         self.kmin_pk = 1e-4
 
-        ####TEXT VOMIT####
-        self.recap_class()
+        ### TEXT VOMIT ###
+        if cfg.settings["verbosity"]>1:
+            self.recap_class()
         ##################
 
         classres.compute()
@@ -535,6 +547,9 @@ class boltzmann_code:
         self.results.s8_cb_of_z = get_sigma8_cb(self.results.zgrid)
         self.results.s8_of_z = get_sigma8(self.results.zgrid)
 
+        self.results.kmin_pk = self.kmin_pk
+        self.results.kmax_pk = self.kmax_pk
+
         if self.cambcosmopars["Want_CMB"]:
             powers = cambres.get_cmb_power_spectra(CMB_unit="muK")
             self.results.camb_cmb = powers["total"]
@@ -674,6 +689,9 @@ class boltzmann_code:
             )
             return f_cb_z, z_array
 
+        self.results.kmin_pk = self.kmin_pk
+        self.results.kmax_pk = self.kmax_pk
+
         f_cb_z_k_array, z_array = f_cb_deriv(self.results.kgrid)
         f_g_cb_kz = RectBivariateSpline(z_array, self.results.kgrid, f_cb_z_k_array.T)
         self.results.f_growthrate_cb_zk = f_g_cb_kz
@@ -684,6 +702,7 @@ class cosmo_functions:
 
     def __init__(self, cosmopars, input=None):
         self.settings = cfg.settings
+        self.input_cosmoparams = cosmopars
         self.fiducialcosmopars = cfg.fiducialcosmoparams
         self.input = input
         if input is None:
@@ -773,7 +792,7 @@ class cosmo_functions:
 
         Parameters
         ----------
-        z : float
+        z : array_like
             The redshift of interest.
 
         k : array_like
@@ -952,22 +971,18 @@ class cosmo_functions:
             The Variance of the matter perturbation smoothed over a scale of R in Mpc
 
         """
-        R = np.atleast_1d(R)[None,:]
-        k = self.results.kgrid / u.Mpc
+        R = np.atleast_1d(R)[None,:,None]
+        z = np.atleast_1d(z)[None,None,:]
+        k = np.geomspace(self.results.kmin_pk,self.results.kmax_pk,400) / u.Mpc
+        x = (k[:,None,None] * R).to(1)
 
-
-        Pk = self.matpow(z,k,tracer=tracer)[:,None]
-        
-        x = (k[:,None] * R).to(1)
-
+        Pk = self.matpow(z,k[:,None,None],tracer=tracer)
         #Get Sigma window function
         W = 3 /np.power(x,3)*(np.sin(x*u.rad)-x*np.cos(x*u.rad))
-        for ix, xi in enumerate(x):
-            if xi<0.01:
-                W[ix]=1-xi**2/10
+        W[np.where(x<0.01)] = 1 - np.power(x[np.where(x<0.01)],2) / 10
 
-        Integr= np.power(k[:,None]*W,2)*Pk/(2*np.pi**2)
-        return np.sqrt(np.trapz(Integr,k,axis=0))
+        Integr= np.power(k[:,None,None]*W,2)*Pk/(2*np.pi**2)
+        return np.squeeze(np.sqrt(np.trapz(Integr,k,axis=0)))
 
     def growth(self, z, k=None):
         """Growth factor
@@ -1011,11 +1026,8 @@ class cosmo_functions:
         .. math::
             Omega_m(z) = Omega_{m,0}*(1+z)^3 / E^2(z)
         """
-        omz = 0
-        if self.input == "external":
-            omz = (self.cosmopars["Omegam"] * (1 + z) ** 3) / self.E_hubble(z) ** 2
-        else:
-            omz = self.results.Om_m(z)
+
+        omz = self.results.Om_m(z)
 
         return omz
 
@@ -1104,11 +1116,6 @@ class cosmo_functions:
             mu = 1 + E11 * Omega_DE
             eta = 1 + E22 * Omega_DE
             Sigma = (mu / 2) * (1 + eta)
-        elif (
-            self.settings["external_activateMG"] is True
-            or self.settings["activateMG"] == "external"
-        ):
-            Sigma = self.results.SigWL_zk(z, k, grid=False)
 
         return Sigma
 

@@ -43,6 +43,13 @@ def init(
     settings.setdefault("cosmo_model", "LCDM")
     settings.setdefault("code", "camb")
     settings.setdefault("h-units", False)
+    settings.setdefault('savgol_window', 101)
+    settings.setdefault('savgol_polyorder', 3)
+    settings.setdefault('savgol_width', 1.358528901113328)
+    settings.setdefault('savgol_internalsamples', 800)
+    settings.setdefault('savgol_internalkmin', 0.001)
+
+    # Pk Settings
     settings.setdefault("kmin", 1.e-2 * u.Mpc**-1)
     settings.setdefault("kmax", 10 * u.Mpc**-1)
     settings.setdefault("nk",100)
@@ -57,18 +64,15 @@ def init(
     settings.setdefault("FoG_damp", "Lorentzian")
     settings.setdefault("smooth", False)
     settings.setdefault("do_conv_Wkmin", False)
-    settings.setdefault("nonlinear", False)
     settings.setdefault("share_delta_neff", True)
     settings.setdefault("LP_rescale_ini_As", 2.1e-9)
     settings.setdefault("LP_rescale_boost", 2)
     settings.setdefault("nonlinear", True)
-    settings.setdefault("output", None)
 
-    settings.setdefault('savgol_window', 101)
-    settings.setdefault('savgol_polyorder', 3)
-    settings.setdefault('savgol_width', 1.358528901113328)
-    settings.setdefault('savgol_internalsamples', 800)
-    settings.setdefault('savgol_internalkmin', 0.001)
+    # Output settings
+    settings.setdefault("verbosity",1)
+    settings.setdefault("output", None)
+    settings.setdefault("z_output",[0])
 
     # Load Boltzmann solver files
     global input_type

@@ -46,9 +46,10 @@ class sslimpy:
         self.vidpars = cfg.vidpars
         self.output = cfg.settings["output"]
 
-        #### TEXT VOMIT ####
-        self.recap_options()
-        ####################
+        ### TEXT VOMIT ###
+        if cfg.settings["verbosity"]>1:
+            self.recap_options()
+        ##################
 
     def compute(self, cosmology):
         if self.output is not None:
