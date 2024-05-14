@@ -36,22 +36,28 @@ class astro_functions:
         else:
             self.cosmology = cosmology.cosmo_functions(cosmopars, cfg.input_type)
 
-        # Check passed models
-        # self.check_model()
-        # self.check_halo_mass_function_model()
-        self.init_bias_model()
-
-        # current Units
+        # Current units
         self.hubble = self.cosmology.Hubble(0,True)/  (100 * u.km/u.s/u.Mpc)
         self.Mpch = u.Mpc / self.hubble
         self.Msunh = u.Msun / self.hubble
         self.rho_crit = 2.77536627e11*(self.Msunh*self.Mpch**-3).to(u.Msun*u.Mpc**-3) #Msun/Mpc^3
 
+        # Internal samples for computations
         self.M = np.geomspace(self.astroparams["Mmin"],self.astroparams["Mmax"],self.astroparams["nM"])
         self.L = np.geomspace(self.astroparams["Lmin"],self.astroparams["Lmax"],self.astroparams["nL"])
-        self.z = cfg.settings["z_output"]
+        # find the redshifts for fequencies asked for:
+        self.nu = self.astroparams["nu"]
+        self.nuObs = self.astroparams["nuObs"]
+        self.z = (self.astroparams["nu"] / self.astroparams["nuObs"]).to(1).value - 1
 
         self.sigmaM, self.dsigmaM_dM = self.compute_sigmaM_funcs(self.M,self.z)
+
+        # Check passed models
+        # self.check_model()
+        # self.check_halo_mass_function_model()
+        # self.init_bias_model()
+
+        pebis = ml.mass_luminosity(self)
 
     def sigmaM_of_z(self, M, z, tracer = "clustering"):
         '''
@@ -145,23 +151,24 @@ class astro_functions:
                 raise ValueError(model_name+
                         " not found in luminosity_functions.py")
                 
-    def init_bias_model(self):
+    def init_bias_function(self):
         '''
-        Check if model given by bias_model exists in the given model_type
+        Initialise computation of bias function if model given by bias_model exists in the given model_type
         '''
         bias_name = self.astroparams["bias_model"]
-        self.bias_functions = bf.bias_fittinig_functions(self)
-        if not hasattr(self.bias_functions,bias_name):
+        self.bias_function = bf.bias_fittinig_functions(self)
+        if not hasattr(self.bias_function,bias_name):
             raise ValueError(bias_name+
                         " not found in bias_fitting_functions.py")
                         
-    def check_halo_mass_function_model(self):
+    def init_halo_mass_function(self):
         '''
-        Check if model given by hmf_model exists in the given model_type
+        Initialise computation of halo mass function if model given by hmf_model exists in the given model_type
         '''
         hmf_model = self.astroparams["hmf_model"]
+        self.halo_mass_function = HMF.halo_mass_functions(self)
 
-        if not hasattr(HMF,hmf_model):
+        if not hasattr(self.halo_mass_function,hmf_model):
             raise ValueError(hmf_model+
                         " not found in halo_mass_functions.py")
 

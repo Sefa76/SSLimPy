@@ -72,7 +72,6 @@ def init(
     # Output settings
     settings.setdefault("verbosity",1)
     settings.setdefault("output", None)
-    settings.setdefault("z_output",[0])
 
     # Load Boltzmann solver files
     global input_type

@@ -1,0 +1,9 @@
+#Fitting parameters for SFR(M) derived from Millenium simulations.
+# Average of De Lucia & Blaizot 2007 and Guo et al. 2011
+# z		M0		Mb		Mc		a		b		c
+0.		3e-10	6e10	1e12	3.15	-1.7	-1.7
+1.		1.7e-9	9e10	2e12	2.9		-1.4	-2.1
+2.		4e-9	7e10	2e12	3.1		-2.0	-1.5
+3.		1.1e-8	5e10	3e12	3.1		-2.1	-1.5
+4.		6.6e-8	5e10	2e12	2.9		-2.0	-1.
+5.		7e-7	6e10	2e12	2.5		-1.6	-1.
