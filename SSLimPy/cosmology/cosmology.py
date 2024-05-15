@@ -281,7 +281,7 @@ class boltzmann_code:
         ##################
 
         cambres = camb.get_results(cambinstance)
-        return cambres
+        return cambres, cambinstance
 
     def ready_class(self, cosmopars, Class):
 
@@ -324,7 +324,7 @@ class boltzmann_code:
 
     def camb_results(self, camb, cosmopars):
         self.results = types.SimpleNamespace()
-        cambres = self.ready_camb(cosmopars,camb)
+        cambres, cambinstance = self.ready_camb(cosmopars,camb)
 
         Pk_l, self.results.zgrid, self.results.kgrid = (
             cambres.get_matter_power_interpolator(
@@ -355,6 +355,11 @@ class boltzmann_code:
             extrap_kmax=100,
             return_z_k=True,
         )
+
+        pk_prim = cambinstance.scalar_power(self.results.kgrid)* (2.0 * np.pi**2) / np.power(self.results.kgrid, 3)
+        lgpk_prim = np.log10(pk_prim)
+        lgk = np.log10(self.results.kgrid)
+        self.results.P_scalar = UnivariateSpline(lgk,lgpk_prim)
 
         self.results.Pk_l = RectBivariateSpline(
             self.results.zgrid,
@@ -609,6 +614,10 @@ class boltzmann_code:
             / np.power(k, 3)
         )
 
+        lgpk_prim = np.log10(pk_prim)
+        lgk = np.log10(k)
+        self.results.P_scalar = UnivariateSpline(lgk,lgpk_prim)
+
         pk_cnu = T_nu * T_cb * pk_prim[:, None]
         pk_nunu = T_nu * T_nu * pk_prim[:, None]
         Pk_cb_nl = (
@@ -787,6 +796,11 @@ class cosmo_functions:
 
         return dA
 
+    def primordial_scalar_pow(self, k):
+        lgk = np.log10(k)
+        pk = np.power(10,self.results.P_scalar(lgk))
+        return pk * u.Mpc**3
+
     def matpow(self, z, k, nonlinear=False, tracer="matter"):
         """Calculates the power spectrum of a given tracer quantity at a specific redshift and wavenumber.
 
@@ -820,12 +834,17 @@ class cosmo_functions:
         recognized and the function defaults to using `Pmm` to calculate the power spectrum of matter.
         """
         if tracer == "clustering":
-            Ps = self.Pcb(z, k, nonlinear=nonlinear) * u.Mpc**3
+            return self.Pcb(z, k, nonlinear=nonlinear) * u.Mpc**3
         elif tracer != "matter":
             warn("Did not recognize tracer: reverted to matter")
-
-        Ps  = self.Pmm(z, k, nonlinear=nonlinear) * u.Mpc**3
-        return Ps
+        return self.Pmm(z, k, nonlinear=nonlinear) * u.Mpc**3
+    
+    def Transfer(self,z,k, nonlinear=False, tracer="matter"):
+        z =np.atleast_1d(z)[:,None]
+        k =np.atleast_1d(k)[None,:]
+        matpow = np.atleast_2d(self.matpow(z,k,nonlinear=nonlinear,tracer=tracer))
+        primordial = np.atleast_1d(self.primordial_scalar_pow(k))[None,:]
+        return np.squeeze(np.sqrt(matpow/primordial))
 
     def Pmm(self, z, k, nonlinear=False):
         """Compute the power spectrum of the total matter species  (MM) at a given redshift and wavenumber.

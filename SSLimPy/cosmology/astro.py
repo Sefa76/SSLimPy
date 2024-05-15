@@ -53,12 +53,45 @@ class astro_functions:
         self.sigmaM, self.dsigmaM_dM = self.compute_sigmaM_funcs(self.M,self.z)
 
         # Check passed models
-        # self.check_model()
-        # self.check_halo_mass_function_model()
-        # self.init_bias_model()
+        self.init_model()
+        self.init_halo_mass_function()
+        self.init_bias_function()
 
-        pebis = ml.mass_luminosity(self)
+        # bias function 
+        # !Without Corrections for nongaussianity!
+        delta_crit = 1.686
+        self.b_of_M = getattr(self.bias_function,self.astroparams["bias_model"])(dc=delta_crit,nu=delta_crit/self.sigmaM)
 
+        # halo mass function
+        m_input = self.M.to(self.Msunh)
+        rho_input = 2.77536627e11* self.cosmology.Omega(0,"clustering")*(self.Msunh*self.Mpch**-3).to(self.Msunh*self.Mpch**-3)
+        self.dn_dM_of_M = getattr(self.halo_mass_function,self.astroparams["hmf_model"])(m_input,rho_input)
+
+        if "ML" in self.astroparams["model_type"]:
+            self.L_of_M  = getattr(self.mass_luminosity_function,self.astroparams["model_name"])(self.M.to(u.Msun),self.z)
+
+            sigma = np.maximum(cfg.settings["sigma_scatter"],0.05)
+            # Special case for Tony Li model- scatter does not preserve LCO
+            if self.model_name=='TonyLi':
+                alpha = self.model_par['alpha']
+                sig_SFR = self.model_par['sig_SFR']
+                #assume sigma and sig_SFR are totally uncorrelated
+                sigma = (sigma**2 + sig_SFR**2/alpha**2)**0.5
+            sigma_base_e = sigma*2.302585
+
+            L_of_M_and_z = np.atleast_2d(self.L_of_M)
+            dn_dM_of_M_and_z = np.atleast_2d(self.dn_dM_of_M)
+            flognorm =  self.lognormal(self.L[None,:,None],np.log(L_of_M_and_z.value)[:,None,:]-0.5*sigma_base_e**2.,sigma_base_e)
+            CFL = flognorm * dn_dM_of_M_and_z[:,None,:]
+            self.dn_dL_of_L = np.squeeze(np.trapz(CFL,self.M,axis=0))
+
+        elif "LF" in self.astroparams["model_type"]:
+            LF_par = {'A':1.,'b':1.,'Mcut_min':self.astroparams["Mmin"],'Mcut_max':self.astroparams["Mmax"]}
+            off_mass_luminosity = ml.mass_luminosity(self,LF_par)
+            self.L_of_M = getattr(off_mass_luminosity,'MassPow')(self.M.to(u.Msun),self.z)
+
+            self.dn_dL_of_L = getattr(self.luminosity_function,self.astroparams["model_name"])(self.L.to(u.Lsun))
+ 
     def sigmaM_of_z(self, M, z, tracer = "clustering"):
         '''
         Mass (or cdm+b) variance at target redshift
@@ -92,6 +125,15 @@ class astro_functions:
     # Helper Functions
     ##################
     # To be Outsorced
+    def lognormal(self, x,mu,sigma):
+        '''
+        Returns a lognormal PDF as function of x with mu and sigma 
+        being the mean of log(x) and standard deviation of log(x), respectively
+        '''
+        try: 
+            return 1/x/sigma/(2.*np.pi)**0.5*np.exp(-(np.log(x.value) - mu)**2/2./sigma**2)
+        except:
+            return 1/x/sigma/(2.*np.pi)**0.5*np.exp(-(np.log(x) - mu)**2/2./sigma**2)
 
     def set_astrophysics_defaults(self):
         """
@@ -128,22 +170,25 @@ class astro_functions:
         self.astroparams.setdefault("v_of_M", None)
         self.astroparams.setdefault("line_incli", True)
 
-    def check_model(self):
+    def init_model(self):
         '''
         Check if model given by model_name exists in the given model_type
         '''
         model_type = self.astroparams["model_type"]
         model_name = self.astroparams["model_name"]
+        self.luminosity_function = lf.luminosity_functions(self)
+        self.mass_luminosity_function = ml.mass_luminosity(self)
 
-        if model_type=='ML' and not hasattr(ml,model_name):
-            if hasattr(lf,model_name):
+        if model_type=='ML' and not hasattr(self.mass_luminosity_function,model_name):
+            if hasattr(self.luminosity_function,model_name):
                 raise ValueError(model_name+" not found in mass_luminosity.py."+
                         " Set model_type='LF' to use "+model_name)
             else:
                 raise ValueError(model_name+
                         " not found in mass_luminosity.py")
-        elif model_type=='LF' and not hasattr(lf,model_name):
-            if hasattr(ml,model_name):
+
+        elif model_type=='LF' and not hasattr(self.luminosity_function,model_name):
+            if hasattr(self.mass_luminosity_function,model_name):
                 raise ValueError(model_name+
                         " not found in luminosity_functions.py."+
                         " Set model_type='ML' to use "+model_name)

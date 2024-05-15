@@ -11,10 +11,14 @@ import astropy.units as u
 from copy import deepcopy
 
 class luminosity_functions:
-    def __init__(self,astro):
+    def __init__(self,astro,model_par=dict()):
         self.astro = astro
         self.astroparams = deepcopy(astro.astroparams)
-        self.model_par = self.astroparams["model_par"]
+        
+        if model_par:
+            self.model_par = model_par
+        else:
+            self.model_par = self.astroparams["model_par"]
 
     def Sch(self, Lvec):
         """

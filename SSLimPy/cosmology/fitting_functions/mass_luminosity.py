@@ -23,10 +23,14 @@ import os
 
 class mass_luminosity:
 
-    def __init__(self, astro):
+    def __init__(self, astro, model_par=dict()):
         self.astro = astro
         self.astroparams = deepcopy(astro.astroparams)
-        self.model_par = self.astroparams["model_par"]
+        
+        if model_par:
+            self.model_par = model_par
+        else:
+            self.model_par = self.astroparams["model_par"]
 
         self.SFR_folder= "".join(os.path.dirname(os.path.realpath(__file__)).split("SSLimPy")[:-2])+"SSLimPy/SFR_tables/"
 
