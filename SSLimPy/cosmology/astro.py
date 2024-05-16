@@ -57,10 +57,10 @@ class astro_functions:
         self.init_halo_mass_function()
         self.init_bias_function()
 
-        # bias function 
+        # bias function
         # !Without Corrections for nongaussianity!
-        delta_crit = 1.686
-        self.b_of_M = getattr(self.bias_function,self.astroparams["bias_model"])(dc=delta_crit,nu=delta_crit/self.sigmaM)
+        self.delta_crit = 1.686
+        self.b_of_M = getattr(self.bias_function,self.astroparams["bias_model"])(dc=self.delta_crit,nu=self.delta_crit/self.sigmaM)
 
         # halo mass function
         m_input = self.M.to(self.Msunh)
@@ -91,7 +91,7 @@ class astro_functions:
             self.L_of_M = getattr(off_mass_luminosity,'MassPow')(self.M.to(u.Msun),self.z)
 
             self.dn_dL_of_L = getattr(self.luminosity_function,self.astroparams["model_name"])(self.L.to(u.Lsun))
- 
+
     def sigmaM_of_z(self, M, z, tracer = "clustering"):
         '''
         Mass (or cdm+b) variance at target redshift
@@ -100,7 +100,7 @@ class astro_functions:
         R = (3.0*M/(4.0*np.pi*rhoM))**(1.0/3.0)
 
         return self.cosmology.sigmaR_of_z(z,R,tracer)
-    
+
     def compute_sigmaM_funcs(self, M, z, tracer="clustering"):
         sigmaM = self.sigmaM_of_z(M,z,tracer=tracer)
         sigmaMpe = self.sigmaM_of_z(M*(1+1e-2),z,tracer=tracer)
@@ -121,19 +121,174 @@ class astro_functions:
 
         return mass_non_linear.to(self.Msunh)
 
+    def S3_dS3(self,M,z,tracer="clustering"):
+        '''
+        The skewness and derivative with respect to mass of the skewness.
+        Used to calculate the correction to the HMF due to non-zero fnl,
+        as presented in 2009.01245.
+
+        Their parameter k_cut is equivalent to our klim, not to be confused
+        with the ncdm parameter. k_lim represents the cutoff in the skewness
+        integral, we opt for no cutoff and thus set it to a very small value.
+        This can be changed if necessary.
+        '''
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+
+        rhoM = self.rho_crit*self.cosmology.Omega(0,tracer=tracer)
+        R = (3.0*M/(4.0*np.pi*rhoM))**(1.0/3.0)
+
+        kmin= self.cosmology.results.kmin_pk
+        kmax= self.cosmology.results.kmax_pk
+        k = np.geomspace(kmin,kmax,128) / u.Mpc
+        mu= np.linspace(-0.995,0.995,128)
+
+        # Why Numpy is just the best
+
+        #############################
+        # Indicies k1, k2, mu, M, z #
+        #############################
+
+        # funnctions of k1 or k2 only
+        P_phi = 9/25 * self.cosmology.primordial_scalar_pow(k)
+        k_1 = k[:,None,None,None,None]
+        k_2 = k[None,:,None,None,None]
+        P_1 = P_phi[:,None,None,None,None]
+        P_2 = P_phi[None,:,None,None,None]
+        # functions of k1 or k2 and M
+        tM = M[None,:]
+        tR = R[None,:]
+        tk = k[:,None]
+        j1 = self.j1(tR*tk)
+        dj1_dM = self.dj1(tR*tk) * (tk*tR)/(3 * tM)
+        j1_1 = j1[:,None,None,:,None]
+        j1_2 = j1[None,:,None,:,None]
+        dj1_dM_1 = dj1_dM[:,None,None,:,None]
+        dj1_dM_2 = dj1_dM[None,:,None,:,None]
+        # functions of k1 or k2 and z
+        Tm = -5/3 * np.atleast_2d(self.cosmology.Transfer(z,k,nonlinear=False,tracer=tracer)).T
+        Tm_1 = Tm[:,None,None,None,:]
+        Tm_2 = Tm[None,:,None,None,:]
+        # functions of k1, k2, and mu
+        tk_1 = k[:,None,None]
+        tk_2 = k[None,:,None]
+        tmu = mu[None,None,:]
+        k_12 = np.sqrt(np.power(tk_1,2)+np.power(tk_2,2)+2*tk_1*tk_2*tmu)
+        # functions of k1, k2, mu, and M
+        tR = R[None,:]
+        tk = k_12.flatten()[:,None]
+        kmask = np.where((tk>kmin) and (tk<kmask))
+        tx = tR * tk
+        j1_12 = np.zeros_like(tx)
+        dj1_dM_12 = np.zeros_like(tx)
+        j1_12[kmask,:] = self.j1(tx[kmask,:])
+        dj1_dM_12[kmask,:] = self.dj1(tx[kmask,:])*tx[kmask,:]/ (3 * tM)
+        j1_12= np.reshape(j1_12,(len(k),len(k),len(mu),len(M)))[:,:,:,:,None]
+        dj1_dM_12= np.reshape(dj1_dM_12,(len(k),len(k),len(mu),len(M)))[:,:,:,:,None]
+        # functions of k1, k2, mu, and z
+        Tm_12 = np.zeros((len(tk),len(z)))
+        Tm_12[kmask,:] = -5/3 * np.atleast_2d(self.cosmology.Transfer(z,tk[kmask],nonlinear=False,tracer=tracer)).T
+        Tm_12 = np.reshape(Tm_12,(len(k),len(k),len(mu),len(z)))[:,:,:,None,:]
+
+        # Integrandts
+        W = j1_1 * j1_2 * j1_12
+        dW_dM = j1_1 * j1_2 * dj1_dM_12 + j1_1 * dj1_dM_2 * j1_12 + dj1_dM_1 * j1_2 * j1_12
+
+        integ_S3 =  np.power(k_1,2) * np.power(k_2,2)* W * Tm_1 * Tm_2 * Tm_12 * P_1 * P_2
+        integ_dS3_dM = np.power(k_1,2) * np.power(k_2,2)* dW_dM * Tm_1 * Tm_2 * Tm_12 * P_1 * P_2
+
+        # The integration
+        S3 = np.trapz(integ_S3,k,axis=0)
+        S3 = np.trapz(S3,k,axis=0)
+        S3 = np.trapz(S3,mu,axis=0)
+        dS3_dM = np.trapz(integ_dS3_dM,k,axis=0)
+        dS3_dM = np.trapz(dS3_dM,k,axis=0)
+        dS3_dM = np.trapz(dS3_dM,mu,axis=0)
+
+        fac = self.cosmology.input_cosmoparams["f_NL"]*6/8/np.pi**4
+        S3 = -1 * fac * np.squeeze(S3)
+        dS3_dm = -1 * fac * np.squeeze(dS3_dm)
+        return -S3, dS3_dm
+
+    def kappa3_dkappa3(self,M,z,tracer="clustering"):
+        '''
+        Calculates kappa_3 its derivative with respect to halo mass M from 2009.01245
+        '''
+        S3, dS3_dM = self.S3_dS3(M,z,tracer=tracer)
+        sigmaM, dSigmaM = self.compute_sigmaM_funcs(M,z,tracer=tracer)
+
+        kappa3 = S3/sigmaM
+        dkappa3dM = (dS3_dM - 3 * S3 * dSigmaM / sigmaM) /(self.sigmaM**3)
+
+        return kappa3, dkappa3dM
+
+    def Delta_HMF(self,M,z,tracer="clustering"):
+        '''
+        The correction to the HMF due to non-zero f_NL, as presented in 2009.01245.
+        '''
+        sigmaM, dSigmaM = self.compute_sigmaM_funcs(M,z,tracer=tracer)
+
+        nuc = 1.42/sigmaM
+        dnuc_dM = -1.42*dSigmaM/(sigmaM)**2
+
+        kappa3, dkappa3_dM = self.kappa3_dkappa3(M,z,tracer=tracer)
+
+        H2nuc = nuc**2-1
+        H3nuc = nuc**3-3*nuc
+
+        F1pF0p = (kappa3*H3nuc - H2nuc*dkappa3_dM/dnuc_dM )/6
+
+        return F1pF0p
+
+    def Delta_b(self,M,z,k,tracer="clustering"):
+        """
+        Scale dependent correction to the halo bias in presence of primordial non-gaussianity
+        """
+
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+        k = np.atleast_1d(k)
+
+        Tk = (self.cosmology.Transfer(z,k)).T
+        sigmaM = self.sigmaM_of_z(M,z,tracer=tracer)
+        bias = getattr(self.bias_function,self.astroparams["bias_model"])(dc=self.delta_crit,nu=self.delta_crit/sigmaM)
+
+        f1 =  (self.cosmology.Hubble(0,physical=True) / (c.c  * k)).to(1).value
+        f2 = 3*self.cosmology.Omega(0,tracer=tracer)*self.cosmology.input_cosmoparams["f_NL"]
+
+        f1_of_k = f1[None,None,:]
+        Tk_of_k_and_z = np.atleast_2d(Tk)[None,:,:]
+        bias_of_M_and_z = np.atleast_2d(bias)[:,:,None]
+
+        #Compute non-Gaussian correction Delta_b
+        delta_b = (bias_of_M_and_z-1)*f2* f1_of_k/Tk_of_k_and_z
+        return np.squeeze(delta_b)
+
     ##################
     # Helper Functions
     ##################
     # To be Outsorced
     def lognormal(self, x,mu,sigma):
         '''
-        Returns a lognormal PDF as function of x with mu and sigma 
+        Returns a lognormal PDF as function of x with mu and sigma
         being the mean of log(x) and standard deviation of log(x), respectively
         '''
-        try: 
+        try:
             return 1/x/sigma/(2.*np.pi)**0.5*np.exp(-(np.log(x.value) - mu)**2/2./sigma**2)
         except:
             return 1/x/sigma/(2.*np.pi)**0.5*np.exp(-(np.log(x) - mu)**2/2./sigma**2)
+
+    def j1(self,x):
+        W = 3 /np.power(x,3)*(np.sin(x*u.rad)-x*np.cos(x*u.rad))
+        W[np.where(x<0.01)] = 1 - np.power(x[np.where(x<0.01)],2) / 10
+
+        return W
+
+    def dj1(self,x):
+        dW = 3 /np.power(x,2)*np.sin(x*u.rad) -9 /np.power(x,4)*(np.sin(x*u.rad) - x*np.cos(x*u.rad))
+        dW[np.where(x<0.01)] = -x/5 + np.power(x,3)/70
+
+        return dW
 
     def set_astrophysics_defaults(self):
         """
@@ -195,7 +350,7 @@ class astro_functions:
             else:
                 raise ValueError(model_name+
                         " not found in luminosity_functions.py")
-                
+
     def init_bias_function(self):
         '''
         Initialise computation of bias function if model given by bias_model exists in the given model_type
@@ -205,7 +360,7 @@ class astro_functions:
         if not hasattr(self.bias_function,bias_name):
             raise ValueError(bias_name+
                         " not found in bias_fitting_functions.py")
-                        
+
     def init_halo_mass_function(self):
         '''
         Initialise computation of halo mass function if model given by hmf_model exists in the given model_type

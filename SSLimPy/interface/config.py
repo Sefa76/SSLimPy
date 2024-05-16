@@ -50,7 +50,7 @@ def init(
     settings.setdefault('savgol_internalkmin', 0.001)
 
     # Pk Settings
-    settings.setdefault("kmin", 1.e-2 * u.Mpc**-1)
+    settings.setdefault("kmin", 1.e-3 * u.Mpc**-1)
     settings.setdefault("kmax", 10 * u.Mpc**-1)
     settings.setdefault("nk",100)
     settings.setdefault("k_kind","log")

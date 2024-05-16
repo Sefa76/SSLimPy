@@ -164,6 +164,10 @@ class boltzmann_code:
             classpars["Omega_b"] = classpars.pop("Omegab")
         if "Omegam" in classpars:
             classpars["Omega_cdm"] = (classpars.pop("Omegam") - classpars["Omega_b"] - classpars["Omega_ncdm"])
+        
+        # f_NL is not a real class imput parameter. Its value is in the input_cosmoparams
+        if "f_NL" in classpars:
+            classpars.pop("f_NL")
 
         return classpars
 
@@ -217,6 +221,10 @@ class boltzmann_code:
             insigma8 = cambpars.pop("sigma8")
             cambpars["As"] = 2.1e-9
             rescaleAs = True
+
+        # f_NL is not a real camb imput parameter. Its value is in the input_cosmoparams
+        if "f_NL" in cambpars:
+            cambpars.pop("f_NL")
 
         try:
             camb.set_params(**cambpars)
