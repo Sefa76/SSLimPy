@@ -68,6 +68,7 @@ def init(
     settings.setdefault("LP_rescale_ini_As", 2.1e-9)
     settings.setdefault("LP_rescale_boost", 2)
     settings.setdefault("nonlinear", True)
+    settings.setdefault("do_pheno_ncdm",False)
 
     # Output settings
     settings.setdefault("verbosity",1)
@@ -145,7 +146,15 @@ def init(
     fiducialastroparams = astropars
 
     global fiducialcosmo
-    fiducialcosmo = cosmology.cosmo_functions(cosmopars,input_type)
+    # seperate the nuiscance-like cosmology parameters
+    # add new ones here
+    nuiscance_like_params_names = ["f_NL","slope_ncdm","k_cut_ncdm"]
+    nuiscance_like = dict()
+    for key in cosmopars:
+        if key in nuiscance_like_params_names:
+            nuiscance_like[key]=cosmopars.pop(key)
+
+    fiducialcosmo = cosmology.cosmo_functions(cosmopars=cosmopars,nuiscance_like=nuiscance_like,input=input_type)
 
     global fiducialastro
     fiducialastro = astro.astro_functions(cosmopars, astropars)

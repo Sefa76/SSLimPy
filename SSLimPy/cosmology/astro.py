@@ -37,7 +37,7 @@ class astro_functions:
             self.cosmology = cosmology.cosmo_functions(cosmopars, cfg.input_type)
 
         # Current units
-        self.hubble = self.cosmology.Hubble(0,True)/  (100 * u.km/u.s/u.Mpc)
+        self.hubble = self.cosmology.h()
         self.Mpch = u.Mpc / self.hubble
         self.Msunh = u.Msun / self.hubble
         self.rho_crit = 2.77536627e11*(self.Msunh*self.Mpch**-3).to(u.Msun*u.Mpc**-3) #Msun/Mpc^3
@@ -107,7 +107,7 @@ class astro_functions:
         sigmaMme = self.sigmaM_of_z(M*(1-1e-2),z,tracer=tracer)
         dM = 2e-2*M
 
-        dsigmaM_dM = (sigmaMpe + sigmaMme - 2* sigmaM) / dM
+        dsigmaM_dM = (sigmaMpe - sigmaMme) / (dM[:,None])
 
         return sigmaM, dsigmaM_dM
 

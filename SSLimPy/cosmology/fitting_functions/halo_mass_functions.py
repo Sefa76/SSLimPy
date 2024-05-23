@@ -35,7 +35,7 @@ class halo_mass_functions:
 
         dndM = (
             -2
-            * (rhoM / Mvec)
+            * (rhoM / Mvec[:,None])
             * self.dsigmaM_dM.to(self.Msunh**-1)
             / self.sigmaM
             * 0.3222

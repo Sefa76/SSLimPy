@@ -164,10 +164,6 @@ class boltzmann_code:
             classpars["Omega_b"] = classpars.pop("Omegab")
         if "Omegam" in classpars:
             classpars["Omega_cdm"] = (classpars.pop("Omegam") - classpars["Omega_b"] - classpars["Omega_ncdm"])
-        
-        # f_NL is not a real class imput parameter. Its value is in the input_cosmoparams
-        if "f_NL" in classpars:
-            classpars.pop("f_NL")
 
         return classpars
 
@@ -221,10 +217,6 @@ class boltzmann_code:
             insigma8 = cambpars.pop("sigma8")
             cambpars["As"] = 2.1e-9
             rescaleAs = True
-
-        # f_NL is not a real camb imput parameter. Its value is in the input_cosmoparams
-        if "f_NL" in cambpars:
-            cambpars.pop("f_NL")
 
         try:
             camb.set_params(**cambpars)
@@ -717,29 +709,48 @@ class boltzmann_code:
 class cosmo_functions:
     celeritas = c.c
 
-    def __init__(self, cosmopars, input=None):
+    """
+    This class is where you can extract all of the EBS results. When modifying the code try to keep using the funcitons of this class instead of the callables inside of results.
+    It also handles the nuiscance-like cosmological parameters.
+    """
+    def __init__(self, cosmopars=dict(), nuiscance_like = dict(), input=None, cosmology = None):
         self.settings = cfg.settings
-        self.input_cosmoparams = cosmopars
+
+        self.input_cosmoparams = {**cosmopars, **nuiscance_like}
+
         self.fiducialcosmopars = cfg.fiducialcosmoparams
-        self.input = input
         if input is None:
             input = cfg.input_type
-        if input == "camb":
-            cambresults = boltzmann_code(cosmopars, code="camb")
-            self.code = "camb"
-            self.results = cambresults.results
-            self.kgrid = cambresults.results.kgrid
-            self.cosmopars = cambresults.cosmopars
-            self.cambcosmopars = cambresults.cambcosmopars
-        elif input == "class":
-            classresults = boltzmann_code(cosmopars, code="class")
-            self.code = "class"
-            self.results = classresults.results
-            self.kgrid = classresults.results.kgrid
-            self.cosmopars = classresults.cosmopars
-            self.classcosmopars = classresults.classcosmopars
+
+        if not cosmology:
+            if input is None:
+                input = cfg.input_type
+            if input == "camb":
+                cambresults = boltzmann_code(cosmopars, code="camb")
+                self.code = "camb"
+                self.results = cambresults.results
+                self.kgrid = cambresults.results.kgrid
+                self.cosmopars = cambresults.cosmopars
+                self.cambcosmopars = cambresults.cambcosmopars
+            elif input == "class":
+                classresults = boltzmann_code(cosmopars, code="class")
+                self.code = "class"
+                self.results = classresults.results
+                self.kgrid = classresults.results.kgrid
+                self.cosmopars = classresults.cosmopars
+                self.classcosmopars = classresults.classcosmopars
+            else:
+                print(input, ":  This input type is not implemented yet")
         else:
-            print(input, ":  This input type is not implemented yet")
+            self.code = cosmology.code
+            self.results = cosmology.results
+            self.kgrid = cosmology.results.kgrid
+            self.cosmopars = cosmology.cosmopars
+            if self.code == "class":
+                self.classcosmopars = cosmology.classcomopars
+            if self.code == "camb":
+                self.cambcosmopars = cosmology.cambcosmopars
+
 
     def Hubble(self, z, physical=False):
         """Hubble function
@@ -784,6 +795,13 @@ class cosmo_functions:
         Eofz = self.Hubble(z) / H0
 
         return Eofz
+
+    def h(self) -> float:
+        """
+        h
+        """
+        h =  (self.Hubble(0,physical=True)/(100 * u.km / u.s / u.Mpc) ).to(1)
+        return h
 
     def angdist(self, z):
         """Angular diameter distance
@@ -842,11 +860,22 @@ class cosmo_functions:
         recognized and the function defaults to using `Pmm` to calculate the power spectrum of matter.
         """
         if tracer == "clustering":
-            return self.Pcb(z, k, nonlinear=nonlinear) * u.Mpc**3
-        elif tracer != "matter":
+            Pk = self.Pcb(z, k, nonlinear=nonlinear) * u.Mpc**3
+        elif tracer == "matter":
+            Pk = self.Pmm(z, k, nonlinear=nonlinear) * u.Mpc**3
+        else:
             warn("Did not recognize tracer: reverted to matter")
-        return self.Pmm(z, k, nonlinear=nonlinear) * u.Mpc**3
-    
+            Pk = self.Pmm(z, k, nonlinear=nonlinear) * u.Mpc**3
+
+        Pk = np.atleast_2d(Pk)
+        ###################################
+        # Emulators and Fitting functions #
+        ###################################
+        if cfg.settings["do_pheno_ncdm"]:
+            Pk *= self.transfer_ncdm(k)[None,:]
+        
+        return np.squeeze(Pk)
+
     def Transfer(self,z,k, nonlinear=False, tracer="matter"):
         z =np.atleast_1d(z)[:,None]
         k =np.atleast_1d(k)[None,:]
@@ -960,27 +989,6 @@ class cosmo_functions:
 
         return chi
 
-    def sigma8_of_z(self, z, tracer="matter"):
-        """sigma_8
-
-        Parameters
-        ----------
-        z     : float
-                redshift
-        tracer: String
-                either 'matter' if you want sigma_8 calculated from the total matter power spectrum or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
-        Returns
-        -------
-        float
-            The Variance of the matter perturbation smoothed over a scale of 8 Mpc/h
-
-        """
-        if tracer == "clustering":
-            return self.results.s8_cb_of_z(z)
-        if tracer != "matter":
-            warn("Did not recognize tracer: reverted to matter")
-        return self.results.s8_of_z(z)
-
     def sigmaR_of_z(self, z, R,tracer="matter"):
         """sigma_8
 
@@ -1003,13 +1011,31 @@ class cosmo_functions:
         k = np.geomspace(self.results.kmin_pk,self.results.kmax_pk,400) / u.Mpc
         x = (k[:,None,None] * R).to(1)
 
-        Pk = self.matpow(z,k[:,None,None],tracer=tracer)
+        Pk = np.atleast_2d(self.matpow(z,k[:,None,None],tracer=tracer))[:,None,:]
         #Get Sigma window function
         W = 3 /np.power(x,3)*(np.sin(x*u.rad)-x*np.cos(x*u.rad))
         W[np.where(x<0.01)] = 1 - np.power(x[np.where(x<0.01)],2) / 10
 
         Integr= np.power(k[:,None,None]*W,2)*Pk/(2*np.pi**2)
         return np.squeeze(np.sqrt(np.trapz(Integr,k,axis=0)))
+
+    def sigma8_of_z(self, z, tracer="matter"):
+        """sigma_8
+
+        Parameters
+        ----------
+        z     : float
+                redshift
+        tracer: String
+                either 'matter' if you want sigma_8 calculated from the total matter power spectrum or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
+        Returns
+        -------
+        float
+            The Variance of the matter perturbation smoothed over a scale of 8 Mpc/h
+
+        """
+        R = 8*u.Mpc / self.h()
+        return self.sigmaR_of_z(z,R,tracer=tracer)
 
     def growth(self, z, k=None):
         """Growth factor
@@ -1133,18 +1159,26 @@ class cosmo_functions:
 
         return fs8
 
-    def SigmaMG(self, z, k):
-        Sigma = np.array(1)
-        if self.settings["activateMG"] == "late-time":
-            E11 = self.cosmopars["E11"]
-            E22 = self.cosmopars["E22"]
-            # TODO: Fix for non-flat models
-            Omega_DE = 1 - self.Omegam_of_z(z)
-            mu = 1 + E11 * Omega_DE
-            eta = 1 + E22 * Omega_DE
-            Sigma = (mu / 2) * (1 + eta)
+    def transfer_ncdm(self,ncdmk):
+        '''
+        Transfer function to suppress small-scale power due to non-CDM models as presented in 2404.11609.
+        '''
+        if "f_NL" in self.input_cosmoparams:
+            raise ValueError('Cannot have non-zero f_NL and non-CDM.')
+        else:
+            kcut = self.input_cosmoparams["kcut"]
+            slope = self.input_cosmoparams["slope"]
+            # make sure k's are in the proper units
+            kcut = kcut.to(1./u.Mpc).value
+            k = ncdmk
 
-        return Sigma
+            # Initialize Tk with ones of the same shape as ncdmk
+            Tk = np.ones_like(k)
+            # Apply the transfer function conditionally
+            mask = k > kcut
+            Tk[mask] = (k[mask] / kcut) ** (-slope)
+
+        return Tk
 
     def cmb_power(self, lmin, lmax, obs1, obs2):
         if self.code == "camb":
