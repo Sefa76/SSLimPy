@@ -137,9 +137,9 @@ class astro_functions:
             return np.squeeze(np.exp(inter_logsigmaM(logM,z)))
         def dsigmaM_of_M_and_z(M,z):
             eps = 0.01
-            sigmaMp = sigmaM_of_M_and_z(M*(1+eps),z)
-            sigmaMm = sigmaM_of_M_and_z(M*(1-eps),z)
-            return (sigmaMp-sigmaMm)/(2*eps*M)
+            sigmaMp = np.atleast_2d(sigmaM_of_M_and_z(M*(1+eps),z))
+            sigmaMm = np.atleast_2d(sigmaM_of_M_and_z(M*(1-eps),z))
+            return (sigmaMp-sigmaMm)/(2*eps*M[:,None])
 
 
         return sigmaM_of_M_and_z, dsigmaM_of_M_and_z
