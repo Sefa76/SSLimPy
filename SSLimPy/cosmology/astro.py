@@ -1,6 +1,7 @@
 import sys
+import types
 import numpy as np
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, RectBivariateSpline
 import astropy.units as u
 import astropy.constants as c
 
@@ -19,6 +20,8 @@ class astro_functions:
 
         self.astroparams = deepcopy(astropars)
         self.set_astrophysics_defaults()
+
+        self.astrotracer = self.astroparams["astro_tracer"]
 
         ### TEXT VOMIT ###
         if cfg.settings["verbosity"]>1:
@@ -50,7 +53,12 @@ class astro_functions:
         self.nuObs = self.astroparams["nuObs"]
         self.z = (self.astroparams["nu"] / self.astroparams["nuObs"]).to(1).value - 1
 
-        self.sigmaM, self.dsigmaM_dM = self.compute_sigmaM_funcs(self.M,self.z)
+        self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
+
+        # save the astro results
+        self.results = types.SimpleNamespace()
+        self.results.sigmaM = self.sigmaM(self.M,self.z)
+        self.results.dsigmaM_dM = self.dsigmaM_dM(self.M,self.z)
 
         # Check passed models
         self.init_model()
@@ -60,15 +68,18 @@ class astro_functions:
         # bias function
         # !Without Corrections for nongaussianity!
         self.delta_crit = 1.686
-        self.b_of_M = getattr(self.bias_function,self.astroparams["bias_model"])(dc=self.delta_crit,nu=self.delta_crit/self.sigmaM)
+        self.b_of_M = getattr(self.bias_function,self.astroparams["bias_model"])
+        self.results.b_of_M = self.b_of_M(dc=self.delta_crit,nu=self.delta_crit/self.results.sigmaM)
 
         # halo mass function
-        m_input = self.M.to(self.Msunh)
-        rho_input = 2.77536627e11* self.cosmology.Omega(0,"clustering")*(self.Msunh*self.Mpch**-3).to(self.Msunh*self.Mpch**-3)
-        self.dn_dM_of_M = getattr(self.halo_mass_function,self.astroparams["hmf_model"])(m_input,rho_input)
+        M_input = self.M.to(self.Msunh)
+        rho_input = 2.77536627e11* self.cosmology.Omega(0,self.astrotracer)*(self.Msunh*self.Mpch**-3).to(self.Msunh*self.Mpch**-3)
+        self.dn_dM_of_M = getattr(self.halo_mass_function,self.astroparams["hmf_model"])
+        self.results.dn_dM_of_M = self.dn_dM_of_M(M_input,rho_input,self.z)
 
         if "ML" in self.astroparams["model_type"]:
-            self.L_of_M  = getattr(self.mass_luminosity_function,self.astroparams["model_name"])(self.M.to(u.Msun),self.z)
+            self.L_of_M  = getattr(self.mass_luminosity_function,self.astroparams["model_name"])
+            self.results.L_of_M = self.L_of_M(self.M.to(u.Msun),self.z)
 
             sigma = np.maximum(cfg.settings["sigma_scatter"],0.05)
             # Special case for Tony Li model- scatter does not preserve LCO
@@ -83,45 +94,67 @@ class astro_functions:
             dn_dM_of_M_and_z = np.atleast_2d(self.dn_dM_of_M)
             flognorm =  self.lognormal(self.L[None,:,None],np.log(L_of_M_and_z.value)[:,None,:]-0.5*sigma_base_e**2.,sigma_base_e)
             CFL = flognorm * dn_dM_of_M_and_z[:,None,:]
-            self.dn_dL_of_L = np.squeeze(np.trapz(CFL,self.M,axis=0))
+            self.results.dn_dL_of_L = np.squeeze(np.trapz(CFL,self.M,axis=0))
 
         elif "LF" in self.astroparams["model_type"]:
             LF_par = {'A':1.,'b':1.,'Mcut_min':self.astroparams["Mmin"],'Mcut_max':self.astroparams["Mmax"]}
             off_mass_luminosity = ml.mass_luminosity(self,LF_par)
-            self.L_of_M = getattr(off_mass_luminosity,'MassPow')(self.M.to(u.Msun),self.z)
+            self.L_of_M = getattr(off_mass_luminosity,'MassPow')
+            self.results.L_of_M = self.L_of_M(self.M.to(u.Msun),self.z)
 
-            self.dn_dL_of_L = getattr(self.luminosity_function,self.astroparams["model_name"])(self.L.to(u.Lsun))
+            self.dn_dL_of_L = getattr(self.luminosity_function,self.astroparams["model_name"])
+            self.results.dn_dL_of_L = self.dn_dL_of_L(self.L.to(u.Lsun))
 
-    def sigmaM_of_z(self, M, z, tracer = "clustering"):
+    def sigmaM_of_z(self, M, z):
         '''
         Mass (or cdm+b) variance at target redshift
         '''
+        tracer = self.astrotracer
+
         rhoM = self.rho_crit*self.cosmology.Omega(0,tracer)
         R = (3.0*M/(4.0*np.pi*rhoM))**(1.0/3.0)
 
-        return self.cosmology.sigmaR_of_z(z,R,tracer)
+        return self.cosmology.sigmaR_of_z(R,z,tracer)
 
-    def compute_sigmaM_funcs(self, M, z, tracer="clustering"):
-        sigmaM = self.sigmaM_of_z(M,z,tracer=tracer)
-        sigmaMpe = self.sigmaM_of_z(M*(1+1e-2),z,tracer=tracer)
-        sigmaMme = self.sigmaM_of_z(M*(1-1e-2),z,tracer=tracer)
-        dM = 2e-2*M
+    def create_sigmaM_funcs(self):
+        """
+        This function creates the interpolating functions for sigmaM and dsigamM
+        """
+        M_inter = self.M
+        z_inter = self.cosmology.results.zgrid
 
-        dsigmaM_dM = (sigmaMpe - sigmaMme) / (dM[:,None])
+        sigmaM = self.sigmaM_of_z(M_inter,z_inter)
 
-        return sigmaM, dsigmaM_dM
+        # create interpolating functions
+        logM_in_Msun = np.log(M_inter.to(u.Msun).value)
+        logsigmaM = np.log(sigmaM)
+
+        inter_logsigmaM = RectBivariateSpline(logM_in_Msun,z_inter,logsigmaM)
+
+        #restore units
+        def sigmaM_of_M_and_z(M,z):
+            logM = np.log(M.to(u.Msun).value)
+            return np.squeeze(np.exp(inter_logsigmaM(logM,z)))
+        def dsigmaM_of_M_and_z(M,z):
+            eps = 0.01
+            sigmaMp = sigmaM_of_M_and_z(M*(1+eps),z)
+            sigmaMm = sigmaM_of_M_and_z(M*(1-eps),z)
+            return (sigmaMp-sigmaMm)/(2*eps*M)
 
 
-    def mass_non_linear(self, z, delta_crit =1.686, tracer = "clustering"):
+        return sigmaM_of_M_and_z, dsigmaM_of_M_and_z
+
+
+    def mass_non_linear(self, z, delta_crit =1.686):
         '''
         Get (roughly) the mass corresponding to the nonlinear scale in units of Msun h
         '''
-        sigmaM_z = self.sigmaM_of_z(self.M,z,tracer=tracer)
+        sigmaM_z = self.sigmaM(self.M,z)
         mass_non_linear = self.M[np.argmin(np.power(sigmaM_z - delta_crit,2),axis=0)]
 
         return mass_non_linear.to(self.Msunh)
 
-    def S3_dS3(self,M,z,tracer="clustering"):
+    def S3_dS3(self,M,z):
         '''
         The skewness and derivative with respect to mass of the skewness.
         Used to calculate the correction to the HMF due to non-zero fnl,
@@ -132,6 +165,7 @@ class astro_functions:
         integral, we opt for no cutoff and thus set it to a very small value.
         This can be changed if necessary.
         '''
+        tracer = self.astrotracer
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
@@ -210,28 +244,30 @@ class astro_functions:
         dS3_dm = -1 * fac * np.squeeze(dS3_dm)
         return -S3, dS3_dm
 
-    def kappa3_dkappa3(self,M,z,tracer="clustering"):
+    def kappa3_dkappa3(self,M,z):
         '''
         Calculates kappa_3 its derivative with respect to halo mass M from 2009.01245
         '''
-        S3, dS3_dM = self.S3_dS3(M,z,tracer=tracer)
-        sigmaM, dSigmaM = self.compute_sigmaM_funcs(M,z,tracer=tracer)
+        S3, dS3_dM = self.S3_dS3(M,z)
+        sigmaM = self.sigmaM(M,z)
+        dSigmaM = self.dsigmaM_dM(M,z)
 
         kappa3 = S3/sigmaM
-        dkappa3dM = (dS3_dM - 3 * S3 * dSigmaM / sigmaM) /(self.sigmaM**3)
+        dkappa3dM = (dS3_dM - 3 * S3 * dSigmaM / sigmaM) /(sigmaM**3)
 
         return kappa3, dkappa3dM
 
-    def Delta_HMF(self,M,z,tracer="clustering"):
+    def Delta_HMF(self,M,z):
         '''
         The correction to the HMF due to non-zero f_NL, as presented in 2009.01245.
         '''
-        sigmaM, dSigmaM = self.compute_sigmaM_funcs(M,z,tracer=tracer)
+        sigmaM = self.sigmaM(M,z)
+        dSigmaM = self.dsigmaM_dM(M,z)
 
         nuc = 1.42/sigmaM
         dnuc_dM = -1.42*dSigmaM/(sigmaM)**2
 
-        kappa3, dkappa3_dM = self.kappa3_dkappa3(M,z,tracer=tracer)
+        kappa3, dkappa3_dM = self.kappa3_dkappa3(M,z)
 
         H2nuc = nuc**2-1
         H3nuc = nuc**3-3*nuc
@@ -240,10 +276,11 @@ class astro_functions:
 
         return F1pF0p
 
-    def Delta_b(self,M,z,k,tracer="clustering"):
+    def Delta_b(self,M,z,k):
         """
         Scale dependent correction to the halo bias in presence of primordial non-gaussianity
         """
+        tracer = self.astrotracer
 
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
@@ -324,6 +361,7 @@ class astro_functions:
         self.astroparams.setdefault("nL", 5000)
         self.astroparams.setdefault("v_of_M", None)
         self.astroparams.setdefault("line_incli", True)
+        self.astroparams.setdefault("astro_tracer","clustering")
 
     def init_model(self):
         '''

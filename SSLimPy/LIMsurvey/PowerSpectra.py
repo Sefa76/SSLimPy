@@ -52,13 +52,6 @@ class PowerSpectra:
         zvec = self.cosmology.results.zgrid
         Mvec = self.astro.M
 
-        #Compute the effective slope of the growth factor
-        alpha_eff = self.cosmology.f_growthrate(zvec)[None,:]
-        #Compute the effective slope to the power spectrum (as function of M)
-        sigmaM, dsigmaM_dM = self.astro.compute_sigmaM_funcs(Mvec,zvec)
-        neff_at_R = -2.*3.*Mvec/sigmaM*dsigmaM_dM-3.
-        neff = interp1d(np.log10(self.M.value),neff_at_R,fill_value='extrapolate',kind='linear',axis=0)(np.log10(kappa**3 * Mvec))
-
         #fit parameters
         kappa = 0.42
         a0 = 2.37
@@ -66,6 +59,19 @@ class PowerSpectra:
         b0 = 3.39
         b1 = 1.82
         ca = 0.2
+
+        #Compute the effective slope of the growth factor
+        alpha_eff = self.cosmology.f_growthrate(zvec)[None,:]
+        #Compute the effective slope to the power spectrum (as function of M)
+        sigmaM = self.astro.sigmaM(Mvec,zvec)
+        dsigmaM_dM = self.astro.dsigmaM_dM(Mvec,zvec)
+
+        neff_at_R = -2.*3.*Mvec[:,None]/sigmaM*dsigmaM_dM-3.
+
+        # konvert to solar masses
+        dimlM = Mvec.to(u.Msun).value
+        neff = interp1d(np.log10(dimlM),neff_at_R,fill_value='extrapolate',kind='linear',axis=0)(np.log10(kappa**3 * dimlM))
+
         #Quantities for c   
         A = a0*(1.+a1*(neff+3))
         B = b0*(1.+b1*(neff+3))
@@ -77,10 +83,10 @@ class PowerSpectra:
         x = np.logspace(-3,3,256)
         g = np.log(1+x)-x/(1.+x)
 
-        c = np.zeros(len(Mvec))
+        c = np.zeros_like(arg)
         for iM in range(len(Mvec)):
             G = x/g**((5.+neff[iM])/6.)
             invG = interp1d(G,x,fill_value='extrapolate',kind='linear')
             c[iM] = C*invG(arg[iM])
-            
+
         return interp1d(Mvec,c,fill_value='extrapolate',kind='cubic')(self.M.value)

@@ -989,7 +989,7 @@ class cosmo_functions:
 
         return chi
 
-    def sigmaR_of_z(self, z, R,tracer="matter"):
+    def sigmaR_of_z(self, R, z, tracer="matter"):
         """sigma_8
 
         Parameters
@@ -1006,18 +1006,19 @@ class cosmo_functions:
             The Variance of the matter perturbation smoothed over a scale of R in Mpc
 
         """
-        R = np.atleast_1d(R)[None,:,None]
-        z = np.atleast_1d(z)[None,None,:]
+        R = np.atleast_1d(R)
+        z = np.atleast_1d(z)
         k = np.geomspace(self.results.kmin_pk,self.results.kmax_pk,400) / u.Mpc
-        x = (k[:,None,None] * R).to(1)
 
-        Pk = np.atleast_2d(self.matpow(z,k[:,None,None],tracer=tracer))[:,None,:]
+        Pk = np.atleast_2d(self.matpow(z[:,None],k[None,:],tracer=tracer))[None,:,:]
+
         #Get Sigma window function
+        x = (k[None,None,:] * R[:,None,None]).to(1)
         W = 3 /np.power(x,3)*(np.sin(x*u.rad)-x*np.cos(x*u.rad))
         W[np.where(x<0.01)] = 1 - np.power(x[np.where(x<0.01)],2) / 10
 
-        Integr= np.power(k[:,None,None]*W,2)*Pk/(2*np.pi**2)
-        return np.squeeze(np.sqrt(np.trapz(Integr,k,axis=0)))
+        Integr= np.power(k[None,None,:]*W,2)*Pk/(2*np.pi**2)
+        return np.squeeze(np.sqrt(np.trapz(Integr,k,axis=-1)))
 
     def sigma8_of_z(self, z, tracer="matter"):
         """sigma_8
@@ -1035,7 +1036,7 @@ class cosmo_functions:
 
         """
         R = 8*u.Mpc / self.h()
-        return self.sigmaR_of_z(z,R,tracer=tracer)
+        return self.sigmaR_of_z(R,z,tracer=tracer)
 
     def growth(self, z, k=None):
         """Growth factor

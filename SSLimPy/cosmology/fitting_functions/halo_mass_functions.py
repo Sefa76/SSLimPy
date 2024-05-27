@@ -3,7 +3,7 @@ Calculate the halo mass function as function of mass for different fitting funct
 
 All functions return dn/dM(M)
 
-Each function takes: self, Mvec, rhoM
+Each function takes: self, Mvec, rhoM, z
 
 Takes inspiration from pylians
 """
@@ -16,7 +16,6 @@ class halo_mass_functions:
         self.astro = astro
 
         # Units and Redshifts
-        self.z = astro.z
         self.Mpch = astro.Mpch
         self.Msunh = astro.Msunh
 
@@ -25,19 +24,22 @@ class halo_mass_functions:
         self.dsigmaM_dM = astro.dsigmaM_dM
 
 
-    def ST(self, Mvec, rhoM):
+    def ST(self, Mvec, rhoM, z):
         """
         Sheth-Tormen halo mass function
         """
+        sigmaM = self.sigmaM(Mvec,z)
+        dsigmaM_dM = self.dsigmaM_dM(Mvec,z).to(self.Msunh**-1)        
+
         deltac = 1.686
-        nu = (deltac / self.sigmaM) ** 2.0
+        nu = (deltac / sigmaM) ** 2.0
         nup = 0.707 * nu
 
         dndM = (
             -2
-            * (rhoM / Mvec[:,None])
-            * self.dsigmaM_dM.to(self.Msunh**-1)
-            / self.sigmaM
+            * (rhoM / Mvec)
+            * dsigmaM_dM
+            / sigmaM
             * 0.3222
             * (1.0 + 1.0 / nup**0.3)
             * np.sqrt(0.5 * nup)
@@ -48,14 +50,17 @@ class halo_mass_functions:
         return dndM
 
 
-    def Tinker(self, Mvec, rhoM):
+    def Tinker(self, Mvec, rhoM, z):
         """
         Tinker et al 2008 halo mass function for delta=200
         """
         delta = 200
         alpha = 10 ** (-((0.75 / np.log10(delta / 75.0)) ** 1.2))
 
-        z_array = np.atleast_1d(self.z)[None,:]
+        sigmaM = self.sigmaM(Mvec,z)
+        dsigmaM_dM = self.dsigmaM_dM(Mvec,z).to(self.Msunh**-1)
+
+        z_array = np.atleast_1d(z)[None,:]
 
         # this is for R200_critical with OmegaM=0.2708
         D = 200.0
@@ -64,31 +69,34 @@ class halo_mass_functions:
         b = 2.57 * (1.0 + z_array) ** (-alpha)
         c = 1.19
 
-        fs = A * ((b / self.sigmaM) ** (a) + 1.0) * np.exp(-c / self.sigmaM**2)
+        fs = A * ((b / sigmaM) ** (a) + 1.0) * np.exp(-c / sigmaM**2)
 
-        dndM = -(rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) * fs / self.sigmaM
+        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return np.squeeze(dndM)
 
 
-    def Crocce(self, Mvec, rhoM):
+    def Crocce(self, Mvec, rhoM, z):
         """
         Crocce et al. halo mass function
         """
-        z_array = np.atleast_1d(self.z)[None,:]
+        z_array = np.atleast_1d(z)[None,:]
+
+        sigmaM = self.sigmaM(Mvec,z)
+        dsigmaM_dM = self.dsigmaM_dM(Mvec,z).to(self.Msunh**-1)
 
         A = 0.58 * (1.0 + z_array) ** (-0.13)
         a = 1.37 * (1.0 + z_array) ** (-0.15)
         b = 0.3 * (1.0 + z_array) ** (-0.084)
         c = 1.036 * (1.0 + z_array) ** (-0.024)
 
-        fs = A * (self.sigmaM ** (-a) + b) * np.exp(-c / self.sigmaM**2)
-        dndM = -(rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) * fs / self.sigmaM
+        fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2)
+        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return np.squeeze(dndM)
 
 
-    def Jenkins(self, Mvec, rhoM):
+    def Jenkins(self, Mvec, rhoM, z):
         """
         Jenkins et al. halo mass function
         """
@@ -96,14 +104,17 @@ class halo_mass_functions:
         b = 0.61
         c = 3.8
 
-        fs = A * np.exp(-np.absolute(np.log(1.0 / self.sigmaM) + b) ** c)
+        sigmaM = self.sigmaM(Mvec,z)
+        dsigmaM_dM = self.dsigmaM_dM(Mvec,z).to(self.Msunh**-1)
 
-        dndM = -(rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) * fs / self.sigmaM
+        fs = A * np.exp(-np.absolute(np.log(1.0 / sigmaM) + b) ** c)
+
+        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
 
-    def Warren(self, Mvec, rhoM):
+    def Warren(self, Mvec, rhoM, z):
         """
         Warren et al. halo mass function
         """
@@ -112,13 +123,16 @@ class halo_mass_functions:
         b = 0.2538
         c = 1.1982
 
-        fs = A * (self.sigmaM ** (-a) + b) * np.exp(-c / self.sigmaM**2)
-        dndM = -(rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) * fs / self.sigmaM
+        sigmaM = self.sigmaM(Mvec,z)
+        dsigmaM_dM = self.dsigmaM_dM(Mvec,z).to(self.Msunh**-1)
+
+        fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2)
+        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
 
-    def Watson(self, Mvec, rhoM):
+    def Watson(self, Mvec, rhoM, z):
         """
         Watson et al. halo mass function for delta=200. Can be changed
         """
@@ -134,19 +148,22 @@ class halo_mass_functions:
         b = 2.267
         c = 1.287
 
+        sigmaM = self.sigmaM(Mvec,z)
+        dsigmaM_dM = self.dsigmaM_dM(Mvec,z).to(self.Msunh**-1)
+
         factor = (
             np.exp(0.023 * (delta / 178.0 - 1.0))
             * (delta / 178.0) ** (-0.456 * OmegaM - 0.139)
-            * np.exp(0.072 * (1 - delta / 178.0) / self.sigmaM**2.130)
+            * np.exp(0.072 * (1 - delta / 178.0) / sigmaM**2.130)
         )
-        fs = A * (self.sigmaM ** (-a) + b) * np.exp(-c / self.sigmaM**2) * factor
+        fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2) * factor
 
-        dndM = -(rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) * fs / self.sigmaM
+        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
 
-    def Watson_FOF(self, Mvec, rhoM):
+    def Watson_FOF(self, Mvec, rhoM, z):
         """
         Watson et al. halo mass function using FOF
         """
@@ -155,19 +172,25 @@ class halo_mass_functions:
         b = 1.406
         c = 1.210
 
-        fs = A * ((b / self.sigmaM) ** a + 1.0) * np.exp(-c / self.sigmaM**2)
+        sigmaM = self.sigmaM(Mvec,z)
+        dsigmaM_dM = self.dsigmaM_dM(Mvec,z).to(self.Msunh**-1)
 
-        dndM = -(rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) * fs / self.sigmaM
+        fs = A * ((b / sigmaM) ** a + 1.0) * np.exp(-c / sigmaM**2)
+
+        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
 
-    def Angulo(self, Mvec, rhoM):
+    def Angulo(self, Mvec, rhoM, z):
         """
         Angulo et al. halo mass function
         """
-        fs = 0.265 * (1.675 / self.sigmaM + 1.0) ** 1.9 * np.exp(-1.4 / self.sigmaM**2)
+        sigmaM = self.sigmaM(Mvec,z)
+        dsigmaM_dM = self.dsigmaM_dM(Mvec,z).to(self.Msunh**-1)
 
-        dndM = -(rhoM / Mvec) * self.dsigmaM_dM.to(self.Msunh**-1) * fs / self.sigmaM
+        fs = 0.265 * (1.675 / sigmaM + 1.0) ** 1.9 * np.exp(-1.4 / sigmaM**2)
+
+        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
