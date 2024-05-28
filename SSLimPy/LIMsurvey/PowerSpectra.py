@@ -2,6 +2,7 @@ from astropy import units as u
 from astropy import constants as c
 
 from scipy.interpolate import RectBivariateSpline, interp1d
+from scipy.special import sici
 
 import numpy as np
 from SSLimPy.interface import config as cfg
@@ -100,7 +101,35 @@ class PowerSpectra:
         c_spline = RectBivariateSpline(logMvec,zvec,c)
         # restore units
         def cNFW_of_M_and_z(M,z):
+            M = np.atleast_1d(M)
+            z = np.atleast_1d(z)
             logM = np.log(M.to(u.Msun).value)
-            return np.squeeze(c_spline(logM,z))
+            return c_spline(logM[:,None],z[None,:])
 
         return cNFW_of_M_and_z
+
+    def ft_NFW(self,k,M,z):
+        '''
+        Fourier transform of NFW profile, for computing one-halo term
+        '''
+        k = np.atleast_1d(k)
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+
+        #Radii of the SO collapsed (assuming 200*rho_crit)
+        Delta = 200.
+        rho_crit = self.astro.rho_crit
+        R_NFW = (3.*M/(4.*np.pi*Delta*rho_crit))**(1./3.)
+        
+        #get characteristic radius
+        c = self.c_NFW(M,z)[None,:,:]
+        r_s = R_NFW[None,:,None]/c
+        gc = np.log(1+c)-c/(1.+c)
+        #argument: k*rs
+        x = (k[:,None,None]*r_s).to(1).value
+
+        si_x, ci_x = sici(x)
+        si_cx, ci_cx = sici((1.+c)*x)
+        u_km = (np.cos(x)*(ci_cx - ci_x) +
+                  np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
+        return np.squeeze(u_km/gc)
