@@ -511,47 +511,6 @@ class boltzmann_code:
             z_array, self.results.kgrid, f_cb_z_k_array.T
         )
 
-        def get_sigma8(z_range):
-            R = 8.0 / (cambres.Params.H0 / 100.0)
-            k = np.linspace(self.kmin_pk, self.kmax_pk, 10000)
-            sigma_z = np.empty_like(z_range)
-            pkz = self.results.Pk_l(z_range, k)
-            for i in range(len(sigma_z)):
-                integrand = (
-                    9
-                    * (k * R * np.cos(k * R) - np.sin(k * R)) ** 2
-                    * pkz[i]
-                    / k**4
-                    / R**6
-                    / 2
-                    / np.pi**2
-                )
-                sigma_z[i] = np.sqrt(np.trapz(integrand, k))
-            sigm8_z_interp = UnivariateSpline(z_range, sigma_z, s=0)
-            return sigm8_z_interp
-
-        def get_sigma8_cb(z_range):
-            R = 8.0 / (cambres.Params.H0 / 100.0)
-            k = np.linspace(self.kmin_pk, self.kmax_pk, 10000)
-            sigma_cb_z = np.empty_like(z_range)
-            pk_cb_z = self.results.Pk_cb_l(z_range, k)
-            for i in range(len(sigma_cb_z)):
-                integrand = (
-                    9
-                    * (k * R * np.cos(k * R) - np.sin(k * R)) ** 2
-                    * pk_cb_z[i]
-                    / k**4
-                    / R**6
-                    / 2
-                    / np.pi**2
-                )
-                sigma_cb_z[i] = np.sqrt(np.trapz(integrand, k))
-            sigm8_cb_z_interp = UnivariateSpline(z_range, sigma_cb_z, s=0)
-            return sigm8_cb_z_interp
-
-        self.results.s8_cb_of_z = get_sigma8_cb(self.results.zgrid)
-        self.results.s8_of_z = get_sigma8(self.results.zgrid)
-
         self.results.kmin_pk = self.kmin_pk
         self.results.kmax_pk = self.kmax_pk
 
@@ -565,11 +524,6 @@ class boltzmann_code:
         self.results.h_of_z = np.vectorize(classres.Hubble)
         self.results.ang_dist = np.vectorize(classres.angular_distance)
         self.results.com_dist = np.vectorize(classres.comoving_distance)
-        h = classres.h()
-        self.results.s8_of_z = np.vectorize(lambda zz: classres.sigma(R=8 / h, z=zz))
-        self.results.s8_cb_of_z = np.vectorize(
-            lambda zz: classres.sigma_cb(R=8 / h, z=zz)
-        )
         self.results.Om_m = np.vectorize(classres.Om_m)
         self.results.Om_cb= np.vectorize(lambda z: classres.Om_cdm(z)+classres.Om_b(z))
 
@@ -827,7 +781,7 @@ class cosmo_functions:
         pk = np.power(10,self.results.P_scalar(lgk))
         return pk * u.Mpc**3
 
-    def matpow(self, z, k, nonlinear=False, tracer="matter"):
+    def matpow(self, k, z, nonlinear=False, tracer="matter"):
         """Calculates the power spectrum of a given tracer quantity at a specific redshift and wavenumber.
 
         Parameters
@@ -859,32 +813,38 @@ class cosmo_functions:
         If `tracer` is not "matter" or "clustering", a warning message is printed to the console saying the provided tracer was not
         recognized and the function defaults to using `Pmm` to calculate the power spectrum of matter.
         """
+        # Restore Units for Interpolators
+        k = np.atleast_1d(k.to(u.Mpc))
+        z = np.atleast_1d(z)
+        zvec = z[None,:]
+        kvec = k[:,None]
+
         if tracer == "clustering":
-            Pk = self.Pcb(z, k, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pcb(zvec, kvec, nonlinear=nonlinear) * u.Mpc**3
         elif tracer == "matter":
-            Pk = self.Pmm(z, k, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pmm(zvec, kvec, nonlinear=nonlinear) * u.Mpc**3
         else:
             warn("Did not recognize tracer: reverted to matter")
-            Pk = self.Pmm(z, k, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pmm(zvec, kvec, nonlinear=nonlinear) * u.Mpc**3
 
-        Pk = np.atleast_2d(Pk)
         ###################################
         # Emulators and Fitting functions #
         ###################################
         if cfg.settings["do_pheno_ncdm"]:
-            Pk *= self.transfer_ncdm(k)[None,:]
-        
+            Pk *= self.transfer_ncdm(kvec)
+
         return np.squeeze(Pk)
 
-    def Transfer(self,z,k, nonlinear=False, tracer="matter"):
-        z =np.atleast_1d(z)[:,None]
-        k =np.atleast_1d(k)[None,:]
-        matpow = np.atleast_2d(self.matpow(z,k,nonlinear=nonlinear,tracer=tracer))
-        primordial = np.atleast_1d(self.primordial_scalar_pow(k))[None,:]
-        return np.squeeze(np.sqrt(matpow/primordial))
+    def Transfer(self,k,z, nonlinear=False, tracer="matter"):
+        k = np.atleast_1d(k.to(u.Mpc))
+        z = np.atleast_1d(z)
+        P = np.reshape(self.matpow(k,z,nonlinear=nonlinear,tracer=tracer),(*k.shape,*z.shape))
+        primordial = self.primordial_scalar_pow(k)[:,None]
+        return np.squeeze(np.sqrt(P/primordial))
 
     def Pmm(self, z, k, nonlinear=False):
-        """Compute the power spectrum of the total matter species  (MM) at a given redshift and wavenumber.
+        """Compute the power spectrum of the total matter species  (MM) at a given redshift and wavenumber. 
+        Try to only use Matpow internaly as it is fully vecotrized and handles units correctly
 
         Args:
             z: The redshift at which to compute the MM power spectrum.
@@ -901,7 +861,8 @@ class cosmo_functions:
         return power
 
     def Pcb(self, z, k, nonlinear=False):
-        """Compute the power spectrum of the clustering matter species  (CB) at a given redshift and wavenumber.
+        """Compute the power spectrum of the clustering matter species  (CB) at a given redshift and wavenumber. 
+        Try to only use Matpow internaly as it is fully vecotrized and handles units correctly
 
         Args:
             z: The redshift at which to compute the CB power spectrum.
@@ -917,7 +878,7 @@ class cosmo_functions:
             power = self.results.Pk_cb_l(z, k, grid=False)
         return power
 
-    def nonwiggle_pow(self, z, k, nonlinear=False, tracer="matter"):
+    def nonwiggle_pow(self, k, z, nonlinear=False, tracer="matter"):
         """Calculate the power spectrum at a specific redshift and wavenumber,
         after smoothing to remove baryonic acoustic oscillations (BAO).
 
@@ -946,17 +907,21 @@ class cosmo_functions:
             spectrum is then returned on a linear (not logarithmic) grid of
             wavenumbers given by the input array `k`.
         """
-        unitsf = self.cosmopars["h"]
-        kmin_loc = unitsf * self.settings["savgol_internalkmin"]
-        kmax_loc = unitsf * np.max(self.kgrid)
+        h_over_Mpc = self.h() / u.Mpc
+
+        # wave number grids
+        kmin_loc =  self.settings["savgol_internalkmin"] # 1/Mpc
+        kmax_loc =  np.max(self.kgrid) # 1/Mpc
         loc_samples = self.settings["savgol_internalsamples"]
         log_kgrid_loc = np.linspace(np.log(kmin_loc), np.log(kmax_loc), loc_samples)
+
+        # sav-gol settings
         poly_order = self.settings["savgol_polyorder"]
         dlnk_loc = np.mean(log_kgrid_loc[1:] - log_kgrid_loc[0:-1])
         savgol_width = self.settings["savgol_width"]
         n_savgol = int(np.round(savgol_width / np.log(1 + dlnk_loc)))
 
-        P = self.matpow(z, np.exp(log_kgrid_loc), nonlinear=nonlinear, tracer=tracer).flatten()
+        P = self.matpow(np.exp(log_kgrid_loc)/u.Mpc, z, nonlinear=nonlinear, tracer=tracer).flatten()
         uP= P.unit
 
         intp_p = InterpolatedUnivariateSpline(
@@ -964,6 +929,7 @@ class cosmo_functions:
             np.log(P.value),
             k=1,
         )
+
         pow_sg = savgol_filter(intp_p(log_kgrid_loc), n_savgol, poly_order)
         intp_pnw = InterpolatedUnivariateSpline(
             np.exp(log_kgrid_loc), np.exp(pow_sg), k=1
@@ -1010,7 +976,7 @@ class cosmo_functions:
         z = np.atleast_1d(z)
         k = np.geomspace(self.results.kmin_pk,self.results.kmax_pk,400) / u.Mpc
 
-        Pk = np.atleast_2d(self.matpow(z[:,None],k[None,:],tracer=tracer))[None,:,:]
+        Pk = np.reshape(self.matpow(z[:,None],k[None,:],tracer=tracer),)[None,:,:]
 
         #Get Sigma window function
         x = (k[None,None,:] * R[:,None,None]).to(1)

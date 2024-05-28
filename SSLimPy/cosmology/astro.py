@@ -51,7 +51,7 @@ class astro_functions:
         # find the redshifts for fequencies asked for:
         self.nu = self.astroparams["nu"]
         self.nuObs = self.astroparams["nuObs"]
-        self.z = (self.astroparams["nu"] / self.astroparams["nuObs"]).to(1).value - 1
+        self.z = np.atleast_1d((self.astroparams["nu"] / self.astroparams["nuObs"]).to(1).value - 1)
 
         self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
 
@@ -90,8 +90,8 @@ class astro_functions:
                 sigma = (sigma**2 + sig_SFR**2/alpha**2)**0.5
             sigma_base_e = sigma*2.302585
 
-            L_of_M_and_z = np.atleast_2d(self.L_of_M)
-            dn_dM_of_M_and_z = np.atleast_2d(self.dn_dM_of_M)
+            L_of_M_and_z = np.reshape(self.results.L_of_M,(*self.M.shape,*self.z.shape))
+            dn_dM_of_M_and_z = np.reshape(self.dn_dM_of_M,(*self.M.shape,*self.z.shape))
             flognorm =  self.lognormal(self.L[None,:,None],np.log(L_of_M_and_z.value)[:,None,:]-0.5*sigma_base_e**2.,sigma_base_e)
             CFL = flognorm * dn_dM_of_M_and_z[:,None,:]
             self.results.dn_dL_of_L = np.squeeze(np.trapz(CFL,self.M,axis=0))
@@ -133,11 +133,13 @@ class astro_functions:
 
         #restore units
         def sigmaM_of_M_and_z(M,z):
+            M = np.atleast_1d(M)
+            z = np.atleast_1d(z)
             logM = np.log(M.to(u.Msun).value)
             return np.squeeze(np.exp(inter_logsigmaM(logM,z)))
         def dsigmaM_of_M_and_z(M,z):
             M = np.atleast_1d(M.to(u.Msun))
-            sigmaM = np.atleast_2d(sigmaM_of_M_and_z(M,z))
+            sigmaM = np.reshape(sigmaM_of_M_and_z(M,z),(*M.shape,*z.shape))
             logM = np.log(M.value)
             return np.squeeze(sigmaM/M[:,None] * inter_logsigmaM.partial_derivative(1,0)(logM,z))
 
@@ -200,7 +202,7 @@ class astro_functions:
         dj1_dM_1 = dj1_dM[:,None,None,:,None]
         dj1_dM_2 = dj1_dM[None,:,None,:,None]
         # functions of k1 or k2 and z
-        Tm = -5/3 * np.atleast_2d(self.cosmology.Transfer(z,k,nonlinear=False,tracer=tracer)).T
+        Tm = -5/3 * np.reshape(self.cosmology.Transfer(k,z,nonlinear=False,tracer=tracer),(*k.shape,*z.shape))
         Tm_1 = Tm[:,None,None,None,:]
         Tm_2 = Tm[None,:,None,None,:]
         # functions of k1, k2, and mu
@@ -221,8 +223,8 @@ class astro_functions:
         dj1_dM_12= np.reshape(dj1_dM_12,(len(k),len(k),len(mu),len(M)))[:,:,:,:,None]
         # functions of k1, k2, mu, and z
         Tm_12 = np.zeros((len(tk),len(z)))
-        Tm_12[kmask,:] = -5/3 * np.atleast_2d(self.cosmology.Transfer(z,tk[kmask],nonlinear=False,tracer=tracer)).T
-        Tm_12 = np.reshape(Tm_12,(len(k),len(k),len(mu),len(z)))[:,:,:,None,:]
+        Tm_12[kmask,:] = -5/3 * np.reshape(self.cosmology.Transfer(tk[kmask],z,nonlinear=False,tracer=tracer),(*(tk[kmask].shape),*z.shape))
+        Tm_12 = np.reshape(Tm_12,(*k.shape,*k.shape,*mu.shape,*z.shape))[:,:,:,None,:]
 
         # Integrandts
         W = j1_1 * j1_2 * j1_12
@@ -276,7 +278,7 @@ class astro_functions:
 
         return F1pF0p
 
-    def Delta_b(self,M,z,k):
+    def Delta_b(self,k,M,z):
         """
         Scale dependent correction to the halo bias in presence of primordial non-gaussianity
         """
@@ -286,16 +288,17 @@ class astro_functions:
         z = np.atleast_1d(z)
         k = np.atleast_1d(k)
 
-        Tk = (self.cosmology.Transfer(z,k)).T
+        Tk = np.reshape(self.cosmology.Transfer(k,z),(*k.shape,*z.shape))
         sigmaM = self.sigmaM_of_z(M,z,tracer=tracer)
-        bias = getattr(self.bias_function,self.astroparams["bias_model"])(dc=self.delta_crit,nu=self.delta_crit/sigmaM)
+        bias_func = getattr(self.bias_function,self.astroparams["bias_model"])
+        bias = np.reshape(bias_func(dc=self.delta_crit,nu=self.delta_crit/sigmaM),(*M.shape,*z.shape))
 
         f1 =  (self.cosmology.Hubble(0,physical=True) / (c.c  * k)).to(1).value
         f2 = 3*self.cosmology.Omega(0,tracer=tracer)*self.cosmology.input_cosmoparams["f_NL"]
 
         f1_of_k = f1[None,None,:]
-        Tk_of_k_and_z = np.atleast_2d(Tk)[None,:,:]
-        bias_of_M_and_z = np.atleast_2d(bias)[:,:,None]
+        Tk_of_k_and_z = Tk[:,None,:]
+        bias_of_M_and_z = bias[None,:,:]
 
         #Compute non-Gaussian correction Delta_b
         delta_b = (bias_of_M_and_z-1)*f2* f1_of_k/Tk_of_k_and_z
