@@ -41,16 +41,17 @@ class boltzmann_code:
         self.settings = cfg.settings
         self.set_cosmology_defaults()
 
-
         if code == "camb":
             import camb as camb
+
             self.boltzmann_cambpars = cfg.boltzmann_cambpars
-            self.camb_results(camb,self.cosmopars)
+            self.camb_results(camb, self.cosmopars)
 
         elif code == "class":
             from classy import Class
+
             self.boltzmann_classpars = cfg.boltzmann_classpars
-            self.class_results(Class,self.cosmopars)
+            self.class_results(Class, self.cosmopars)
         else:
             print("other Boltzmann code not implemented yet")
             exit()
@@ -105,7 +106,9 @@ class boltzmann_code:
 
         # Set default value for mnu if Omeganu or omnuh2 or mnu is not found in cosmopars
         if not any(par in self.cosmopars for par in ["Omeganu", "omnuh2", "mnu"]):
-            self.cosmopars["mnu"] = self.cosmopars.get("mnu", self.cosmopars.get("m_nu", self.cosmopars.get("M_nu", 0.06)))
+            self.cosmopars["mnu"] = self.cosmopars.get(
+                "mnu", self.cosmopars.get("m_nu", self.cosmopars.get("M_nu", 0.06))
+            )
 
         # Set default value for Neff if it is not found in cosmopars
         if not any(par in self.cosmopars for par in ["N_ur", "Neff"]):
@@ -114,7 +117,6 @@ class boltzmann_code:
         # Set default value for gamma, if it is not found in cosmopars
         # gamma is not used in many places, therefore not needed to add back in cosmopars
         self.gamma = self.cosmopars.get("gamma", 0.545)
-
 
     # Basis Conversion for Class
     def basechange_class(self, cosmopars):
@@ -145,16 +147,23 @@ class boltzmann_code:
 
         Neff = classpars.pop("Neff")
         if shareDeltaNeff:
-            classpars['N_ur'] = 2./3.*Neff #This version does not have the discontinuity at Nur = 1.99
-            g_factor = Neff/3.
+            classpars["N_ur"] = (
+                2.0 / 3.0 * Neff
+            )  # This version does not have the discontinuity at Nur = 1.99
+            g_factor = Neff / 3.0
         else:
-            classpars['N_ur'] = Neff - boltzmann_code.hardcoded_Neff/3.
-            g_factor = boltzmann_code.hardcoded_Neff/3.
+            classpars["N_ur"] = Neff - boltzmann_code.hardcoded_Neff / 3.0
+            g_factor = boltzmann_code.hardcoded_Neff / 3.0
 
         if "mnu" in classpars:
             mnu = classpars.pop("mnu")
             classpars["T_ncdm"] = (4.0 / 11.0) ** (1.0 / 3.0) * g_factor ** (1.0 / 4.0)
-            classpars["Omega_ncdm"] = mnu * g_factor ** (0.75) / boltzmann_code.hardcoded_neutrino_mass_fac / h**2
+            classpars["Omega_ncdm"] = (
+                mnu
+                * g_factor ** (0.75)
+                / boltzmann_code.hardcoded_neutrino_mass_fac
+                / h**2
+            )
         elif "Omeganu" in classpars:
             classpars["Omega_ncdm"] = classpars.pop("Omeganu")
         elif "omnuh2" in classpars:
@@ -163,7 +172,9 @@ class boltzmann_code:
         if "Omegab" in classpars:
             classpars["Omega_b"] = classpars.pop("Omegab")
         if "Omegam" in classpars:
-            classpars["Omega_cdm"] = (classpars.pop("Omegam") - classpars["Omega_b"] - classpars["Omega_ncdm"])
+            classpars["Omega_cdm"] = (
+                classpars.pop("Omegam") - classpars["Omega_b"] - classpars["Omega_ncdm"]
+            )
 
         return classpars
 
@@ -175,7 +186,7 @@ class boltzmann_code:
         cambpars = deepcopy(cosmopars)
         if "h" in cambpars:
             h = cambpars.pop("h")
-            h2= h**2
+            h2 = h**2
             cambpars["H0"] = h * 100
         if "Omegab" in cambpars:
             cambpars["ombh2"] = cambpars.pop("Omegab") * h2
@@ -228,25 +239,24 @@ class boltzmann_code:
 
         return cambpars
 
-
     # CAMB shooting for A_s from sigma8 is to inaccurate so we just call [it] twice
     def rescale_LP(self, cambpars, camb, insigma8):
         cambpars_LP = cambpars.copy()
         ini_As = self.settings["LP_rescale_ini_As"]
         boost = self.settings["LP_rescale_boost"]
 
-        #lower precission of camb calcuation
+        # lower precission of camb calcuation
         cambpars_LP["AccuracyBoost"] = boost
         cambpars_LP["lAccuracyBoost"] = boost
         cambpars_LP["lSampleBoost"] = boost
         cambpars_LP["kmax"] = 20
 
-        #obtain s8 from camb run
+        # obtain s8 from camb run
         pars = camb.set_params(redshifts=[0.0], **cambpars_LP)
         results = camb.get_results(pars)
         test_sig8 = np.array(results.get_sigma8())
 
-        #rescale linear power spectrum to obtain the s8 asked for
+        # rescale linear power spectrum to obtain the s8 asked for
         final_As = ini_As * (insigma8 / test_sig8[-1]) ** 2.0
         return final_As
 
@@ -272,11 +282,13 @@ class boltzmann_code:
             redshifts=camb_zarray,
             k_per_logint=self.cambcosmopars["k_per_logint"],
             kmax=self.cambcosmopars["kmax"],
-            accurate_massive_neutrino_transfers=self.cambcosmopars["accurate_massive_neutrino_transfers"],
+            accurate_massive_neutrino_transfers=self.cambcosmopars[
+                "accurate_massive_neutrino_transfers"
+            ],
         )
 
         ### TEXT VOMIT ###
-        if cfg.settings["verbosity"]>1:
+        if cfg.settings["verbosity"] > 1:
             self.recap_camb()
         ##################
 
@@ -287,7 +299,7 @@ class boltzmann_code:
 
         input_classcosmopars = {
             **self.boltzmann_classpars["ACCURACY"],
-            **self.boltzmann_classpars["COSMO_SETTINGS"]
+            **self.boltzmann_classpars["COSMO_SETTINGS"],
         }.copy()
         input_classcosmopars.update(cosmopars)
         self.classcosmopars = self.basechange_class(input_classcosmopars)
@@ -299,7 +311,7 @@ class boltzmann_code:
         self.kmin_pk = 1e-4
 
         ### TEXT VOMIT ###
-        if cfg.settings["verbosity"]>1:
+        if cfg.settings["verbosity"] > 1:
             self.recap_class()
         ##################
 
@@ -324,7 +336,7 @@ class boltzmann_code:
 
     def camb_results(self, camb, cosmopars):
         self.results = types.SimpleNamespace()
-        cambres, cambinstance = self.ready_camb(cosmopars,camb)
+        cambres, cambinstance = self.ready_camb(cosmopars, camb)
 
         Pk_l, self.results.zgrid, self.results.kgrid = (
             cambres.get_matter_power_interpolator(
@@ -356,10 +368,14 @@ class boltzmann_code:
             return_z_k=True,
         )
 
-        pk_prim = cambinstance.scalar_power(self.results.kgrid)* (2.0 * np.pi**2) / np.power(self.results.kgrid, 3)
+        pk_prim = (
+            cambinstance.scalar_power(self.results.kgrid)
+            * (2.0 * np.pi**2)
+            / np.power(self.results.kgrid, 3)
+        )
         lgpk_prim = np.log10(pk_prim)
         lgk = np.log10(self.results.kgrid)
-        self.results.P_scalar = UnivariateSpline(lgk,lgpk_prim)
+        self.results.P_scalar = UnivariateSpline(lgk, lgpk_prim)
 
         self.results.Pk_l = RectBivariateSpline(
             self.results.zgrid,
@@ -525,7 +541,9 @@ class boltzmann_code:
         self.results.ang_dist = np.vectorize(classres.angular_distance)
         self.results.com_dist = np.vectorize(classres.comoving_distance)
         self.results.Om_m = np.vectorize(classres.Om_m)
-        self.results.Om_cb= np.vectorize(lambda z: classres.Om_cdm(z)+classres.Om_b(z))
+        self.results.Om_cb = np.vectorize(
+            lambda z: classres.Om_cdm(z) + classres.Om_b(z)
+        )
 
         # Calculate the Matter fractions for CB Powerspectrum
         f_cdm = classres.Omega0_cdm() / classres.Omega_m()
@@ -570,7 +588,7 @@ class boltzmann_code:
 
         lgpk_prim = np.log10(pk_prim)
         lgk = np.log10(k)
-        self.results.P_scalar = UnivariateSpline(lgk,lgpk_prim)
+        self.results.P_scalar = UnivariateSpline(lgk, lgpk_prim)
 
         pk_cnu = T_nu * T_cb * pk_prim[:, None]
         pk_nunu = T_nu * T_nu * pk_prim[:, None]
@@ -667,7 +685,10 @@ class cosmo_functions:
     This class is where you can extract all of the EBS results. When modifying the code try to keep using the funcitons of this class instead of the callables inside of results.
     It also handles the nuiscance-like cosmological parameters.
     """
-    def __init__(self, cosmopars=dict(), nuiscance_like = dict(), input=None, cosmology = None):
+
+    def __init__(
+        self, cosmopars=dict(), nuiscance_like=dict(), input=None, cosmology=None
+    ):
         self.settings = cfg.settings
 
         self.input_cosmoparams = {**cosmopars, **nuiscance_like}
@@ -705,7 +726,6 @@ class cosmo_functions:
             if self.code == "camb":
                 self.cambcosmopars = cosmology.cambcosmopars
 
-
     def Hubble(self, z, physical=False):
         """Hubble function
 
@@ -726,7 +746,7 @@ class cosmo_functions:
         if physical:
             prefactor = cosmo_functions.celeritas
 
-        hubble = prefactor * self.results.h_of_z(z) * 1/u.Mpc
+        hubble = prefactor * self.results.h_of_z(z) * 1 / u.Mpc
 
         return hubble
 
@@ -754,7 +774,7 @@ class cosmo_functions:
         """
         h
         """
-        h =  (self.Hubble(0,physical=True)/(100 * u.km / u.s / u.Mpc) ).to(1)
+        h = (self.Hubble(0, physical=True) / (100 * u.km / u.s / u.Mpc)).to(1)
         return h
 
     def angdist(self, z):
@@ -778,7 +798,7 @@ class cosmo_functions:
 
     def primordial_scalar_pow(self, k):
         lgk = np.log10(k)
-        pk = np.power(10,self.results.P_scalar(lgk))
+        pk = np.power(10, self.results.P_scalar(lgk))
         return pk * u.Mpc**3
 
     def matpow(self, k, z, nonlinear=False, tracer="matter"):
@@ -814,10 +834,10 @@ class cosmo_functions:
         recognized and the function defaults to using `Pmm` to calculate the power spectrum of matter.
         """
         # Restore Units for Interpolators
-        k = np.atleast_1d(k.to(u.Mpc))
+        k = np.atleast_1d(k.to(1 / u.Mpc))
         z = np.atleast_1d(z)
-        zvec = z[None,:]
-        kvec = k[:,None]
+        zvec = z[None, :]
+        kvec = k[:, None]
 
         if tracer == "clustering":
             Pk = self.Pcb(zvec, kvec, nonlinear=nonlinear) * u.Mpc**3
@@ -835,15 +855,17 @@ class cosmo_functions:
 
         return np.squeeze(Pk)
 
-    def Transfer(self,k,z, nonlinear=False, tracer="matter"):
+    def Transfer(self, k, z, nonlinear=False, tracer="matter"):
         k = np.atleast_1d(k.to(u.Mpc))
         z = np.atleast_1d(z)
-        P = np.reshape(self.matpow(k,z,nonlinear=nonlinear,tracer=tracer),(*k.shape,*z.shape))
-        primordial = self.primordial_scalar_pow(k)[:,None]
-        return np.squeeze(np.sqrt(P/primordial))
+        P = np.reshape(
+            self.matpow(k, z, nonlinear=nonlinear, tracer=tracer), (*k.shape, *z.shape)
+        )
+        primordial = self.primordial_scalar_pow(k)[:, None]
+        return np.squeeze(np.sqrt(P / primordial))
 
     def Pmm(self, z, k, nonlinear=False):
-        """Compute the power spectrum of the total matter species  (MM) at a given redshift and wavenumber. 
+        """Compute the power spectrum of the total matter species  (MM) at a given redshift and wavenumber.
         Try to only use Matpow internaly as it is fully vecotrized and handles units correctly
 
         Args:
@@ -861,7 +883,7 @@ class cosmo_functions:
         return power
 
     def Pcb(self, z, k, nonlinear=False):
-        """Compute the power spectrum of the clustering matter species  (CB) at a given redshift and wavenumber. 
+        """Compute the power spectrum of the clustering matter species  (CB) at a given redshift and wavenumber.
         Try to only use Matpow internaly as it is fully vecotrized and handles units correctly
 
         Args:
@@ -910,8 +932,8 @@ class cosmo_functions:
         h_over_Mpc = self.h() / u.Mpc
 
         # wave number grids
-        kmin_loc =  self.settings["savgol_internalkmin"] # 1/Mpc
-        kmax_loc =  np.max(self.kgrid) # 1/Mpc
+        kmin_loc = self.settings["savgol_internalkmin"]  # 1/Mpc
+        kmax_loc = np.max(self.kgrid)  # 1/Mpc
         loc_samples = self.settings["savgol_internalsamples"]
         log_kgrid_loc = np.linspace(np.log(kmin_loc), np.log(kmax_loc), loc_samples)
 
@@ -921,8 +943,10 @@ class cosmo_functions:
         savgol_width = self.settings["savgol_width"]
         n_savgol = int(np.round(savgol_width / np.log(1 + dlnk_loc)))
 
-        P = self.matpow(np.exp(log_kgrid_loc)/u.Mpc, z, nonlinear=nonlinear, tracer=tracer).flatten()
-        uP= P.unit
+        P = self.matpow(
+            np.exp(log_kgrid_loc) / u.Mpc, z, nonlinear=nonlinear, tracer=tracer
+        ).flatten()
+        uP = P.unit
 
         intp_p = InterpolatedUnivariateSpline(
             log_kgrid_loc,
@@ -974,17 +998,20 @@ class cosmo_functions:
         """
         R = np.atleast_1d(R)
         z = np.atleast_1d(z)
-        k = np.geomspace(self.results.kmin_pk,self.results.kmax_pk,400) / u.Mpc
+        k = np.geomspace(self.results.kmin_pk, self.results.kmax_pk, 400) / u.Mpc
 
-        Pk = np.reshape(self.matpow(z[:,None],k[None,:],tracer=tracer),)[None,:,:]
+        # Keep in order R,z,k
+        Pk = np.reshape(self.matpow(k, z, tracer=tracer), (*k.shape, *z.shape)).T[
+            None, :, :
+        ]
 
-        #Get Sigma window function
-        x = (k[None,None,:] * R[:,None,None]).to(1)
-        W = 3 /np.power(x,3)*(np.sin(x*u.rad)-x*np.cos(x*u.rad))
-        W[np.where(x<0.01)] = 1 - np.power(x[np.where(x<0.01)],2) / 10
+        # Get Sigma window function
+        x = (k[None, None, :] * R[:, None, None]).to(1).value
+        W = 3 / np.power(x, 3) * (np.sin(x) - x * np.cos(x))
+        W[np.where(x < 0.01)] = 1 - np.power(x[np.where(x < 0.01)], 2) / 10
 
-        Integr= np.power(k[None,None,:]*W,2)*Pk/(2*np.pi**2)
-        return np.squeeze(np.sqrt(np.trapz(Integr,k,axis=-1)))
+        Integr = np.power(k[None, None, :] * W, 2) * Pk / (2 * np.pi**2)
+        return np.squeeze(np.sqrt(np.trapz(Integr, k, axis=-1)))
 
     def sigma8_of_z(self, z, tracer="matter"):
         """sigma_8
@@ -1001,8 +1028,8 @@ class cosmo_functions:
             The Variance of the matter perturbation smoothed over a scale of 8 Mpc/h
 
         """
-        R = 8*u.Mpc / self.h()
-        return self.sigmaR_of_z(R,z,tracer=tracer)
+        R = 8 * u.Mpc / self.h()
+        return self.sigmaR_of_z(R, z, tracer=tracer)
 
     def growth(self, z, k=None):
         """Growth factor
@@ -1051,7 +1078,7 @@ class cosmo_functions:
 
         return omz
 
-    def Omega(self, z, tracer = "matter"):
+    def Omega(self, z, tracer="matter"):
         if tracer == "clustering":
             return self.results.Om_cb(z)
         if tracer != "matter":
@@ -1126,17 +1153,17 @@ class cosmo_functions:
 
         return fs8
 
-    def transfer_ncdm(self,ncdmk):
-        '''
+    def transfer_ncdm(self, ncdmk):
+        """
         Transfer function to suppress small-scale power due to non-CDM models as presented in 2404.11609.
-        '''
+        """
         if "f_NL" in self.input_cosmoparams:
-            raise ValueError('Cannot have non-zero f_NL and non-CDM.')
+            raise ValueError("Cannot have non-zero f_NL and non-CDM.")
         else:
             kcut = self.input_cosmoparams["kcut"]
             slope = self.input_cosmoparams["slope"]
             # make sure k's are in the proper units
-            kcut = kcut.to(1./u.Mpc).value
+            kcut = kcut.to(1.0 / u.Mpc).value
             k = ncdmk
 
             # Initialize Tk with ones of the same shape as ncdmk
