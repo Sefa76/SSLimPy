@@ -136,10 +136,10 @@ class astro_functions:
             logM = np.log(M.to(u.Msun).value)
             return np.squeeze(np.exp(inter_logsigmaM(logM,z)))
         def dsigmaM_of_M_and_z(M,z):
-            eps = 0.01
-            sigmaMp = np.atleast_2d(sigmaM_of_M_and_z(M*(1+eps),z))
-            sigmaMm = np.atleast_2d(sigmaM_of_M_and_z(M*(1-eps),z))
-            return (sigmaMp-sigmaMm)/(2*eps*M[:,None])
+            M = np.atleast_1d(M.to(u.Msun))
+            sigmaM = np.atleast_2d(sigmaM_of_M_and_z(M,z))
+            logM = np.log(M.value)
+            return np.squeeze(sigmaM/M[:,None] * inter_logsigmaM.partial_derivative(1,0)(logM,z))
 
 
         return sigmaM_of_M_and_z, dsigmaM_of_M_and_z

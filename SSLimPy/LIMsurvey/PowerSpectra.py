@@ -74,13 +74,11 @@ class PowerSpectra:
 
         neff_at_R = -2.0 * 3.0 * Mvec[:, None] / sigmaM * dsigmaM_dM - 3.0
 
-        self.debug_neff_at_R = neff_at_R
-
         # konvert to solar masses
-        dimlM = Mvec.to(u.Msun).value
-        neff_inter = interp1d(np.log10(dimlM), neff_at_R, fill_value="extrapolate", kind="linear", axis=0)
-        neff = neff_inter(np.log10(kappa**3 * dimlM))
-
+        logMvec = np.log(Mvec.to(u.Msun).value)
+        neff_inter = interp1d(logMvec, neff_at_R, fill_value="extrapolate", kind="linear", axis=0)
+        neff = neff_inter(np.log(kappa**3 * Mvec.to(u.Msun).value))
+        
         # Quantities for c
         A = a0 * (1.0 + a1 * (neff + 3))
         B = b0 * (1.0 + b1 * (neff + 3))
@@ -99,9 +97,6 @@ class PowerSpectra:
                 invG = interp1d(G_x, x, fill_value="extrapolate", kind="linear")
                 c[iM,iz] = C[iz] * invG(arg[iM,iz])
 
-        self.debugc = (Mvec,zvec,c)
-
-        logMvec = np.log(Mvec.to(u.Msun).value)
         c_spline = RectBivariateSpline(logMvec,zvec,c)
         # restore units
         def cNFW_of_M_and_z(M,z):
