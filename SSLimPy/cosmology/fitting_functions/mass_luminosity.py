@@ -21,18 +21,22 @@ import astropy.constants as cu
 from scipy.interpolate import RegularGridInterpolator, interp1d
 import os
 
+
 class mass_luminosity:
 
     def __init__(self, astro, model_par=dict()):
         self.astro = astro
         self.astroparams = deepcopy(astro.astroparams)
-        
+
         if model_par:
             self.model_par = model_par
         else:
             self.model_par = self.astroparams["model_par"]
 
-        self.SFR_folder= "".join(os.path.dirname(os.path.realpath(__file__)).split("SSLimPy")[:-2])+"SSLimPy/SFR_tables/"
+        self.SFR_folder = (
+            "".join(os.path.dirname(os.path.realpath(__file__)).split("SSLimPy")[:-2])
+            + "SSLimPy/SFR_tables/"
+        )
 
     def MassPow(self, Mvec, z):
         """
@@ -50,14 +54,13 @@ class mass_luminosity:
         >>> print MassPow(Mvec,self.model_par,z)
         [   20000.   200000.  2000000.] solLum
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         A = self.model_par["A"]
         b = self.model_par["b"]
         L = A * np.array(M_grid) ** b * u.Lsun * np.ones_like(z_grid)
         return np.squeeze(L)
-
 
     def DblPwr(self, Mvec, z):
         """
@@ -78,8 +81,8 @@ class mass_luminosity:
         >>> print DblPwr(Mvec,self.model_par,z)
         [    546.6...   37502...  462439...] solLum
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         A = self.model_par["A"]
         b1 = self.model_par["b1"]
@@ -96,7 +99,6 @@ class mass_luminosity:
 
         return np.squeeze(L)
 
-
     def CO_lines_scaling_LFIR(self, Mvec, z):
         """
         Returns the luminosity for CO lines lines that have empirical scaling relations with FIR luminosity
@@ -112,10 +114,10 @@ class mass_luminosity:
                 -alpha
                 -beta
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
-        alpha= self.model_par["alpha"]
+        alpha = self.model_par["alpha"]
         beta = self.model_par["beta"]
         SFR_file = self.model_par["SFR_file"]
 
@@ -133,10 +135,9 @@ class mass_luminosity:
         # Compute IR luminosity in Lsun from Kennicutt 1998, arXiv:9807187
         LIR = (SFR * (1 / 4.5e-44) * u.erg / u.s).to(u.Lsun)
         Lp = np.power(10, ((np.log10(LIR.value) - beta) / alpha))
-        L = (4.9e-5 * u.Lsun) * Lp * (self.astro.nu[None,:] / (115.27 * u.GHz)) ** 3
+        L = (4.9e-5 * u.Lsun) * Lp * (self.astro.nu[None, :] / (115.27 * u.GHz)) ** 3
 
         return np.squeeze(L)
-
 
     def COMAP_Fid(self, Mvec, z):
         """
@@ -155,8 +156,8 @@ class mass_luminosity:
         * realistic-plus: (-2.85, -0.42, 10.63, 12.3, 0.42)
         * optimistic: (-2.4, -0.5, 10.45, 12.21, 0.36))
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         A = self.model_par["A"]
         B = self.model_par["B"]
@@ -164,9 +165,12 @@ class mass_luminosity:
         Ms = self.model_par["Ms"]
 
         L = C / ((M_grid / Ms) ** A + (M_grid / Ms) ** B) * np.ones_like(z_grid)
-        L *= 4.9e-5 * u.Lsun * ( np.atleast_1d(self.astro.nu)[None,:] / (115.27 * u.GHz)) ** 3
+        L *= (
+            4.9e-5
+            * u.Lsun
+            * (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)) ** 3
+        )
         return np.squeeze(L)
-
 
     def TonyLi(self, Mvec, z):
         """
@@ -199,8 +203,8 @@ class mass_luminosity:
         >>> print TonyLi(Mvec,self.model_par,z)
         [  2.05...e+02   7.86...e+03   4.56...e+05] solLum
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         alpha = self.model_par["alpha"]
         beta = self.model_par["beta"]
@@ -225,10 +229,13 @@ class mass_luminosity:
         Lprime = (10.0**-beta * LIR) ** (1.0 / alpha)
 
         # Compute LCO
-        L = (4.9e-5 * u.Lsun) * Lprime * (np.atleast_1d(self.astro.nu)[None,:] / (115.27 * u.GHz)) ** 3
+        L = (
+            (4.9e-5 * u.Lsun)
+            * Lprime
+            * (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)) ** 3
+        )
 
         return np.squeeze(L)
-
 
     def SilvaCII(self, Mvec, z):
         """
@@ -252,8 +259,8 @@ class mass_luminosity:
         >>> print SilvaCII(Mvec,self.model_par,z)
         [  4.58...e+06   1.61...e+08   6.89...e+08] solLum
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         aLCII = self.model_par["a"]
         bLCII = self.model_par["b"]
@@ -274,7 +281,6 @@ class mass_luminosity:
 
         return np.squeeze(L)
 
-
     def FonsecaLyalpha(self, Mvec, z):
         """
         Fonseca et al. 2016 model for Lyman alpha emission line. Relates Lyman alpha
@@ -292,8 +298,8 @@ class mass_luminosity:
 
         SFR_file     file with SFR
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         RLya = self.model_par["RLya"] * 1e42 * u.erg / u.s * (u.Msun / u.yr) ** -1
         SFR_file = self.model_par["SFR_file"]
@@ -317,7 +323,6 @@ class mass_luminosity:
         L = (SFR * K_Lyalpha).to(u.Lsun)
         return np.squeeze(L)
 
-
     def SilvaLyalpha_12(self, Mvec, z):
         """
         Silva et al. 2012 model for Lyman alpja emission line. Has a relation between
@@ -327,8 +332,8 @@ class mass_luminosity:
 
         SFR_file file with SFR
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         # Get SFR file
         SFR_file = self.model_par["SFR_file"]
@@ -365,7 +370,7 @@ class mass_luminosity:
             fill_value="extrapolate",
             kind="cubic",
         )(z_grid)
-        fesc = np.exp(-alpha * M_grid.to(u.Msun).value**beta)
+        fesc = np.exp(-alpha * M_grid.to(u.Msun).value ** beta)
         # Luminosity due to recombinations
         Lrec = 1.55e42 * (1.0 - fesc) * fLy * SFR / (u.Msun / u.yr) * (u.erg / u.s)
         # Luminosity due to excitation
@@ -398,7 +403,6 @@ class mass_luminosity:
 
         return np.squeeze(L)
 
-
     def Chung_Lyalpha(self, Mvec, z):
         """
         Model for Lyman-alpha line used in Chung+2019 (arXiv:1809.04550)
@@ -411,8 +415,8 @@ class mass_luminosity:
                                             reflecting the possibility of photons
                                             being absorbed by dust
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         C = self.model_par["C"]
         xi = self.model_par["xi"]
@@ -441,7 +445,6 @@ class mass_luminosity:
 
         return np.squeeze(L)
 
-
     def KSrel(self, Mvec, z):
         """
         Uses the Kennicutt-Schmidt relation: linear with SFR, adding an
@@ -452,8 +455,8 @@ class mass_luminosity:
             Aext         Extinction
             SFR_file     file with SFR
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         K = self.model_par["K"]
         Aext = self.model_par["Aext"]
@@ -472,7 +475,6 @@ class mass_luminosity:
         L = (SFR * K * 10 ** (-Aext / 2.5)).to(u.Lsun)
         return np.squeeze(L)
 
-
     def GongHalpha(self, Mvec, z):
         """
         Gong et al. 2017 model for Halpha emission line. Relates Halpha
@@ -486,10 +488,12 @@ class mass_luminosity:
         Aext         Extinction
         SFR_file     file with SFR
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
-        K_Halpha = self.model_par["K_Halpha"] * 1e41 * u.erg / u.s * (u.Msun / u.yr) ** -1
+        K_Halpha = (
+            self.model_par["K_Halpha"] * 1e41 * u.erg / u.s * (u.Msun / u.yr) ** -1
+        )
         Aext = self.model_par["Aext"]
         SFR_file = self.model_par["SFR_file"]
 
@@ -506,7 +510,6 @@ class mass_luminosity:
         L = (SFR * K_Halpha * 10 ** (-Aext / 2.5)).to(u.Lsun)
         return np.squeeze(L)
 
-
     def GongHbeta(self, Mvec, z):
         """
         Gong et al. 2017 model for Hbeta emission line. Relates Hbeta
@@ -520,8 +523,8 @@ class mass_luminosity:
         Aext         Extinction
         SFR_file     file with SFR
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         K_Hbeta = self.model_par["K_Hbeta"] * 1e41 * u.erg / u.s * (u.Msun / u.yr) ** -1
         Aext = self.model_par["Aext"]
@@ -540,7 +543,6 @@ class mass_luminosity:
         L = (SFR * K_Hbeta * 10 ** (-Aext / 2.5)).to(u.Lsun)
         return np.squeeze(L)
 
-
     def GongOIII(self, Mvec, z):
         """
         Gong et al. 2017 model for OIII emission line. Relates OIII
@@ -554,8 +556,8 @@ class mass_luminosity:
         Aext         Extinction
         SFR_file     file with SFR
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         K_OIII = self.model_par["K_OIII"] * 1e41 * u.erg / u.s * (u.Msun / u.yr) ** -1
         Aext = self.model_par["Aext"]
@@ -574,7 +576,6 @@ class mass_luminosity:
         L = (SFR * K_OIII * 10 ** (-Aext / 2.5)).to(u.Lsun)
         return np.squeeze(L)
 
-
     def GongOII(self, Mvec, z):
         """
         Gong et al. 2017 model for OII emission line. Relates OII
@@ -588,8 +589,8 @@ class mass_luminosity:
         Aext         Extinction
         SFR_file     file with SFR
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         K_OII = self.model_par["K_OII"] * 1e41 * u.erg / u.s * (u.Msun / u.yr) ** -1
         Aext = self.model_par["Aext"]
@@ -608,7 +609,6 @@ class mass_luminosity:
         L = (SFR * K_OII * 10 ** (-Aext / 2.5)).to(u.Lsun)
         return np.squeeze(L)
 
-
     def HI_lowz_Villaescusa(self, Mvec, z):
         """
         Fitting function to M_HI(M_h) from Villaescusa-Navarro et al. 2018
@@ -617,8 +617,8 @@ class mass_luminosity:
 
         M_HI(M,z) = M_0*(M/Mmin)^z*exp(-(Mmin/M)^0.35)
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         zint = np.array([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
         alphaint = np.array([0.24, 0.53, 0.60, 0.76, 0.79, 0.74])
@@ -630,8 +630,10 @@ class mass_luminosity:
             zint, alphaint, kind="linear", bounds_error=False, fill_value=alphaint[-1]
         )(z_grid)
         M0 = (
-            interp1d(zint, M0int, kind="linear", bounds_error=False, fill_value=M0int[-1]
-            )(z_grid) * self.Msunh
+            interp1d(
+                zint, M0int, kind="linear", bounds_error=False, fill_value=M0int[-1]
+            )(z_grid)
+            * self.Msunh
         ).to(u.Msun)
         Mmin = (
             interp1d(
@@ -647,12 +649,11 @@ class mass_luminosity:
         ).to(u.Msun)
 
         M_HI = M0 * (M_grid / Mmin) ** alpha * np.exp(-((Mmin / M_grid) ** 0.35))
-        M_HI[Mvec >= Mmax,:] = 0
+        M_HI[Mvec >= Mmax, :] = 0
 
         CLM = 6.25e-9 * u.Lsun / u.Msun  # Conversion factor btw MHI and LHI
         L = CLM * M_HI
         return np.squeeze(L)
-
 
     def MHI_21cm_Obuljen(self, Mvec, z):
         """
@@ -673,8 +674,8 @@ class mass_luminosity:
         >>> print MHI_21cm(Mvec,self.model_par,z)
         [  1.94...e-12   1.33...e-01   4.03...e+00] solLum
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         M0 = self.model_par["M0"]
         Mmin = self.model_par["Mmin"]
@@ -686,7 +687,6 @@ class mass_luminosity:
         L = CLM * MHI * np.ones_like(z_grid)
         return np.squeeze(L)
 
-
     def MHI_21cm_Padmanabhan(self, Mvec, z):
         """
         Padmamabhan & Kulkarni 2017 21cm MHI(M) model, relates MHI to halo mass by
@@ -695,8 +695,8 @@ class mass_luminosity:
         where N, M0, b and y are free parameters fit to observations as function
         of redshift. We use the best fit here
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(Mvec)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
 
         # Values at z=0
         M10 = 4.58e11 * u.Msun
@@ -720,7 +720,6 @@ class mass_luminosity:
         L = CLM * MHI
         return np.squeeze(L)
 
-
     def Constant_L(self, Mvec, z):
         """
         Model where every halo has a constant luminosity independent of mass.
@@ -740,15 +739,13 @@ class mass_luminosity:
         z = np.atleast_1d(z)
         Mvec = np.atleast_1d(Mvec)
 
-        L = self.model_par["L0"]* np.ones((Mvec.size,z.size))
+        L = self.model_par["L0"] * np.ones((Mvec.size, z.size))
 
         return np.squeeze(L)
-
 
     ###################
     # Other functions #
     ###################
-
 
     def get_SFR(self, M, z, SFR_file):
         """
@@ -774,15 +771,14 @@ class mass_luminosity:
 
         return SFR
 
-
     def SFR_Mz_2dinterp(self, M, z, SFR_file):
         """
         Returns SFR(M,z) interpolated from tables of 1+z, log10(Mhalo/Msun) and
         log10(SFR / (Msun/yr)), in three columns, where 1+z is the innermost index
         (the one running fast compared with the mass)
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(M)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(M)[:, None]
 
         try:
             x = np.loadtxt(self.SFR_folder + SFR_file)
@@ -792,35 +788,48 @@ class mass_luminosity:
         logMb = np.unique(x[:, 1])
         logSFRb = x[:, 2].reshape(len(zb), len(logMb), order="F")
 
-        logSFR_interp = RegularGridInterpolator( (zb,logMb), logSFRb, bounds_error=False, fill_value=-40.0)
+        logSFR_interp = RegularGridInterpolator(
+            (zb, logMb), logSFRb, bounds_error=False, fill_value=-40.0
+        )
 
         logM_grid = np.log10((M_grid.to(u.Msun)).value)
-        SFR = np.power(10,logSFR_interp((z_grid,logM_grid)))* u.Msun / u.yr
+        SFR = np.power(10, logSFR_interp((z_grid, logM_grid))) * u.Msun / u.yr
 
         return np.squeeze(SFR)
-
 
     def Silva_SFR(self, M, z, SFR_file):
         """
         Returns SFR(M,z) interpolated from values in Table 2 of Silva et al. 2015
         """
-        z_grid = np.atleast_1d(z)[None,:]
-        M_grid = np.atleast_1d(M)[:,None]
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(M)[:, None]
 
         try:
             x = np.loadtxt(self.SFR_folder + SFR_file)
         except:
             x = np.loadtxt(SFR_file)
         z0 = x[0, :]
-        M0 = (10** interp1d(z0, np.log10(x[1, :]), bounds_error=False, fill_value="extrapolate")(z_grid) * u.Msun / u.yr)
-        Ma = interp1d(z0, x[2, :], bounds_error=False, fill_value="extrapolate")(z_grid) * u.Msun
-        Mb = interp1d(z0, x[3, :], bounds_error=False, fill_value="extrapolate")(z_grid) * u.Msun
+        M0 = (
+            10
+            ** interp1d(
+                z0, np.log10(x[1, :]), bounds_error=False, fill_value="extrapolate"
+            )(z_grid)
+            * u.Msun
+            / u.yr
+        )
+        Ma = (
+            interp1d(z0, x[2, :], bounds_error=False, fill_value="extrapolate")(z_grid)
+            * u.Msun
+        )
+        Mb = (
+            interp1d(z0, x[3, :], bounds_error=False, fill_value="extrapolate")(z_grid)
+            * u.Msun
+        )
         a = interp1d(z0, x[4, :], bounds_error=False, fill_value="extrapolate")(z_grid)
         b = interp1d(z0, x[5, :], bounds_error=False, fill_value="extrapolate")(z_grid)
 
         SFR = M0 * (M_grid / Ma) ** a * (1 + M_grid / Mb) ** b
         return np.squeeze(SFR)
-
 
     def Gong_SFR(self, M, z, SFR_file):
         """
@@ -828,13 +837,13 @@ class mass_luminosity:
         """
         z = np.atleast_1d(z)
         M = np.atleast_1d(M)
-        M_grid = M[:,None]
-        z_grid = z[None,:]
+        M_grid = M[:, None]
+        z_grid = z[None, :]
 
-        SFR = np.zeros((len(M),len(z)))
+        SFR = np.zeros((len(M), len(z)))
 
-        z_mid = np.where((z<5) and (z>=4))
-        z_low = np.where(z<4)
+        z_mid = np.where((z < 5) and (z >= 4))
+        z_low = np.where(z < 4)
         Mlim_mid = 1e12 * u.Msun
         Mlim_low = 1e13 * u.Msun
 
@@ -850,20 +859,31 @@ class mass_luminosity:
         M1 = 1e8 * u.Msun
         M2 = 4e11 * u.Msun
 
-        M_mid = np.minimum(M_grid,Mlim_mid)
-        SFR[:,z_mid] = np.power(10.0,a[z_mid]) * np.power(M_mid / M1,  b[z_mid]) * np.power(1.0 + M_mid / M2,  c[z_mid]) * u.Msun / u.yr
-        M_low = np.minimum(M_grid,Mlim_low)
-        SFR[:,z_low] = np.power(10.0,a[z_low]) * np.power(M_low / M1,  b[z_low]) * np.power(1.0 + M_low / M2,  c[z_low]) * u.Msun / u.yr
+        M_mid = np.minimum(M_grid, Mlim_mid)
+        SFR[:, z_mid] = (
+            np.power(10.0, a[z_mid])
+            * np.power(M_mid / M1, b[z_mid])
+            * np.power(1.0 + M_mid / M2, c[z_mid])
+            * u.Msun
+            / u.yr
+        )
+        M_low = np.minimum(M_grid, Mlim_low)
+        SFR[:, z_low] = (
+            np.power(10.0, a[z_low])
+            * np.power(M_low / M1, b[z_low])
+            * np.power(1.0 + M_low / M2, c[z_low])
+            * u.Msun
+            / u.yr
+        )
 
         return np.squeeze(SFR)
-
 
     def Fonseca_SFR(self, M, z, SFR_file):
         """
         Returns SFR(M,z) interpolated from values in Table 1 of Fonseca et al. 2016
         """
-        M_grid = np.atleast_1d(M)[:,None]
-        z_grid = np.atleast_1d(z)[None,:]
+        M_grid = np.atleast_1d(M)[:, None]
+        z_grid = np.atleast_1d(z)[None, :]
 
         try:
             x = np.loadtxt(self.SFR_folder + SFR_file)
@@ -871,18 +891,30 @@ class mass_luminosity:
             x = np.loadtxt(SFR_file)
         z0 = x[:, 0]
         M0 = interp1d(z0, x[:, 1], bounds_error=False, fill_value="extrapolate")(z_grid)
-        Mb = interp1d(z0, x[:, 2], bounds_error=False, fill_value="extrapolate")(z_grid) * u.Msun
-        Mc = interp1d(z0, x[:, 3], bounds_error=False, fill_value="extrapolate")(z_grid) * u.Msun
+        Mb = (
+            interp1d(z0, x[:, 2], bounds_error=False, fill_value="extrapolate")(z_grid)
+            * u.Msun
+        )
+        Mc = (
+            interp1d(z0, x[:, 3], bounds_error=False, fill_value="extrapolate")(z_grid)
+            * u.Msun
+        )
         a = interp1d(z0, x[:, 4], bounds_error=False, fill_value="extrapolate")(z_grid)
         b = interp1d(z0, x[:, 5], bounds_error=False, fill_value="extrapolate")(z_grid)
         c = interp1d(z0, x[:, 6], bounds_error=False, fill_value="extrapolate")(z_grid)
 
         Ma = 1e8 * u.Msun
 
-        SFR = M0 * (M_grid / Ma) ** a * (1.0 + M_grid / Mb) ** b * (1 + M_grid / Mc) ** c * u.Msun / u.yr
+        SFR = (
+            M0
+            * (M_grid / Ma) ** a
+            * (1.0 + M_grid / Mb) ** b
+            * (1 + M_grid / Mc) ** c
+            * u.Msun
+            / u.yr
+        )
 
         return np.squeeze(SFR)
-
 
     def process_fq(self) -> RegularGridInterpolator:
         """
@@ -911,10 +943,9 @@ class mass_luminosity:
         logMh = data[:, 0]
         zp1 = 1 / a
 
-        fQ_interp = RegularGridInterpolator( (logMh, zp1), mat, bounds_error=True)
+        fQ_interp = RegularGridInterpolator((logMh, zp1), mat, bounds_error=True)
 
         return fQ_interp
-
 
     if __name__ == "__main__":
         import doctest

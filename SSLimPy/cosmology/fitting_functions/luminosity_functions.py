@@ -10,11 +10,12 @@ import numpy as np
 import astropy.units as u
 from copy import deepcopy
 
+
 class luminosity_functions:
-    def __init__(self,astro,model_par=dict()):
+    def __init__(self, astro, model_par=dict()):
         self.astro = astro
         self.astroparams = deepcopy(astro.astroparams)
-        
+
         if model_par:
             self.model_par = model_par
         else:
@@ -49,7 +50,6 @@ class luminosity_functions:
             dndL[Lvec < Lmin] = 0.0 * dndL.unit
 
         return dndL.to(u.Mpc**-3 * u.Lsun**-1)
-
 
     def SchCut(self, Lvec):
         """
