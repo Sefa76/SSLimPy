@@ -59,8 +59,7 @@ def init(
     settings.setdefault("do_onehalo", False)
     settings.setdefault("do_Jysr", False)
     settings.setdefault("do_RSD", True)
-    settings.setdefault("sigma_NL", 7)
-    settings.setdefault("nmu", 1000)
+    settings.setdefault("nmu", 127)
     settings.setdefault("FoG_damp", "Lorentzian")
     settings.setdefault("smooth", False)
     settings.setdefault("do_conv_Wkmin", False)
@@ -69,6 +68,7 @@ def init(
     settings.setdefault("LP_rescale_boost", 2)
     settings.setdefault("nonlinear", True)
     settings.setdefault("do_pheno_ncdm",False)
+    settings.setdefault("fix_cosmo_nl_terms",True)
 
     # Output settings
     settings.setdefault("verbosity",1)

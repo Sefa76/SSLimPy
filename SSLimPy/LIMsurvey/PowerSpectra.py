@@ -11,6 +11,7 @@ from SSLimPy.interface import config as cfg
 class PowerSpectra:
     def __init__(self, cosmology, astro):
         self.cosmology = cosmology
+        self.fiducialcosmo = cfg.fiducialcosmo
         self.astro = astro
 
         #################################
@@ -79,7 +80,7 @@ class PowerSpectra:
         logMvec = np.log(Mvec.to(u.Msun).value)
         neff_inter = interp1d(logMvec, neff_at_R, fill_value="extrapolate", kind="linear", axis=0)
         neff = neff_inter(np.log(kappa**3 * Mvec.to(u.Msun).value))
-        
+
         # Quantities for c
         A = a0 * (1.0 + a1 * (neff + 3))
         B = b0 * (1.0 + b1 * (neff + 3))
@@ -120,7 +121,7 @@ class PowerSpectra:
         Delta = 200.
         rho_crit = self.astro.rho_crit
         R_NFW = (3.*M/(4.*np.pi*Delta*rho_crit))**(1./3.)
-        
+
         #get characteristic radius
         c = self.c_NFW(M,z)[None,:,:]
         r_s = R_NFW[None,:,None]/c
@@ -138,7 +139,7 @@ class PowerSpectra:
         '''
         Average luminosity-weighted bias for the given cosmology and line
         model.  ASSUMED TO BE WEIGHTED LINERALY BY MASS FOR 'LF' MODELS
-        
+
         Includes the effects of f_NL though the wrapping functions in astro
         '''
         # Integrands for mass-averaging
@@ -155,3 +156,21 @@ class PowerSpectra:
 
         b_line = np.trapz(itgrnd1,M,axis=1) / np.trapz(itgrnd2,M,axis=1)
         return np.squeeze(b_line.to(1).value)
+
+    def nbar(self, z):
+        '''
+        Mean number density of galaxies, computed from the luminosity function
+        in 'LF' models and from the mass function in 'ML' models
+        '''
+        model_type = self.astro.astroparams["model_type"]
+        if model_type =='LF':
+            dndL  = self.astro.haloluminosityfunction(self.L,z)
+            nbar = np.trapz(dndL,self.L,axis=0)
+        else:
+            dndM = self.astro.halomassfunction(self.M,z)
+            nbar = np.trapz(dndM,self.M,axis=0)
+        return nbar
+    
+    ###############
+    # De-Wiggling #
+    ###############

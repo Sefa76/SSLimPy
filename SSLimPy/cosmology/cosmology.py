@@ -349,7 +349,7 @@ class boltzmann_code:
                 return_z_k=True,
             )
         )
-        Pk_nl, zgrid, kgrid = cambres.get_matter_power_interpolator(
+        Pk_nl, _, _ = cambres.get_matter_power_interpolator(
             hubble_units=False,
             k_hunit=False,
             var1="delta_tot",
@@ -358,7 +358,7 @@ class boltzmann_code:
             extrap_kmax=100,
             return_z_k=True,
         )
-        Pk_cb_l, zgrid, kgrid = cambres.get_matter_power_interpolator(
+        Pk_cb_l, _, _ = cambres.get_matter_power_interpolator(
             hubble_units=False,
             k_hunit=False,
             var1="delta_nonu",
@@ -454,79 +454,6 @@ class boltzmann_code:
             self.results.zgrid, self.results.kgrid, Pk_cb_nl
         )
 
-        P_kz_0 = self.results.Pk_l(0.0, self.results.kgrid)
-        D_g_norm_kz = np.sqrt(
-            self.results.Pk_l(self.results.zgrid, self.results.kgrid) / P_kz_0
-        )
-
-        self.results.D_growth_zk = RectBivariateSpline(
-            self.results.zgrid, self.results.kgrid, (D_g_norm_kz), kx=3, ky=3
-        )
-
-        P_cb_kz_0 = self.results.Pk_cb_l(0.0, self.results.kgrid)
-        D_g_cb_norm_kz = np.sqrt(
-            self.results.Pk_cb_l(self.results.zgrid, self.results.kgrid) / P_cb_kz_0
-        )
-        self.results.D_growth_cb_zk = RectBivariateSpline(
-            self.results.zgrid, self.results.kgrid, (D_g_cb_norm_kz), kx=3, ky=3
-        )
-
-        def f_deriv(k_array, k_fix=False, fixed_k=1e-3):
-            z_array = self.results.zgrid
-            if k_fix:
-                k_array = np.full((len(k_array)), fixed_k)
-            ## Generates interpolaters D(z) for varying k values
-            D_z = np.array(
-                [
-                    UnivariateSpline(
-                        z_array, self.results.D_growth_zk(z_array, kk), s=0
-                    )
-                    for kk in k_array
-                ]
-            )
-
-            ## Generates arrays f(z) for varying k values
-            f_z = np.array(
-                [
-                    -(1 + z_array) / D_zk(z_array) * (D_zk.derivative())(z_array)
-                    for D_zk in D_z
-                ]
-            )
-            return f_z, z_array
-
-        f_z_k_array, z_array = f_deriv(self.results.kgrid)
-        self.results.f_growthrate_zk = RectBivariateSpline(
-            z_array, self.results.kgrid, f_z_k_array.T
-        )
-
-        def f_cb_deriv(k_array, k_fix=False, fixed_k=1e-3):
-            z_array = self.results.zgrid
-            if k_fix:
-                k_array = np.full((len(k_array)), fixed_k)
-            ## Generates interpolaters D(z) for varying k values
-            D_cb_z = np.array(
-                [
-                    UnivariateSpline(
-                        z_array, self.results.D_growth_cb_zk(z_array, kk), s=0
-                    )
-                    for kk in k_array
-                ]
-            )
-
-            ## Generates arrays f(z) for varying k values
-            f_cb_z = np.array(
-                [
-                    -(1 + z_array) / D_cb_zk(z_array) * (D_cb_zk.derivative())(z_array)
-                    for D_cb_zk in D_cb_z
-                ]
-            )
-            return f_cb_z, z_array
-
-        f_cb_z_k_array, z_array = f_cb_deriv(self.results.kgrid)
-        self.results.f_growthrate_cb_zk = RectBivariateSpline(
-            z_array, self.results.kgrid, f_cb_z_k_array.T
-        )
-
         self.results.kmin_pk = self.kmin_pk
         self.results.kmax_pk = self.kmax_pk
 
@@ -600,82 +527,9 @@ class boltzmann_code:
             z[::-1], k, (np.flip(Pk_cb_nl, axis=1)).transpose()
         )
 
-        def create_growth():
-            z_ = self.results.zgrid
-            pk_flipped = np.flip(Pk_l, axis=1).T
-            D_growth_zk = RectBivariateSpline(
-                z_, k, np.sqrt(pk_flipped / pk_flipped[0, :])
-            )
-            return D_growth_zk
-
-        self.results.D_growth_zk = create_growth()
-
-        def f_deriv(k_array, k_fix=False, fixed_k=1e-3):
-            z_array = np.linspace(0, classres.pars["z_max_pk"], 100)
-            if k_fix:
-                k_array = np.full((len(k_array)), fixed_k)
-            ## Generates interpolaters D(z) for varying k values
-            D_z = np.array(
-                [
-                    UnivariateSpline(
-                        z_array, self.results.D_growth_zk(z_array, kk), s=0
-                    )
-                    for kk in k_array
-                ]
-            )
-
-            ## Generates arrays f(z) for varying k values
-            f_z = np.array(
-                [
-                    -(1 + z_array) / D_zk(z_array) * (D_zk.derivative())(z_array)
-                    for D_zk in D_z
-                ]
-            )
-            return f_z, z_array
-
-        f_z_k_array, z_array = f_deriv(self.results.kgrid)
-        f_g_kz = RectBivariateSpline(z_array, self.results.kgrid, f_z_k_array.T)
-        self.results.f_growthrate_zk = f_g_kz
-
-        def create_growth_cb():
-            z_ = self.results.zgrid
-            pk_flipped = np.flip(Pk_cb_l, axis=1).T
-            D_growth_zk = RectBivariateSpline(
-                z_, k, np.sqrt(pk_flipped / pk_flipped[0, :])
-            )
-            return D_growth_zk
-
-        self.results.D_growth_cb_zk = create_growth_cb()
-
-        def f_cb_deriv(k_array, k_fix=False, fixed_k=1e-3):
-            z_array = np.linspace(0, classres.pars["z_max_pk"], 100)
-            if k_fix:
-                k_array = np.full((len(k_array)), fixed_k)
-            ## Generates interpolaters D(z) for varying k values
-            D_cb_z = np.array(
-                [
-                    UnivariateSpline(
-                        z_array, self.results.D_growth_cb_zk(z_array, kk), s=0
-                    )
-                    for kk in k_array
-                ]
-            )
-
-            ## Generates arrays f(z) for varying k values
-            f_cb_z = np.array(
-                [
-                    -(1 + z_array) / D_cb_zk(z_array) * (D_cb_zk.derivative())(z_array)
-                    for D_cb_zk in D_cb_z
-                ]
-            )
-            return f_cb_z, z_array
-
         self.results.kmin_pk = self.kmin_pk
         self.results.kmax_pk = self.kmax_pk
 
-        f_cb_z_k_array, z_array = f_cb_deriv(self.results.kgrid)
-        f_g_cb_kz = RectBivariateSpline(z_array, self.results.kgrid, f_cb_z_k_array.T)
-        self.results.f_growthrate_cb_zk = f_g_cb_kz
 
 
 class cosmo_functions:
@@ -725,6 +579,12 @@ class cosmo_functions:
                 self.classcosmopars = cosmology.classcomopars
             if self.code == "camb":
                 self.cambcosmopars = cosmology.cambcosmopars
+        
+        self.growth_factor, self.growth_rate = self.create_growth()
+
+    ##############
+    # Background #
+    ##############
 
     def Hubble(self, z, physical=False):
         """Hubble function
@@ -795,6 +655,63 @@ class cosmo_functions:
         dA = self.results.ang_dist(z) * u.Mpc
 
         return dA
+
+    def comoving(self, z):
+        """Comoving distance
+
+        Parameters
+        ----------
+        z     : float
+                redshift
+
+        Returns
+        -------
+        float
+            Comoving distance values at the redshifts of the input redshift
+
+        """
+
+        chi = self.results.com_dist(z) * u.Mpc
+
+        return chi
+
+    def Omegam_of_z(self, z):
+        """Omega matter fraction as a function of redshift
+
+        Parameters
+        ----------
+        z     : float
+                redshift
+
+        Returns
+        -------
+        float
+            Omega matter (total) at the redshifts of the input redshift `z`
+
+
+        Note
+        -----
+        Assumes standard matter evolution
+        Implements the following equation:
+
+        .. math::
+            Omega_m(z) = Omega_{m,0}*(1+z)^3 / E^2(z)
+        """
+
+        omz = self.results.Om_m(z)
+
+        return omz
+
+    def Omega(self, z, tracer="matter"):
+        if tracer == "clustering":
+            return self.results.Om_cb(z)
+        if tracer != "matter":
+            warn("Did not recognize tracer: reverted to matter")
+        return self.results.Om_m(z)
+
+    #################
+    # Power Spectra #
+    #################
 
     def primordial_scalar_pow(self, k):
         lgk = np.log10(k)
@@ -960,24 +877,30 @@ class cosmo_functions:
         )
         return intp_pnw(k) * uP
 
-    def comoving(self, z):
-        """Comoving distance
-
-        Parameters
-        ----------
-        z     : float
-                redshift
-
-        Returns
-        -------
-        float
-            Comoving distance values at the redshifts of the input redshift
-
+    def transfer_ncdm(self, ncdmk):
         """
+        Transfer function to suppress small-scale power due to non-CDM models as presented in 2404.11609.
+        """
+        if "f_NL" in self.input_cosmoparams:
+            raise ValueError("Cannot have non-zero f_NL and non-CDM.")
+        else:
+            kcut = self.input_cosmoparams["kcut"]
+            slope = self.input_cosmoparams["slope"]
+            # make sure k's are in the proper units
+            kcut = kcut.to(1.0 / u.Mpc).value
+            k = ncdmk
 
-        chi = self.results.com_dist(z) * u.Mpc
+            # Initialize Tk with ones of the same shape as ncdmk
+            Tk = np.ones_like(k)
+            # Apply the transfer function conditionally
+            mask = k > kcut
+            Tk[mask] = (k[mask] / kcut) ** (-slope)
 
-        return chi
+        return Tk
+
+    #######################
+    # Real Space Variance #
+    #######################
 
     def sigmaR_of_z(self, R, z, tracer="matter"):
         """sigma_8
@@ -1031,148 +954,75 @@ class cosmo_functions:
         R = 8 * u.Mpc / self.h()
         return self.sigmaR_of_z(R, z, tracer=tracer)
 
-    def growth(self, z, k=None):
-        """Growth factor
-
-        Parameters
-        ----------
-        z     : float
-                redshift
-
-        Returns
-        -------
-        float
-            Growth factor values at the redshifts of the input redshift
-
+    def P_ThetaTheta_Moments(self, z, moment=0):
         """
-        if k is None:
-            k = 0.0001
-        Dg = self.results.D_growth_zk(z, k, grid=False)
-
-        return Dg
-
-    def Omegam_of_z(self, z):
-        """Omega matter fraction as a function of redshift
-
-        Parameters
-        ----------
-        z     : float
-                redshift
-
-        Returns
-        -------
-        float
-            Omega matter (total) at the redshifts of the input redshift `z`
-
-
-        Note
-        -----
-        Assumes standard matter evolution
-        Implements the following equation:
-
-        .. math::
-            Omega_m(z) = Omega_{m,0}*(1+z)^3 / E^2(z)
+        Calculates the angular power spectrum moments of the velocity divergence field, also known as the Theta field.
         """
+        k = self.results.kgrid * 1/u.Mpc
+        z = np.atleast_1d(z)
+        f_mom = np.power(np.reshape(self.growth_rate(k,z,tracer="matter"),(*k.shape,*z.shape)),moment)
+        P_mm = np.reshape(self.matpow(k,z,tracer="matter"),(*k.shape,*z.shape))
+        integrnd = f_mom * P_mm
 
-        omz = self.results.Om_m(z)
+        Int = np.trapz(integrnd, k,axis=0)
+        sigma_tt = np.sqrt((1 / (6 * np.pi**2)) * Int)
+        return np.squeeze(sigma_tt)
 
-        return omz
+    ##########
+    # Growth #
+    ##########
+    def create_growth(self):
+        k = self.results.kgrid * 1/u.Mpc
+        z = self.results.zgrid
+        logk = np.log(k.to(1/u.Mpc).value)
 
-    def Omega(self, z, tracer="matter"):
-        if tracer == "clustering":
-            return self.results.Om_cb(z)
-        if tracer != "matter":
-            warn("Did not recognize tracer: reverted to matter")
-        return self.results.Om_m(z)
+        Pm0 = self.matpow(k,0,tracer="matter")[:,None]
+        Pm = self.matpow(k,z,tracer="matter")
+        Pc0 = self.matpow(k,0,tracer="clustering")[:,None]
+        Pc = self.matpow(k,z,tracer="clustering")
 
-    def f_growthrate(self, z, k=None, gamma=False, tracer="matter"):
-        """Growth rate in LCDM gamma approximation
+        logDm = np.log(np.sqrt((Pm/Pm0).to(1).value))
+        logDc = np.log(np.sqrt((Pc/Pc0).to(1).value))
 
-        Parameters
-        ----------
-        z     : float
-                redshift
+        logDm_inter = RectBivariateSpline(logk,z,logDm)
+        logDc_inter = RectBivariateSpline(logk,z,logDc)
 
-        Returns
-        -------
-        float
-            Growth rate values at the redshifts of the input redshift,
-            using self.gamma as gamma value.
+        def growth_factor(k, z, tracer="matter"):
+            k = np.atleast_1d(k)
+            z = np.atleast_1d(z)
+            logk = np.log(k.to(1/u.Mpc).value)
+            if tracer == "clustering":
+                D = np.squeeze(np.exp(logDc_inter(logk,z)))
+            elif tracer == "matter":
+                D = np.squeeze(np.exp(logDm_inter(logk,z)))
+            else:
+                warn("Did not recognize tracer: reverted to matter")
+                D = np.squeeze(np.exp(logDm_inter(logk,z)))
+            return D
+        
+        def growth_rate(k, z, tracer="matter"):
+            k = np.atleast_1d(k)
+            z = np.atleast_1d(z)
+            logk = np.log(k.to(1/u.Mpc).value)
+            if tracer == "clustering":
+                logdfunc = logDc_inter
+            elif tracer == "matter":
+                logdfunc = logDm_inter
+            else:
+                warn("Did not recognize tracer: reverted to matter")
+                logdfunc = logDm_inter
 
+            return np.squeeze(-1*(1+z)[None,:]*logdfunc.partial_derivative(0,1)(logk,z))
 
-        Note
-        -----
-        Implements the following equation:
+        return growth_rate, growth_factor   
 
-        .. math::
-            f(z) = Omega_m(z)^{\gamma}
+    def fsigma8_of_z(self, k, z, tracer="matter"):
         """
-        if k is None:
-            k = 0.0001
-
-        if tracer == "clustering":
-            fg = self.results.f_growthrate_cb_zk(z, k, grid=False)
-            return fg
-        if tracer != "matter":
-            warn("Did not recognize tracer: reverted to matter")
-
-        if gamma is False:
-            fg = self.results.f_growthrate_zk(z, k, grid=False)
-        else:
-            # Assumes standard Omega_matter evolution in z
-            fg = np.power(self.Omegam_of_z(z), self.gamma)
-
-        return fg
-
-    def fsigma8_of_z(self, z, k=None, gamma=False, tracer="matter"):
-        """Growth rate in LCDM gamma approximation
-
-        Parameters
-        ----------
-        z     : float
-                redshift
-
-        Returns
-        -------
-        float
-            Growth rate values at the redshifts of the input redshift,
-            using self.gamma as gamma value.
-
-
-        Note
-        -----
-        Implements the following equation:
-
-        .. math::
-            f(z) = Omega_m(z)^{\gamma}
+        Clustering parameter of LCDM
         """
-        # Assumes standard Omega_matter evolution in z
-        fs8 = self.f_growthrate(z, k, gamma, tracer=tracer) * self.sigma8_of_z(
-            z, tracer=tracer
-        )
-
-        return fs8
-
-    def transfer_ncdm(self, ncdmk):
-        """
-        Transfer function to suppress small-scale power due to non-CDM models as presented in 2404.11609.
-        """
-        if "f_NL" in self.input_cosmoparams:
-            raise ValueError("Cannot have non-zero f_NL and non-CDM.")
-        else:
-            kcut = self.input_cosmoparams["kcut"]
-            slope = self.input_cosmoparams["slope"]
-            # make sure k's are in the proper units
-            kcut = kcut.to(1.0 / u.Mpc).value
-            k = ncdmk
-
-            # Initialize Tk with ones of the same shape as ncdmk
-            Tk = np.ones_like(k)
-            # Apply the transfer function conditionally
-            mask = k > kcut
-            Tk[mask] = (k[mask] / kcut) ** (-slope)
-
-        return Tk
+        f = self.growth_rate(k,z,tracer=tracer)
+        s8 = self.sigma8_of_z(z,tracer=tracer)
+        return f*s8
 
     def cmb_power(self, lmin, lmax, obs1, obs2):
         if self.code == "camb":

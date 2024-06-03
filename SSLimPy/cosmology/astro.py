@@ -287,7 +287,8 @@ class astro_functions:
             dn_dL_of_L_func = getattr(
                 self.luminosity_function, self.astroparams["model_name"]
             )
-            dn_dL_of_L = dn_dL_of_L(L) * np.ones_like(z)[None, :]
+
+            dn_dL_of_L = dn_dL_of_L_func(L)[:,None] * np.ones_like(z)[None, :]
 
         logL = np.log(L.to(u.Lsun).value)
         logLF = np.log(dn_dL_of_L.to(u.Mpc ** (-3) * u.Lsun ** (-1)).value)

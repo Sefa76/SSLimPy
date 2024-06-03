@@ -37,7 +37,7 @@ class halo_mass_functions:
 
         dndM = (
             -2
-            * (rhoM / Mvec)
+            * (rhoM / Mvec)[:,None]
             * dsigmaM_dM
             / sigmaM
             * 0.3222
@@ -47,7 +47,7 @@ class halo_mass_functions:
             / np.sqrt(np.pi)
         )
 
-        return dndM
+        return np.squeeze(dndM)
 
     def Tinker(self, Mvec, rhoM, z):
         """
@@ -70,7 +70,7 @@ class halo_mass_functions:
 
         fs = A * ((b / sigmaM) ** (a) + 1.0) * np.exp(-c / sigmaM**2)
 
-        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return np.squeeze(dndM)
 
@@ -89,7 +89,7 @@ class halo_mass_functions:
         c = 1.036 * (1.0 + z_array) ** (-0.024)
 
         fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2)
-        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return np.squeeze(dndM)
 
@@ -106,7 +106,7 @@ class halo_mass_functions:
 
         fs = A * np.exp(-np.absolute(np.log(1.0 / sigmaM) + b) ** c)
 
-        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
@@ -123,7 +123,7 @@ class halo_mass_functions:
         dsigmaM_dM = self.dsigmaM_dM(Mvec, z).to(self.Msunh**-1)
 
         fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2)
-        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
@@ -153,7 +153,7 @@ class halo_mass_functions:
         )
         fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2) * factor
 
-        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
@@ -171,7 +171,7 @@ class halo_mass_functions:
 
         fs = A * ((b / sigmaM) ** a + 1.0) * np.exp(-c / sigmaM**2)
 
-        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
@@ -184,6 +184,6 @@ class halo_mass_functions:
 
         fs = 0.265 * (1.675 / sigmaM + 1.0) ** 1.9 * np.exp(-1.4 / sigmaM**2)
 
-        dndM = -(rhoM / Mvec) * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
