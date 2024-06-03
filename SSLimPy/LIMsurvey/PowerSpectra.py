@@ -133,3 +133,25 @@ class PowerSpectra:
         u_km = (np.cos(x)*(ci_cx - ci_x) +
                   np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
         return np.squeeze(u_km/gc)
+
+    def bavg(self, z, k=None):
+        '''
+        Average luminosity-weighted bias for the given cosmology and line
+        model.  ASSUMED TO BE WEIGHTED LINERALY BY MASS FOR 'LF' MODELS
+        
+        Includes the effects of f_NL though the wrapping functions in astro
+        '''
+        # Integrands for mass-averaging
+        M = self.M.to(self.astro.Msunh)
+        z = np.atleast_1d(z)
+        k = np.atleast_1d(k)
+
+        LofM = np.reshape(self.astro.L_of_M(M,z),(*M.shape,*z.shape))
+        dndM = np.reshape(self.astro.halomassfunction(M,z),(*M.shape,*z.shape))
+        bh = np.reshape(self.astro.halobias(M,z,k),(*k.shape,*M.shape,*z.shape))
+
+        itgrnd1 = LofM[None,:,:]*dndM[None,:,:]*bh
+        itgrnd2 = LofM[None,:,:]*dndM[None,:,:]
+
+        b_line = np.trapz(itgrnd1,M,axis=1) / np.trapz(itgrnd2,M,axis=1)
+        return np.squeeze(b_line.to(1).value)

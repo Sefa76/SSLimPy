@@ -49,25 +49,14 @@ class astro_functions:
         )  # Msun/Mpc^3
 
         # Internal samples for computations
-        self.M = np.geomspace(
-            self.astroparams["Mmin"], self.astroparams["Mmax"], self.astroparams["nM"]
-        )
-        self.L = np.geomspace(
-            self.astroparams["Lmin"], self.astroparams["Lmax"], self.astroparams["nL"]
-        )
+        self.M = np.geomspace(self.astroparams["Mmin"], self.astroparams["Mmax"], self.astroparams["nM"])
+        self.L = np.geomspace(self.astroparams["Lmin"], self.astroparams["Lmax"], self.astroparams["nL"])
         # find the redshifts for fequencies asked for:
         self.nu = self.astroparams["nu"]
         self.nuObs = self.astroparams["nuObs"]
-        self.z = np.atleast_1d(
-            (self.astroparams["nu"] / self.astroparams["nuObs"]).to(1).value - 1
-        )
+        self.z = np.atleast_1d((self.nu/self.nuObs).to(1).value - 1)
 
         self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
-
-        # save the astro results
-        self.results = types.SimpleNamespace()
-        self.results.sigmaM = self.sigmaM(self.M, self.z)
-        self.results.dsigmaM_dM = self.dsigmaM_dM(self.M, self.z)
 
         # Check passed models
         self.init_model()
@@ -77,78 +66,72 @@ class astro_functions:
         # bias function
         # !Without Corrections for nongaussianity!
         self.delta_crit = 1.686
-        self.b_of_M = getattr(self.bias_function, self.astroparams["bias_model"])
-        self.results.b_of_M = self.b_of_M(
-            dc=self.delta_crit, nu=self.delta_crit / self.results.sigmaM
-        )
+        self._b_of_M = getattr(self.bias_function, self.astroparams["bias_model"])
+        # use halobias to compute the bias with all corrections
 
         # halo mass function
-        M_input = self.M.to(self.Msunh)
+        # !Without Corrections for nongaussianity!
+        self._dn_dM_of_M = getattr(self.halo_mass_function, self.astroparams["hmf_model"])
+        # use halomassfunction to compute the bias with all corrections
+
+        # mass luminosty function
+        self.massluminosityfunction = self.create_mass_luminosity()
+
+        # halo luminostiy function 
+        self.haloluminosityfunction = self.create_luminosty_function()
+
+    ###################
+    # Astro Functions #
+    ###################
+
+    def mass_non_linear(self, z, delta_crit=1.686):
+        """
+        Get (roughly) the mass corresponding to the nonlinear scale in units of Msun h
+        """
+        sigmaM_z = self.sigmaM(self.M, z)
+        mass_non_linear = self.M[np.argmin(np.power(sigmaM_z - delta_crit, 2), axis=0)]
+
+        return mass_non_linear.to(self.Msunh)
+
+    def halobias(self,M,z,k=None):
+        """
+        This function is a wrapper to obtain the halo bias with all correction and as a function of standard inputs
+        """
+        k = np.atleast_1d(k)
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+
+        bh = self._b_of_M(M,z,self.delta_crit)
+
+        if "f_NL" in self.cosmology.input_cosmoparams:
+            Delta_b = np.reshape(self.Delta_b(k,M,z),(*k.shape,*M.shape,*z.shape))
+            bh = bh[None,:,:] + Delta_b
+        
+        return np.squeeze(bh)        
+
+    def halomassfunction(self,M,z):
+        """
+        This function is a wrapper to obtain the halo mass function with all correction and as a function of standard inputs
+        """
+        M = np.atleast_1d(M).to(self.Msunh)
+        z = np.atleast_1d(z)
+
         rho_input = (
             2.77536627e11
             * self.cosmology.Omega(0, self.astrotracer)
-            * (self.Msunh * self.Mpch**-3).to(self.Msunh * self.Mpch**-3)
-        )
-        self.dn_dM_of_M = getattr(
-            self.halo_mass_function, self.astroparams["hmf_model"]
-        )
-        self.results.dn_dM_of_M = self.dn_dM_of_M(M_input, rho_input, self.z)
+            * (self.Msunh * self.Mpch**-3))
 
-        if "ML" in self.astroparams["model_type"]:
-            self.L_of_M = getattr(
-                self.mass_luminosity_function, self.astroparams["model_name"]
-            )
-            self.results.L_of_M = self.L_of_M(self.M.to(u.Msun), self.z)
+        dndM = np.reshape(self._dn_dM_of_M(M, rho_input, z),(*M.shape,*z.shape))
 
-            sigma = np.maximum(cfg.settings["sigma_scatter"], 0.05)
-            # Special case for Tony Li model- scatter does not preserve LCO
-            if self.model_name == "TonyLi":
-                alpha = self.model_par["alpha"]
-                sig_SFR = self.model_par["sig_SFR"]
-                # assume sigma and sig_SFR are totally uncorrelated
-                sigma = (sigma**2 + sig_SFR**2 / alpha**2) ** 0.5
-            sigma_base_e = sigma * 2.302585
+        if "f_NL" in self.cosmology.input_cosmoparams:
+            Delta_HMF = np.reshape(self.Delta_HMF(M,z),(*M.shape,*z.shape))
+            dndm *= (1+Delta_HMF)
 
-            L_of_M_and_z = np.reshape(
-                self.results.L_of_M, (*self.M.shape, *self.z.shape)
-            )
-            dn_dM_of_M_and_z = np.reshape(
-                self.dn_dM_of_M, (*self.M.shape, *self.z.shape)
-            )
-            flognorm = self.lognormal(
-                self.L[None, :, None],
-                np.log(L_of_M_and_z.value)[:, None, :] - 0.5 * sigma_base_e**2.0,
-                sigma_base_e,
-            )
-            CFL = flognorm * dn_dM_of_M_and_z[:, None, :]
-            self.results.dn_dL_of_L = np.squeeze(np.trapz(CFL, self.M, axis=0))
+        return np.squeeze(dndM).to(u.Mpc**-3*u.Msun**-1)
 
-        elif "LF" in self.astroparams["model_type"]:
-            LF_par = {
-                "A": 1.0,
-                "b": 1.0,
-                "Mcut_min": self.astroparams["Mmin"],
-                "Mcut_max": self.astroparams["Mmax"],
-            }
-            off_mass_luminosity = ml.mass_luminosity(self, LF_par)
-            self.L_of_M = getattr(off_mass_luminosity, "MassPow")
-            self.results.L_of_M = self.L_of_M(self.M.to(u.Msun), self.z)
-
-            self.dn_dL_of_L = getattr(
-                self.luminosity_function, self.astroparams["model_name"]
-            )
-            self.results.dn_dL_of_L = self.dn_dL_of_L(self.L.to(u.Lsun))
-
-    def sigmaM_of_z(self, M, z):
-        """
-        Mass (or cdm+b) variance at target redshift
-        """
-        tracer = self.astrotracer
-
-        rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
-        R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
-
-        return self.cosmology.sigmaR_of_z(R, z, tracer)
+    #############################
+    # Additional Init Functions #
+    #############################
 
     def create_sigmaM_funcs(self):
         """
@@ -157,7 +140,7 @@ class astro_functions:
         M_inter = self.M
         z_inter = self.cosmology.results.zgrid
 
-        sigmaM = self.sigmaM_of_z(M_inter, z_inter)
+        sigmaM = self._sigmaM_of_z(M_inter, z_inter)
 
         # create interpolating functions
         logM_in_Msun = np.log(M_inter.to(u.Msun).value)
@@ -174,6 +157,7 @@ class astro_functions:
 
         def dsigmaM_of_M_and_z(M, z):
             M = np.atleast_1d(M.to(u.Msun))
+            z = np.atleast_1d(z)
             sigmaM = np.reshape(sigmaM_of_M_and_z(M, z), (*M.shape, *z.shape))
             logM = np.log(M.value)
             return np.squeeze(
@@ -182,14 +166,133 @@ class astro_functions:
 
         return sigmaM_of_M_and_z, dsigmaM_of_M_and_z
 
-    def mass_non_linear(self, z, delta_crit=1.686):
+    def _sigmaM_of_z(self, M, z):
         """
-        Get (roughly) the mass corresponding to the nonlinear scale in units of Msun h
+        Mass (or cdm+b) variance at target redshift. Used to create interpolated versions
         """
-        sigmaM_z = self.sigmaM(self.M, z)
-        mass_non_linear = self.M[np.argmin(np.power(sigmaM_z - delta_crit, 2), axis=0)]
+        tracer = self.astrotracer
 
-        return mass_non_linear.to(self.Msunh)
+        rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
+        R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
+
+        return self.cosmology.sigmaR_of_z(R, z, tracer)
+
+    def init_model(self):
+        """
+        Check if model given by model_name exists in the given model_type
+        """
+        model_type = self.astroparams["model_type"]
+        model_name = self.astroparams["model_name"]
+        self.luminosity_function = lf.luminosity_functions(self)
+        self.mass_luminosity_function = ml.mass_luminosity(self)
+
+        if model_type == "ML" and not hasattr(
+            self.mass_luminosity_function, model_name
+        ):
+            if hasattr(self.luminosity_function, model_name):
+                raise ValueError(
+                    model_name
+                    + " not found in mass_luminosity.py."
+                    + " Set model_type='LF' to use "
+                    + model_name
+                )
+            else:
+                raise ValueError(model_name + " not found in mass_luminosity.py")
+
+        elif model_type == "LF" and not hasattr(self.luminosity_function, model_name):
+            if hasattr(self.mass_luminosity_function, model_name):
+                raise ValueError(
+                    model_name
+                    + " not found in luminosity_functions.py."
+                    + " Set model_type='ML' to use "
+                    + model_name
+                )
+            else:
+                raise ValueError(model_name + " not found in luminosity_functions.py")
+
+    def init_bias_function(self):
+        """
+        Initialise computation of bias function if model given by bias_model exists in the given model_type
+        """
+        bias_name = self.astroparams["bias_model"]
+        self.bias_function = bf.bias_fittinig_functions(self)
+        if not hasattr(self.bias_function, bias_name):
+            raise ValueError(bias_name + " not found in bias_fitting_functions.py")
+
+    def init_halo_mass_function(self):
+        """
+        Initialise computation of halo mass function if model given by hmf_model exists in the given model_type
+        """
+        hmf_model = self.astroparams["hmf_model"]
+        self.halo_mass_function = HMF.halo_mass_functions(self)
+
+        if not hasattr(self.halo_mass_function, hmf_model):
+            raise ValueError(hmf_model + " not found in halo_mass_functions.py")
+
+    def create_mass_luminosity(self):
+        if "ML" in self.astroparams["model_type"]:
+            L_of_M = getattr(self.mass_luminosity_function, self.astroparams["model_name"])
+
+        elif "LF" in self.astroparams["model_type"]:
+            LF_par = {
+                "A": 1.0,
+                "b": 1.0,
+                "Mcut_min": self.astroparams["Mmin"],
+                "Mcut_max": self.astroparams["Mmax"],
+            }
+            off_mass_luminosity = ml.mass_luminosity(self, LF_par)
+            L_of_M = getattr(off_mass_luminosity, "MassPow")             
+
+        # The Mass Luminosity functions L(M,z) are allready vectorized properly inside of the File
+        return L_of_M
+
+    def create_luminosty_function(self):
+        M = self.M
+        z = self.cosmology.results.zgrid
+        L = self.L
+
+        if "ML" in self.astroparams["model_type"]:
+            sigma = np.maximum(cfg.settings["sigma_scatter"], 0.05)
+            # Special case for Tony Li model- scatter does not preserve LCO
+            if self.model_name == "TonyLi":
+                alpha = self.model_par["alpha"]
+                sig_SFR = self.model_par["sig_SFR"]
+                # assume sigma and sig_SFR are totally uncorrelated
+                sigma = (sigma**2 + sig_SFR**2 / alpha**2) ** 0.5
+            sigma_base_e = sigma * 2.302585
+
+            dn_dM_of_M_and_z = np.reshape(self.halomassfunction(M,z),(*M.shape,*z.shape))
+            L_of_M = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
+
+            flognorm = self.lognormal(
+                L[None, :, None],
+                np.log(L_of_M.value)[:, None, :] - 0.5 * sigma_base_e**2.0,
+                sigma_base_e,
+            )
+            CFL = flognorm * dn_dM_of_M_and_z[:, None, :]
+            dn_dL_of_L = np.trapz(CFL, self.M, axis=0)
+
+        elif "LF" in self.astroparams["model_type"]:
+            dn_dL_of_L_func = getattr(self.luminosity_function, self.astroparams["model_name"])
+            dn_dL_of_L = dn_dL_of_L(L)*np.ones_like(z)[None,:]
+        
+        logL = np.log(L.to(u.Lsun).value)
+        logLF = np.log(dn_dL_of_L.to(u.Mpc**(-3)*u.Lsun**(-1)).value)
+        logLF_inter = RectBivariateSpline(logL,z,logLF)
+
+        def HaloLuminosityFunction(pL,pz):
+            pL = np.atleast_1d(pL.to(u.Lsun))
+            pz = np.atleast_1d(pz)
+            logpL = np.log(pL.value)
+            logdndL = logLF_inter(logpL,pz)
+            LF = u.Mpc**(-3)*u.Lsun**(-1)*np.exp(logdndL)
+            return np.squeeze(LF)
+
+        return HaloLuminosityFunction
+
+    #########################################
+    # f_NL corrections to HMF and halo bias #
+    #########################################
 
     def S3_dS3(self, M, z):
         """
@@ -355,12 +458,7 @@ class astro_functions:
         k = np.atleast_1d(k)
 
         Tk = np.reshape(self.cosmology.Transfer(k, z), (*k.shape, *z.shape))
-        sigmaM = self.sigmaM_of_z(M, z, tracer=tracer)
-        bias_func = getattr(self.bias_function, self.astroparams["bias_model"])
-        bias = np.reshape(
-            bias_func(dc=self.delta_crit, nu=self.delta_crit / sigmaM),
-            (*M.shape, *z.shape),
-        )
+        bias = np.reshape(self._b_of_M(M,z,self.delta_crit),(*M.shape, *z.shape))
 
         f1 = (self.cosmology.Hubble(0, physical=True) / (c.c * k)).to(1).value
         f2 = (
@@ -369,7 +467,7 @@ class astro_functions:
             * self.cosmology.input_cosmoparams["f_NL"]
         )
 
-        f1_of_k = f1[None, None, :]
+        f1_of_k = f1[:,None,None]
         Tk_of_k_and_z = Tk[:, None, :]
         bias_of_M_and_z = bias[None, :, :]
 
@@ -452,58 +550,6 @@ class astro_functions:
         self.astroparams.setdefault("v_of_M", None)
         self.astroparams.setdefault("line_incli", True)
         self.astroparams.setdefault("astro_tracer", "clustering")
-
-    def init_model(self):
-        """
-        Check if model given by model_name exists in the given model_type
-        """
-        model_type = self.astroparams["model_type"]
-        model_name = self.astroparams["model_name"]
-        self.luminosity_function = lf.luminosity_functions(self)
-        self.mass_luminosity_function = ml.mass_luminosity(self)
-
-        if model_type == "ML" and not hasattr(
-            self.mass_luminosity_function, model_name
-        ):
-            if hasattr(self.luminosity_function, model_name):
-                raise ValueError(
-                    model_name
-                    + " not found in mass_luminosity.py."
-                    + " Set model_type='LF' to use "
-                    + model_name
-                )
-            else:
-                raise ValueError(model_name + " not found in mass_luminosity.py")
-
-        elif model_type == "LF" and not hasattr(self.luminosity_function, model_name):
-            if hasattr(self.mass_luminosity_function, model_name):
-                raise ValueError(
-                    model_name
-                    + " not found in luminosity_functions.py."
-                    + " Set model_type='ML' to use "
-                    + model_name
-                )
-            else:
-                raise ValueError(model_name + " not found in luminosity_functions.py")
-
-    def init_bias_function(self):
-        """
-        Initialise computation of bias function if model given by bias_model exists in the given model_type
-        """
-        bias_name = self.astroparams["bias_model"]
-        self.bias_function = bf.bias_fittinig_functions(self)
-        if not hasattr(self.bias_function, bias_name):
-            raise ValueError(bias_name + " not found in bias_fitting_functions.py")
-
-    def init_halo_mass_function(self):
-        """
-        Initialise computation of halo mass function if model given by hmf_model exists in the given model_type
-        """
-        hmf_model = self.astroparams["hmf_model"]
-        self.halo_mass_function = HMF.halo_mass_functions(self)
-
-        if not hasattr(self.halo_mass_function, hmf_model):
-            raise ValueError(hmf_model + " not found in halo_mass_functions.py")
 
     def recap_astro(self):
         print("Astronomical Parameters:")
