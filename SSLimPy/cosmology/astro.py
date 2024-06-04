@@ -70,7 +70,7 @@ class astro_functions:
         # bias function
         # !Without Corrections for nongaussianity!
         self.delta_crit = 1.686
-        self._b_of_M = getattr(self.bias_function, self.astroparams["bias_model"])
+        self._b_of_M = getattr(self._bias_function, self.astroparams["bias_model"])
         # use halobias to compute the bias with all corrections
 
         # halo mass function
