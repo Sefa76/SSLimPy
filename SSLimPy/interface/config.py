@@ -66,7 +66,9 @@ def init(
     settings.setdefault("share_delta_neff", True)
     settings.setdefault("LP_rescale_ini_As", 2.1e-9)
     settings.setdefault("LP_rescale_boost", 2)
-    settings.setdefault("nonlinear", True)
+    settings.setdefault("nonlinearMatpow", True)
+    settings.setdefault("nonlinearSwitch", True)
+    settings.setdefault("TracerPowerSpectrum", "matter")
     settings.setdefault("do_pheno_ncdm",False)
     settings.setdefault("fix_cosmo_nl_terms",True)
 

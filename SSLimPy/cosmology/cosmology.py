@@ -497,7 +497,7 @@ class boltzmann_code:
         self.results.zgrid = z[::-1]
 
         ## interpolating function Pk_nl (k,z)
-        Pk_nl, k, z = classres.get_pk_and_k_and_z(nonlinear=cfg.settings["nonlinear"])
+        Pk_nl, k, z = classres.get_pk_and_k_and_z(nonlinear=cfg.settings["nonlinearMatpow"])
         self.results.Pk_nl = RectBivariateSpline(
             z[::-1], k, (np.flip(Pk_nl, axis=1)).transpose()
         )

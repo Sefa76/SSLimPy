@@ -76,7 +76,7 @@ class astro_functions:
         # halo mass function
         # !Without Corrections for nongaussianity!
         self._dn_dM_of_M = getattr(
-            self.halo_mass_function, self.astroparams["hmf_model"]
+            self._halo_mass_function, self.astroparams["hmf_model"]
         )
         # use halomassfunction to compute the bias with all corrections
 
@@ -136,6 +136,41 @@ class astro_functions:
 
         return np.squeeze(dndM).to(u.Mpc**-3 * u.Msun**-1)
 
+    def bavg(self, z, k=None):
+        '''
+        Average luminosity-weighted bias for the given cosmology and line
+        model.  ASSUMED TO BE WEIGHTED LINERALY BY MASS FOR 'LF' MODELS
+
+        Includes the effects of f_NL though the wrapping functions in astro
+        '''
+        # Integrands for mass-averaging
+        M = self.M.to(self.Msunh)
+        z = np.atleast_1d(z)
+        k = np.atleast_1d(k)
+
+        LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
+        dndM = np.reshape(self.halomassfunction(M,z),(*M.shape,*z.shape))
+        bh = np.reshape(self.halobias(M,z,k),(*k.shape,*M.shape,*z.shape))
+
+        itgrnd1 = LofM[None,:,:]*dndM[None,:,:]*bh
+        itgrnd2 = LofM[None,:,:]*dndM[None,:,:]
+
+        b_line = np.trapz(itgrnd1,M,axis=1) / np.trapz(itgrnd2,M,axis=1)
+        return np.squeeze(b_line.to(1).value)
+
+    def nbar(self, z):
+        '''
+        Mean number density of galaxies, computed from the luminosity function
+        in 'LF' models and from the mass function in 'ML' models
+        '''
+        model_type = self.astroparams["model_type"]
+        if model_type =='LF':
+            dndL  = self.haloluminosityfunction(self.L,z)
+            nbar = np.trapz(dndL,self.L,axis=0)
+        else:
+            dndM = self.halomassfunction(self.M,z)
+            nbar = np.trapz(dndM,self.M,axis=0)
+        return nbar
     #############################
     # Additional Init Functions #
     #############################
@@ -190,13 +225,13 @@ class astro_functions:
         """
         model_type = self.astroparams["model_type"]
         model_name = self.astroparams["model_name"]
-        self.luminosity_function = lf.luminosity_functions(self)
-        self.mass_luminosity_function = ml.mass_luminosity(self)
+        self._luminosity_function = lf.luminosity_functions(self)
+        self._mass_luminosity_function = ml.mass_luminosity(self)
 
         if model_type == "ML" and not hasattr(
-            self.mass_luminosity_function, model_name
+            self._mass_luminosity_function, model_name
         ):
-            if hasattr(self.luminosity_function, model_name):
+            if hasattr(self._luminosity_function, model_name):
                 raise ValueError(
                     model_name
                     + " not found in mass_luminosity.py."
@@ -206,8 +241,8 @@ class astro_functions:
             else:
                 raise ValueError(model_name + " not found in mass_luminosity.py")
 
-        elif model_type == "LF" and not hasattr(self.luminosity_function, model_name):
-            if hasattr(self.mass_luminosity_function, model_name):
+        elif model_type == "LF" and not hasattr(self._luminosity_function, model_name):
+            if hasattr(self._mass_luminosity_function, model_name):
                 raise ValueError(
                     model_name
                     + " not found in luminosity_functions.py."
@@ -222,8 +257,8 @@ class astro_functions:
         Initialise computation of bias function if model given by bias_model exists in the given model_type
         """
         bias_name = self.astroparams["bias_model"]
-        self.bias_function = bf.bias_fittinig_functions(self)
-        if not hasattr(self.bias_function, bias_name):
+        self._bias_function = bf.bias_fittinig_functions(self)
+        if not hasattr(self._bias_function, bias_name):
             raise ValueError(bias_name + " not found in bias_fitting_functions.py")
 
     def init_halo_mass_function(self):
@@ -231,15 +266,15 @@ class astro_functions:
         Initialise computation of halo mass function if model given by hmf_model exists in the given model_type
         """
         hmf_model = self.astroparams["hmf_model"]
-        self.halo_mass_function = HMF.halo_mass_functions(self)
+        self._halo_mass_function = HMF.halo_mass_functions(self)
 
-        if not hasattr(self.halo_mass_function, hmf_model):
+        if not hasattr(self._halo_mass_function, hmf_model):
             raise ValueError(hmf_model + " not found in halo_mass_functions.py")
 
     def create_mass_luminosity(self):
         if "ML" in self.astroparams["model_type"]:
             L_of_M = getattr(
-                self.mass_luminosity_function, self.astroparams["model_name"]
+                self._mass_luminosity_function, self.astroparams["model_name"]
             )
 
         elif "LF" in self.astroparams["model_type"]:
@@ -285,7 +320,7 @@ class astro_functions:
 
         elif "LF" in self.astroparams["model_type"]:
             dn_dL_of_L_func = getattr(
-                self.luminosity_function, self.astroparams["model_name"]
+                self._luminosity_function, self.astroparams["model_name"]
             )
 
             dn_dL_of_L = dn_dL_of_L_func(L)[:,None] * np.ones_like(z)[None, :]

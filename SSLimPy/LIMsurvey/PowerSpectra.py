@@ -69,7 +69,7 @@ class PowerSpectra:
         ca = 0.2
 
         # Compute the effective slope of the growth factor
-        alpha_eff = self.cosmology.f_growthrate(zvec)
+        alpha_eff = self.cosmology.growth_rate(1e-4/u.Mpc,zvec)
         # Compute the effective slope to the power spectrum (as function of M)
         sigmaM = self.astro.sigmaM(Mvec, zvec)
         dsigmaM_dM = self.astro.dsigmaM_dM(Mvec, zvec)
@@ -134,43 +134,58 @@ class PowerSpectra:
         u_km = (np.cos(x)*(ci_cx - ci_x) +
                   np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
         return np.squeeze(u_km/gc)
-
-    def bavg(self, z, k=None):
-        '''
-        Average luminosity-weighted bias for the given cosmology and line
-        model.  ASSUMED TO BE WEIGHTED LINERALY BY MASS FOR 'LF' MODELS
-
-        Includes the effects of f_NL though the wrapping functions in astro
-        '''
-        # Integrands for mass-averaging
-        M = self.M.to(self.astro.Msunh)
-        z = np.atleast_1d(z)
-        k = np.atleast_1d(k)
-
-        LofM = np.reshape(self.astro.L_of_M(M,z),(*M.shape,*z.shape))
-        dndM = np.reshape(self.astro.halomassfunction(M,z),(*M.shape,*z.shape))
-        bh = np.reshape(self.astro.halobias(M,z,k),(*k.shape,*M.shape,*z.shape))
-
-        itgrnd1 = LofM[None,:,:]*dndM[None,:,:]*bh
-        itgrnd2 = LofM[None,:,:]*dndM[None,:,:]
-
-        b_line = np.trapz(itgrnd1,M,axis=1) / np.trapz(itgrnd2,M,axis=1)
-        return np.squeeze(b_line.to(1).value)
-
-    def nbar(self, z):
-        '''
-        Mean number density of galaxies, computed from the luminosity function
-        in 'LF' models and from the mass function in 'ML' models
-        '''
-        model_type = self.astro.astroparams["model_type"]
-        if model_type =='LF':
-            dndL  = self.astro.haloluminosityfunction(self.L,z)
-            nbar = np.trapz(dndL,self.L,axis=0)
-        else:
-            dndM = self.astro.halomassfunction(self.M,z)
-            nbar = np.trapz(dndM,self.M,axis=0)
-        return nbar
     
     ###############
     # De-Wiggling #
     ###############
+    def sigmavNL(self, z, mu):
+        z = np.atleast_1d(z)
+        mu = np.atleast_1d(mu)
+    
+        if cfg.settings["fix_cosmo_nl_terms"]:
+            cosmo = self.fiducialcosmo
+        else:
+            cosmo = self.cosmology
+
+        if cfg.settings["nonlinearSwitch"]:
+            f0 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 0), 2))[:,None]
+            f1 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 1), 2))[:,None]
+            f2 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 2), 2))[:,None]
+            sv = np.sqrt(f0 + 2 * mu[None,:]**2 * f1 + mu[None,:]**2 * f2)
+        else:
+            sv = 0
+        
+        return np.squeeze(sv)
+
+    def dewiggled_pdd(self, k, z, mu):
+        """ "
+        Calculates the normalized dewiggled powerspectrum
+
+        Args:
+        z : float
+            The redshift value.
+        k : float
+            The wavenumber in Mpc^-1.
+        mu : float
+            The cosine of angle between the wavevector and the line-of-sight direction.
+
+        Retruns:
+            The dewiggled powerspectrum calculated with the Zeldovic approximation.
+            If the config asks for only linear spectrum
+        """
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+        mu = np.atleast_1d(mu)
+
+        gmudamping = np.reshape(self.sigmavNL(z, mu) ** 2, (*z.shape, *mu.shape))
+
+        P_dd = self.cosmology.matpow(k, z, tracer=cfg.settings["TracerPowerSpectrum"], nonlinear=False)
+        P_dd_NW = self.cosmology.nonwiggle_pow(k, z, tracer=cfg.settings["TracerPowerSpectrum"], nonlinear=False)
+        P_dd = np.reshape(P_dd,(*k.shape,*z.shape))
+        P_dd_NW = np.reshape(P_dd_NW,(*k.shape,*z.shape))
+
+        P_dd_DW = ( P_dd[:, :, None] * np.exp(-gmudamping[None,:,:] * k[:, None, None]**2) 
+                  + P_dd_NW[:, :, None] * (1 - np.exp(-gmudamping[None,:,:] * k[:, None, None]**2)))
+        return np.squeeze(P_dd_DW)
+    
+        
