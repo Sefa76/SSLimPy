@@ -714,7 +714,7 @@ class cosmo_functions:
     #################
 
     def primordial_scalar_pow(self, k):
-        lgk = np.log10(k)
+        lgk = np.log10(k.to(u.Mpc**-1).value)
         pk = np.power(10, self.results.P_scalar(lgk))
         return pk * u.Mpc**3
 
@@ -773,7 +773,7 @@ class cosmo_functions:
         return np.squeeze(Pk)
 
     def Transfer(self, k, z, nonlinear=False, tracer="matter"):
-        k = np.atleast_1d(k.to(u.Mpc))
+        k = np.atleast_1d(k.to(u.Mpc**-1))
         z = np.atleast_1d(z)
         P = np.reshape(
             self.matpow(k, z, nonlinear=nonlinear, tracer=tracer), (*k.shape, *z.shape)
