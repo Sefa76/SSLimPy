@@ -19,7 +19,8 @@ def init(
     class_yaml_file = None,
     specifications = None,
     cosmopars = dict(),
-    astropars = dict()
+    astropars = dict(),
+    BAOpars = dict(),
 ):
     """This class is to handle the configuration for the computation as well as the fiducial parameters. It then gives access to all global variables
 
@@ -71,6 +72,7 @@ def init(
     settings.setdefault("TracerPowerSpectrum", "matter")
     settings.setdefault("do_pheno_ncdm",False)
     settings.setdefault("fix_cosmo_nl_terms",True)
+    settings.setdefault("nuiscance_model","Fixed")
 
     # Output settings
     settings.setdefault("verbosity",1)
@@ -160,3 +162,6 @@ def init(
 
     global fiducialastro
     fiducialastro = astro.astro_functions(cosmopars, astropars)
+
+    global fiducialBAOparams
+    fiducialBAOparams = BAOpars

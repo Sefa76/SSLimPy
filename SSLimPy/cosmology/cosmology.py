@@ -401,6 +401,7 @@ class boltzmann_code:
         self.results.com_dist = InterpolatedUnivariateSpline(
             self.results.zgrid, cambres.comoving_radial_distance(self.results.zgrid)
         )
+        self.results.rs_drag = cambres.get_derived_params()["rdrag"]
         self.results.Om_m = InterpolatedUnivariateSpline(
             self.results.zgrid,
             (
@@ -471,7 +472,7 @@ class boltzmann_code:
         self.results.Om_cb = np.vectorize(
             lambda z: classres.Om_cdm(z) + classres.Om_b(z)
         )
-
+        self.results.rs_drag = classres.rs_drag()
         # Calculate the Matter fractions for CB Powerspectrum
         f_cdm = classres.Omega0_cdm() / classres.Omega_m()
         f_b = classres.Omega_b() / classres.Omega_m()
@@ -709,10 +710,12 @@ class cosmo_functions:
             warn("Did not recognize tracer: reverted to matter")
         return self.results.Om_m(z)
 
+    def rs_drag(self):
+        return self.results.rs_drag * u.Mpc
+
     #################
     # Power Spectra #
     #################
-
     def primordial_scalar_pow(self, k):
         lgk = np.log10(k.to(u.Mpc**-1).value)
         pk = np.power(10, self.results.P_scalar(lgk))

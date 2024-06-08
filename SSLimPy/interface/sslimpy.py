@@ -12,6 +12,7 @@ class sslimpy:
         specifications = None,
         cosmopars = dict(),
         astropars = dict(),
+        BAOpars = dict()
     ):
 
         print("#--------------------------------------------------#")
@@ -33,6 +34,7 @@ class sslimpy:
         specifications = specifications,
         cosmopars = cosmopars,
         astropars = astropars,
+        BAOpars= BAOpars,
         )
 
         self.settings = cfg.settings
@@ -51,7 +53,7 @@ class sslimpy:
             self.recap_options()
         ##################
 
-    def compute(self, cosmology):
+    def compute(self, cosmopars, astropars, BAOpars):
         if self.output is not None:
             for ops in self.output:
                 if ops=="power spectrum":
@@ -62,9 +64,9 @@ class sslimpy:
                     warn("Output {} asked for not recognised \n Skiped".format(ops))
         print("Done!")
 
-    def _compute_ps(self, cosmology):
+    def _compute_ps(self, cosmology, astro, BAOpars):
         from SSLimPy.LIMsurvey.PowerSpectra import PowerSpectra
-        return PowerSpectra()
+        return PowerSpectra(cosmology=cosmology, astro= astro, BAOpars=BAOpars)
 
 
     def _compute_cov(self, cosmology):

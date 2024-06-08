@@ -6,13 +6,14 @@ from scipy.special import sici
 
 import numpy as np
 from SSLimPy.interface import config as cfg
-
+from copy import copy
 
 class PowerSpectra:
-    def __init__(self, cosmology, astro):
+    def __init__(self, cosmology, astro, BAOpars=dict()):
         self.cosmology = cosmology
         self.fiducialcosmo = cfg.fiducialcosmo
         self.astro = astro
+        self.BAOpars = copy(BAOpars)
 
         #################################
         # Properties of target redshift #
@@ -20,13 +21,6 @@ class PowerSpectra:
         self.nu = self.astro.nu
         self.z = self.astro.z
         self.H = self.cosmology.Hubble(self.z, physical=True)
-
-        if cfg.settings["do_Jysr"]:
-            x = c.c / (4.0 * np.pi * self.nu * self.H * (1.0 * u.sr))
-            self.CLT = x.to(u.Jy * u.Mpc**3 / (u.Lsun * u.sr))
-        else:
-            x = c.c**3 * (1 + self.z) ** 2 / (8 * np.pi * c.k_B * self.nu**3 * self.H)
-            self.CLT = x.to(u.uK * u.Mpc**3 / u.Lsun)
 
         #########################################
         # Masses, luminosities, and wavenumbers #
@@ -134,30 +128,34 @@ class PowerSpectra:
         u_km = (np.cos(x)*(ci_cx - ci_x) +
                   np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
         return np.squeeze(u_km/gc)
-    
+
     ###############
     # De-Wiggling #
     ###############
-    def sigmavNL(self, z, mu):
-        z = np.atleast_1d(z)
+    def sigmavNL(self, mu, z, BAOpars=dict()):
         mu = np.atleast_1d(mu)
-    
+        z = np.atleast_1d(z)
+
         if cfg.settings["fix_cosmo_nl_terms"]:
             cosmo = self.fiducialcosmo
         else:
             cosmo = self.cosmology
 
-        if cfg.settings["nonlinearSwitch"]:
+        if "sigmav" in BAOpars:
+            sigmav = BAOpars["sigmaV"]
+            if len(sigmav) != len(z):
+                raise ValueError("did not pass velocity dispertion for every z asked for")
+            # scale independent f
+            f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
+            sv2 = sigmav[None,:]*(1-np.power(mu,2)[:,None]+np.power(mu,2)[:,None]*(1+f_scaleindependent[None,:]))
+        else:
             f0 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 0), 2))[:,None]
             f1 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 1), 2))[:,None]
             f2 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 2), 2))[:,None]
-            sv = np.sqrt(f0 + 2 * mu[None,:]**2 * f1 + mu[None,:]**2 * f2)
-        else:
-            sv = 0
-        
-        return np.squeeze(sv)
+            sv2 = f0 + 2 * mu[None,:]**2 * f1 + mu[None,:]**2 * f2
+        return np.squeeze(np.sqrt(sv2))
 
-    def dewiggled_pdd(self, k, z, mu):
+    def dewiggled_pdd(self, k, mu, z):
         """ "
         Calculates the normalized dewiggled powerspectrum
 
@@ -174,18 +172,141 @@ class PowerSpectra:
             If the config asks for only linear spectrum
         """
         k = np.atleast_1d(k)
-        z = np.atleast_1d(z)
         mu = np.atleast_1d(mu)
+        z = np.atleast_1d(z)
 
-        gmudamping = np.reshape(self.sigmavNL(z, mu) ** 2, (*z.shape, *mu.shape))
+        gmudamping = np.reshape(self.sigmavNL(mu, z) ** 2, (*mu.shape, *z.shape))
 
         P_dd = self.cosmology.matpow(k, z, tracer=cfg.settings["TracerPowerSpectrum"], nonlinear=False)
         P_dd_NW = self.cosmology.nonwiggle_pow(k, z, tracer=cfg.settings["TracerPowerSpectrum"], nonlinear=False)
         P_dd = np.reshape(P_dd,(*k.shape,*z.shape))
         P_dd_NW = np.reshape(P_dd_NW,(*k.shape,*z.shape))
 
-        P_dd_DW = ( P_dd[:, :, None] * np.exp(-gmudamping[None,:,:] * k[:, None, None]**2) 
-                  + P_dd_NW[:, :, None] * (1 - np.exp(-gmudamping[None,:,:] * k[:, None, None]**2)))
+        P_dd_DW = ( P_dd[:, None, :] * np.exp(-gmudamping[None,:,:] * k[:, None, None]**2)
+                  + P_dd_NW[:, None, :] * (1 - np.exp(-gmudamping[None,:,:] * k[:, None, None]**2)))
         return np.squeeze(P_dd_DW)
+
+    ################
+    # BAO Features #
+    ################
+    def qparallel(self, z, BAOpars = dict()):
+        """
+        Function implementing q parallel of the Alcock-Paczynski effect
+        If BAOpars is passed checks for alpha_par
+        """
+        z = np.atleast_1d(z)
+        if "alpha_par" in BAOpars:
+            q_par = np.atleast_1d(BAOpars["alpha_par"])
+            if len(z) != len(q_par):
+                raise ValueError("did not pass alpha_par parameters for every z asked for")
+        else:
+            fidTerm = self.fiducialcosmo.Hubble(z)
+            cosmoTerm = self.cosmology.Hubble(z)
+            q_par = fidTerm/cosmoTerm
+        return q_par
+
+    def qperpendicular(self, z, BAOpars = dict()):
+        """
+        Function implementing q perpendicular of the Alcock-Paczynski effect
+        If BAOpars is passed checks for alpha_perp
+        """
+        z = np.atleast_1d(z)
+        if "alpha_perp" in BAOpars:
+            q_perp = np.atleast_1d(BAOpars["alpha_perp"])
+            if len(z) != len(q_perp):
+                raise ValueError("did not pass alpha_perp parameters for every z asked for")
+        else:
+            fidTerm = self.fiducialcosmo.angdist(z)
+            cosmoTerm = self.cosmology.angdist(z)
+            q_perp = cosmoTerm / fidTerm
+        return q_perp
+
+    def dragscale(self):
+        """
+        Function to fix the dragscale
+        """
+        fidTerm = self.fiducialcosmo.rs_drag()
+        cosmoTerm = self.cosmology.rs_drag()
+        return fidTerm/cosmoTerm
+
+    def bias_term(self, z, k=None, BAOpars=dict()):
+        """
+        Function to compute the bias term that enters the lienar Kaiser formula
+        If BAOpars is passed checks for bmean
+        """
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+        if "bmean" in BAOpars:
+            bmean = np.atleast_1d(BAOpars["bmean"])
+            if len(bmean) != len(z):
+                raise ValueError("did not pass mean bias for every z asked for")
+            # Does not contain correction for f_nl yet
+            Biasterm = bmean[None,:] * self.cosmology.sigma8_of_z(z)[None,:]
+        else:
+            Biasterm = self.astro.restore_shape(self.astro.bavg(z, k=k),k,z) * self.cosmology.sigma8_of_z(z)[None,:]
+        return np.squeeze(Biasterm)
+
+    def f_term(self,k,mu,z, BAOpars=dict()):
+        """
+        Function to compute the linear redshift space distortion that enters the lienar Kaiser formula
+        If BAOpars is passed checks for Tmean
+        """
+        k = np.atleast_1d(k)
+        mu= np.atleast_1d(mu)
+        z = np.atleast_1d(z)
+        if "Tmean" in BAOpars:
+            Tmean = np.atleast_1d(BAOpars["Tmean"])
+            if len(Tmean) != len(z):
+                raise ValueError("did not pass mean Temperature for every z asked for")
+        else:
+            Tmean = self.astro.Tmoments(z,moment=1)
+        Lfs8 =  Tmean[None,:] * np.reshape(self.cosmology.fsigma8_of_z(k,z),(*k.shape,*z.shape))
+        Kaiser_RSD = Lfs8[:,None,:]*np.power(mu,2)[None,:,None]
+        return np.squeeze(Kaiser_RSD)
+
+    def Kaiser_Term(self,k,mu,z, BAOpars =dict()):
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        z = np.atleast_1d(z)
+        bterm = self.astro.restore_shape(self.bias_term(z,k=k,BAOpars=BAOpars),k,z)
+        fterm = np.reshape(self.f_term(k,mu,z,BAOpars=BAOpars),(*k.shape,*mu.shape,*z.shape))
+        linear_Kaiser = np.power(bterm[:,None,:] + fterm ,2)
+        return np.squeeze(linear_Kaiser)
+
+    def fingers_of_god(self, k, mu, z, BAOpars = dict()):
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        z = np.atleast_1d(z)
+
+        if cfg.settings["fix_cosmo_nl_terms"]:
+            cosmo = self.fiducialcosmo
+        else:
+            cosmo = self.cosmology
+
+        if "sigmav" in BAOpars:
+            # This quantitiy is different from the old lim one by a factor of f^2
+            sigmav = BAOpars["sigmaV"]
+            if len(sigmav) != len(z):
+                raise ValueError("did not pass velocity dispertion for every z asked for")
+            # scale independent f
+            f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
+            sp = sigmav*f_scaleindependent
+        else:
+            sp = cosmo.P_ThetaTheta_Moments(z,moment=2)
+        FoG_damp = cfg.settings["Fog_damp"]
+        if FoG_damp == 'Lorentzian':
+            FoG = np.power(1.+0.5*np.power(k[:,None,None]*mu[None,:,None]* sp[None,None,:],2),-2)
+        elif FoG_damp == 'Gaussian':
+            FoG = np.exp(-((k[:,None,None]*mu[None,:,None]*sp[None,None,:])**2.))
+        elif FoG_damp == "ISTF_like":
+            FoG = np.power(1+np.power(k[:,None,None]*mu[None,:,None]*sp[None,None,:],2),-1)
+
+        return np.squeeze(FoG)
+
+    ##################################
+    # Line Broadening and Resolution #
+    ##################################
     
-        
+    #TODO: Add Functions for Line Broadening and Supression because of Survey Resolution
+
+    

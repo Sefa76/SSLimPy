@@ -150,7 +150,7 @@ class astro_functions:
 
         LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
         dndM = np.reshape(self.halomassfunction(M,z),(*M.shape,*z.shape))
-        bh = np.reshape(self.halobias(M,z,k),(*k.shape,*M.shape,*z.shape))
+        bh = self.restore_shape(self.halobias(M,z,k=k),k,M,z)
 
         itgrnd1 = LofM[None,:,:]*dndM[None,:,:]*bh
         itgrnd2 = LofM[None,:,:]*dndM[None,:,:]
@@ -171,6 +171,34 @@ class astro_functions:
             dndM = self.halomassfunction(self.M,z)
             nbar = np.trapz(dndM,self.M,axis=0)
         return nbar
+
+    def CLT(self,z):
+        if cfg.settings["do_Jysr"]:
+            x = c.c / (4.0 * np.pi * self.nu * self.cosmology.Hubble(z,physical=True) * (1.0 * u.sr))
+            self.CLT = x.to(u.Jy * u.Mpc**3 / (u.Lsun * u.sr))
+        else:
+            x = c.c**3 * (1 + z) ** 2 / (8 * np.pi * c.k_B * self.nu**3 * self.cosmology.Hubble(z,physical=True))
+            self.CLT = x.to(u.uK * u.Mpc**3 / u.Lsun)
+
+    def Lmoments(self,z,moment=1):
+        '''
+        Sky-averaged luminosity density moments at nuObs from target line.
+        Has two cases for 'LF' and 'ML' models that where handeld in create_luminosty_function
+        '''
+        L = self.L
+        z = np.atleast_1d(z)
+        dndL = np.reshape(self.haloluminosityfunction(L,z),(*L.shape,*z.shape))
+        itgrnd1 = dndL * np.power(L,moment)[:,None]
+        Lmoment = np.trapz(itgrnd1,L,axis=0)
+        return np.squeeze(Lmoment)
+
+    def Tmoments(self,z,moment=1):
+        '''
+        Sky-averaged brightness temperature moments at nuObs from target line.
+        Else, you can directly input Tmean using TOY model
+        '''
+        return np.power(self.CLT(z),moment) * self.Lmoments(z,moment=moment)
+
     #############################
     # Additional Init Functions #
     #############################
@@ -563,6 +591,32 @@ class astro_functions:
         dW[np.where(x < 0.01)] = -x / 5 + np.power(x, 3) / 70
 
         return dW
+
+    def restore_shape(self,A,*args):
+        """
+        Extremely dangerous function to reshape squeezed arrays into arrays with boradcastable shapes
+        Only use when there is other way as this assumes that the output shape has lenghs corresponding to input
+        And is sqeezed in order of the input
+        """
+        inputShape = A.shape
+        targetShape = ()
+        for arg in args:
+            targetShape = (*targetShape, *np.atleast_1d(arg).shape)
+
+        inputShape = np.array(inputShape)
+        targetShape= np.array(targetShape)
+
+        new_shape_A = []
+        j = 0
+        for i in range(len(targetShape)):
+            if j < len(inputShape) and inputShape[j] == targetShape[i]:
+                new_shape_A.append(inputShape[j])
+                j += 1
+            else:
+                new_shape_A.append(1)
+
+        A = A.reshape(new_shape_A)
+        return A
 
     def set_astrophysics_defaults(self):
         """
