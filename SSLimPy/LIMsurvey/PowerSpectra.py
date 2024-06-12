@@ -307,6 +307,6 @@ class PowerSpectra:
     # Line Broadening and Resolution #
     ##################################
     
-    #TODO: Add Functions for Line Broadening and Supression because of Survey Resolution
+    #TODO: #1 Add Functions for Line Broadening and Supression because of Survey Resolution
 
     

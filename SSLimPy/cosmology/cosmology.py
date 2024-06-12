@@ -1017,7 +1017,7 @@ class cosmo_functions:
 
             return np.squeeze(-1*(1+z)[None,:]*logdfunc.partial_derivative(0,1)(logk,z))
 
-        return growth_rate, growth_factor   
+        return growth_factor, growth_rate
 
     def fsigma8_of_z(self, k, z, tracer="matter"):
         """
