@@ -15,6 +15,8 @@ class PowerSpectra:
         self.astro = astro
         self.BAOpars = copy(BAOpars)
 
+        self.tracer = cfg.settings["TracerPowerSpectrum"]
+
         #################################
         # Properties of target redshift #
         #################################
@@ -44,6 +46,10 @@ class PowerSpectra:
         self.k_perp = self.k[:, None] * np.sqrt(1 - np.power(self.mu[None, :], 2))
 
         self.c_NFW = self.prepare_c_NFW()
+
+    ###################
+    # Halo Properties #
+    ###################
 
     def prepare_c_NFW(self):
         """
@@ -129,6 +135,22 @@ class PowerSpectra:
                   np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
         return np.squeeze(u_km/gc)
 
+    def halomoments(self,k,z,moment=1):
+        """
+        Computes the Luminosity weight halo profile
+        In ML models this is equivalent to the n-halo-self-correlation terms
+        In a LF model this will be off by a consant and should not be taken into an accurate physical model
+        """
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+        M = self.M
+        dn_dM = np.reshape(self.astro.halomassfunction(M,z),(*M.shape,*z.shape))
+        L_of_M = np.reshape(self.astro.massluminosityfunction(M,z),(*M.shape,*z.shape))
+        normhaloprofile = np.reshape(self.ft_NFW(k,M,z),(*k.shape,*M.shape,*z.shape))
+        integrnd = dn_dM[None,:,:] * np.power(L_of_M[None,:,:]*normhaloprofile[:,:,:],moment)
+        hm_corr = np.trapz(integrnd,M,axis=1)
+        return np.squeeze(hm_corr)
+
     ###############
     # De-Wiggling #
     ###############
@@ -177,8 +199,8 @@ class PowerSpectra:
 
         gmudamping = np.reshape(self.sigmavNL(mu, z) ** 2, (*mu.shape, *z.shape))
 
-        P_dd = self.cosmology.matpow(k, z, tracer=cfg.settings["TracerPowerSpectrum"], nonlinear=False)
-        P_dd_NW = self.cosmology.nonwiggle_pow(k, z, tracer=cfg.settings["TracerPowerSpectrum"], nonlinear=False)
+        P_dd = self.cosmology.matpow(k, z, tracer=self.tracer, nonlinear=False)
+        P_dd_NW = self.cosmology.nonwiggle_pow(k, z, tracer=self.tracer, nonlinear=False)
         P_dd = np.reshape(P_dd,(*k.shape,*z.shape))
         P_dd_NW = np.reshape(P_dd_NW,(*k.shape,*z.shape))
 
@@ -241,9 +263,9 @@ class PowerSpectra:
             if len(bmean) != len(z):
                 raise ValueError("did not pass mean bias for every z asked for")
             # Does not contain correction for f_nl yet
-            Biasterm = bmean[None,:] * self.cosmology.sigma8_of_z(z)[None,:]
+            Biasterm = bmean[None,:] * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
         else:
-            Biasterm = self.astro.restore_shape(self.astro.bavg(z, k=k),k,z) * self.cosmology.sigma8_of_z(z)[None,:]
+            Biasterm = self.astro.restore_shape(self.astro.bavg(z, k=k),k,z) * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
         return np.squeeze(Biasterm)
 
     def f_term(self,k,mu,z, BAOpars=dict()):
@@ -260,7 +282,7 @@ class PowerSpectra:
                 raise ValueError("did not pass mean Temperature for every z asked for")
         else:
             Tmean = self.astro.Tmoments(z,moment=1)
-        Lfs8 =  Tmean[None,:] * np.reshape(self.cosmology.fsigma8_of_z(k,z),(*k.shape,*z.shape))
+        Lfs8 =  Tmean[None,:] * np.reshape(self.cosmology.fsigma8_of_z(k,z,tracer=self.tracer),(*k.shape,*z.shape))
         Kaiser_RSD = Lfs8[:,None,:]*np.power(mu,2)[None,:,None]
         return np.squeeze(Kaiser_RSD)
 
@@ -306,7 +328,71 @@ class PowerSpectra:
     ##################################
     # Line Broadening and Resolution #
     ##################################
-    
+
     #TODO: #1 Add Functions for Line Broadening and Supression because of Survey Resolution
 
-    
+    #######################
+    # Power Spectra Terms #
+    #######################
+
+    def shotnoise(self, z, k=None, BAOpars = dict()):
+        """
+        This function returns additional contributions to the Auto-power spectrum depending on what is asked for:
+            - The Posoinian Shot noise
+            - The One-Halo Term as scale dependent shot noise
+            - Additional Shot noise from the BAOpars
+            - Combinations of the fromer
+        """
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        Ps = 0
+        if cfg.settings["do_onehalo"] :
+            if cfg.settings["halo_model_PS"]:
+                Ps = self.halomoments(k,z,moment=2)
+            else:
+                Ps = self.astro.Tmoments(z,moment=2)
+
+        if "Pshot" in BAOpars:
+            Pshot = np.atleast_1d(BAOpars["Pshot"])
+            if len(Pshot) != len(z):
+                raise ValueError("did not pass the shotnoise for every z asked for")
+            Ps = self.astro.restore_shape(Ps,k,z)
+            Ps = Ps + Pshot[None,:]
+        return np.squeeze(Pshot)
+
+    def compute_power_spectra(self):
+
+        #dewiggled-power-spectrum
+        k = self.k
+        mu = self.mu
+        z = self.z
+
+
+        interp_per_z = []
+        Pk_dw_grid = np.reshape(self.dewiggled_pdd(k,mu,z),(*k.shape,*mu.shape,*z.shape))
+        for iz,zi in enumerate(z):
+            interp_per_z.append(RectBivariateSpline(np.log(k),mu,Pk_dw_grid[:,:,iz]))
+
+        # fix units
+        k *= self.dragscale()
+
+        # Apply AP effect
+        qparr = np.atleast_1d(self.qparallel(z,self.BAOpars))
+        kparr_ap = k[:,None,None] * mu[None,None,:] * qparr[None,None,:]
+        qperp = np.atleast_1d(self.qperpendicular(z,self.BAOpars))
+        kperp_ap = k[:,None,None] *np.sqrt(1- np.power(mu[None,None,:],2)) * qperp[None,None,:]
+
+        # Compute related quantities
+        k_ap = np.sqrt(np.power(kparr_ap,2)+np.power(kperp_ap,2))
+        mu_ap = kparr_ap/k_ap
+
+        # Obtain the normalized dewiggled power spectrum
+        Pk_dw = np.zeros((*k.shape,*mu.shape,*z.shape))
+        for iz, zi in enumerate(z):
+            Pk_dw[:,:,iz] = interp_per_z[iz](np.log(k_ap[:,:,iz]), mu_ap[:,:,iz], grid=False) \
+                            / self.cosmology.sigma8_of_z(zi,tracer=self.tracer)
+
+        # Obtain
+
+

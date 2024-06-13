@@ -175,10 +175,11 @@ class astro_functions:
     def CLT(self,z):
         if cfg.settings["do_Jysr"]:
             x = c.c / (4.0 * np.pi * self.nu * self.cosmology.Hubble(z,physical=True) * (1.0 * u.sr))
-            self.CLT = x.to(u.Jy * u.Mpc**3 / (u.Lsun * u.sr))
+            CLT = x.to(u.Jy * u.Mpc**3 / (u.Lsun * u.sr))
         else:
             x = c.c**3 * (1 + z) ** 2 / (8 * np.pi * c.k_B * self.nu**3 * self.cosmology.Hubble(z,physical=True))
-            self.CLT = x.to(u.uK * u.Mpc**3 / u.Lsun)
+            CLT = x.to(u.uK * u.Mpc**3 / u.Lsun)
+        return CLT
 
     def Lmoments(self,z,moment=1):
         '''
@@ -598,6 +599,7 @@ class astro_functions:
         Only use when there is other way as this assumes that the output shape has lenghs corresponding to input
         And is sqeezed in order of the input
         """
+        A = np.atleast_1d(A)
         inputShape = A.shape
         targetShape = ()
         for arg in args:

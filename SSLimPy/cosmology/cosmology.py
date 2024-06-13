@@ -906,7 +906,7 @@ class cosmo_functions:
     #######################
 
     def sigmaR_of_z(self, R, z, tracer="matter"):
-        """sigma_8
+        """sigma_R
 
         Parameters
         ----------
