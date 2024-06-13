@@ -21,8 +21,7 @@ class astro_functions:
 
         self.astroparams = deepcopy(astropars)
         self.set_astrophysics_defaults()
-
-        self.astrotracer = self.astroparams["astro_tracer"]
+        self.astrotracer = cfg.settings["astro_tracer"]
 
         ### TEXT VOMIT ###
         if cfg.settings["verbosity"] > 1:
@@ -654,7 +653,6 @@ class astro_functions:
         self.astroparams.setdefault("nL", 5000)
         self.astroparams.setdefault("v_of_M", None)
         self.astroparams.setdefault("line_incli", True)
-        self.astroparams.setdefault("astro_tracer", "clustering")
 
     def recap_astro(self):
         print("Astronomical Parameters:")

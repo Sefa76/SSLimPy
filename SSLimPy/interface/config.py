@@ -41,38 +41,48 @@ def init(
     #Set global defaults for the settings dictionary
     global settings
     settings = settings_dict
+
+    # Cosmology settings
+    settings.setdefault("nonlinearMatpow", True)
+    settings.setdefault("share_delta_neff", True)
+    settings.setdefault("LP_rescale_ini_As", 2.1e-9)
+    settings.setdefault("LP_rescale_boost", 2)
     settings.setdefault("cosmo_model", "LCDM")
     settings.setdefault("code", "camb")
     settings.setdefault("h-units", False)
+    settings.setdefault("do_pheno_ncdm",False)
+    settings.setdefault("astro_tracer", "clustering")
+
+    # Savgol numerics
     settings.setdefault('savgol_window', 101)
     settings.setdefault('savgol_polyorder', 3)
     settings.setdefault('savgol_width', 1.358528901113328)
     settings.setdefault('savgol_internalsamples', 800)
     settings.setdefault('savgol_internalkmin', 0.001)
 
-    # Pk Settings
+    # Pk numerics
     settings.setdefault("kmin", 1.e-3 * u.Mpc**-1)
     settings.setdefault("kmax", 10 * u.Mpc**-1)
     settings.setdefault("nk",100)
     settings.setdefault("k_kind","log")
+    settings.setdefault("nmu", 127)
+
+    # Pk specifications
     settings.setdefault("sigma_scatter",0)
     settings.setdefault("fduty",1)
-    settings.setdefault("do_onehalo", False)
     settings.setdefault("do_Jysr", False)
+    settings.setdefault("fix_cosmo_nl_terms",True)
+
+    # Pk contributions
+    settings.setdefault("QNLpowerspectrum", True)
+    settings.setdefault("TracerPowerSpectrum", "matter")
     settings.setdefault("do_RSD", True)
-    settings.setdefault("nmu", 127)
+    settings.setdefault("nonlinearRSD", True)
     settings.setdefault("FoG_damp", "Lorentzian")
+    settings.setdefault("do_onehalo", True)
+    settings.setdefault("halo_model_PS", False)
     settings.setdefault("smooth", False)
     settings.setdefault("do_conv_Wkmin", False)
-    settings.setdefault("share_delta_neff", True)
-    settings.setdefault("LP_rescale_ini_As", 2.1e-9)
-    settings.setdefault("LP_rescale_boost", 2)
-    settings.setdefault("nonlinearMatpow", True)
-    settings.setdefault("nonlinearSwitch", True)
-    settings.setdefault("TracerPowerSpectrum", "matter")
-    settings.setdefault("do_pheno_ncdm",False)
-    settings.setdefault("fix_cosmo_nl_terms",True)
-    settings.setdefault("nuiscance_model","Fixed")
 
     # Output settings
     settings.setdefault("verbosity",1)
