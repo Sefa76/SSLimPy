@@ -156,32 +156,8 @@ class astro_functions:
 
         I1 = np.trapz(itgrnd1,M,axis=1)
         I2 = np.trapz(itgrnd2,M,axis=1)
-        print(I1)
-        print(I2)
-
         b_line =  I1/I2 
         return np.squeeze(b_line.to(1).value)
-
-    def Tbavg(self, z, k=None):
-        '''
-        Halo-averaged bias times temperature for the given cosmology and line
-        model. ASSUMED TO BE WEIGHTED LINERALY BY MASS FOR 'LF' MODELS
-
-        Includes the effects of f_NL though the wrapping functions in astro
-        '''
-        # Integrands for mass-averaging
-        M = self.M.to(self.Msunh)
-        z = np.atleast_1d(z)
-        k = np.atleast_1d(k)
-
-        LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
-        dndM = np.reshape(self.halomassfunction(M,z),(*M.shape,*z.shape))
-        bh = self.restore_shape(self.halobias(M,z,k=k),k,M,z)
-
-        itgrnd1 = LofM[None,:,:]*dndM[None,:,:]*bh
-
-        Tb_line = np.trapz(itgrnd1,M,axis=1) * np.atleast_1d(self.CLT(z))[None,:]
-        return np.squeeze(Tb_line)
 
     def nbar(self, z):
         '''

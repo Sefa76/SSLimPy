@@ -267,7 +267,9 @@ class PowerSpectra:
             # Does not contain correction for f_nl yet
             Biasterm = bmean[None,:] * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
         else:
-            Biasterm = self.astro.restore_shape(self.astro.Tbavg(z, k=k),k,z) * np.atleast_1d(self.cosmology.sigma8_of_z(z,tracer=self.tracer))[None,:]
+            Biasterm = (self.astro.restore_shape(self.astro.bavg(z, k=k),k,z)
+                        * np.reshape(self.astro.Tmoments(z,moment=1),z.shape)[None,:]
+                        * np.atleast_1d(self.cosmology.sigma8_of_z(z,tracer=self.tracer))[None,:])
         return np.squeeze(Biasterm)
 
     def f_term(self,k,mu,z, BAOpars=dict()):
@@ -294,11 +296,6 @@ class PowerSpectra:
         z = np.atleast_1d(z)
         bterm = self.astro.restore_shape(self.bias_term(z,k=k,BAOpars=BAOpars),k,z)
         fterm = np.reshape(self.f_term(k,mu,z,BAOpars=BAOpars),(*k.shape,*mu.shape,*z.shape))
-        print(bterm)
-        print(np.max(bterm))
-        print(fterm)
-        print(np.max(fterm))
-        print("kaiser")
         linear_Kaiser = np.power(bterm[:,None,:] + fterm ,2)
         return np.squeeze(linear_Kaiser)
 
