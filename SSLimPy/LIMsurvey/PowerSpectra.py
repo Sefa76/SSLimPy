@@ -47,6 +47,8 @@ class PowerSpectra:
 
         self.c_NFW = self.prepare_c_NFW()
 
+        self.compute_power_spectra()
+
     ###################
     # Halo Properties #
     ###################
@@ -265,7 +267,7 @@ class PowerSpectra:
             # Does not contain correction for f_nl yet
             Biasterm = bmean[None,:] * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
         else:
-            Biasterm = self.astro.restore_shape(self.astro.bavg(z, k=k),k,z) * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
+            Biasterm = self.astro.restore_shape(self.astro.Tbavg(z, k=k),k,z) * np.atleast_1d(self.cosmology.sigma8_of_z(z,tracer=self.tracer))[None,:]
         return np.squeeze(Biasterm)
 
     def f_term(self,k,mu,z, BAOpars=dict()):
@@ -292,6 +294,11 @@ class PowerSpectra:
         z = np.atleast_1d(z)
         bterm = self.astro.restore_shape(self.bias_term(z,k=k,BAOpars=BAOpars),k,z)
         fterm = np.reshape(self.f_term(k,mu,z,BAOpars=BAOpars),(*k.shape,*mu.shape,*z.shape))
+        print(bterm)
+        print(np.max(bterm))
+        print(fterm)
+        print(np.max(fterm))
+        print("kaiser")
         linear_Kaiser = np.power(bterm[:,None,:] + fterm ,2)
         return np.squeeze(linear_Kaiser)
 
@@ -314,8 +321,8 @@ class PowerSpectra:
             f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
             sp = sigmav*f_scaleindependent
         else:
-            sp = cosmo.P_ThetaTheta_Moments(z,moment=2)
-        FoG_damp = cfg.settings["Fog_damp"]
+            sp = np.atleast_1d(cosmo.P_ThetaTheta_Moments(z,moment=2))
+        FoG_damp = cfg.settings["FoG_damp"]
         if FoG_damp == 'Lorentzian':
             FoG = np.power(1.+0.5*np.power(k[:,None,None]*mu[None,:,None]* sp[None,None,:],2),-2)
         elif FoG_damp == 'Gaussian':
@@ -359,7 +366,7 @@ class PowerSpectra:
                 raise ValueError("did not pass the shotnoise for every z asked for")
             Ps = self.astro.restore_shape(Ps,k,z)
             Ps = Ps + Pshot[None,:]
-        return np.squeeze(Pshot)
+        return np.squeeze(Ps)
 
     def compute_power_spectra(self):
         #grid quantities
@@ -381,23 +388,25 @@ class PowerSpectra:
         # Compute related quantities
         k_ap = np.sqrt(np.power(kparr_ap,2)+np.power(kperp_ap,2))
         mu_ap = kparr_ap/k_ap
-        
+
         Pk_ap = np.zeros(outputshape)
         if cfg.settings["QNLpowerspectrum"]:
             # Obtain the normalized dewiggled power spectrum
             Pk_dw_grid = np.reshape(self.dewiggled_pdd(k,mu,z,BAOpars=self.BAOpars),outputshape)
-
+            uI = Pk_dw_grid.unit
             for iz,zi in enumerate(z):
                 interp_per_z = RectBivariateSpline(logkMpc,mu,Pk_dw_grid[:,:,iz])
                 Pk_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value), mu_ap[:,:,iz], grid=False) \
-                                / self.cosmology.sigma8_of_z(zi,tracer=self.tracer)
+                                / np.atleast_1d(np.power(self.cosmology.sigma8_of_z(zi,tracer=self.tracer),2))[None,None,:]
         else:
             # Use linear power spectrum
             Pk_grid = np.reshape(self.cosmology.matpow(k,z),(*k.shape,*z.shape))
+            uI = Pk_grid.unit
             for iz,zi in enumerate(z):
                 interp_per_z = UnivariateSpline(logkMpc,Pk_grid[:,iz])
                 Pk_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value)) \
-                                / self.cosmology.sigma8_of_z(zi,tracer=self.tracer)
+                                / np.atleast_1d(np.power(self.cosmology.sigma8_of_z(zi,tracer=self.tracer),2))[None,None,:]
+        Pk_ap *= uI
 
         rsd_ap  = np.ones(outputshape)
         if cfg.settings["do_RSD"]:
@@ -406,20 +415,23 @@ class PowerSpectra:
             if cfg.settings["nonlinearRSD"]:
                 rsd_grid *= self.fingers_of_god(k,mu,z,BAOpars=self.BAOpars)
             rsd_grid = np.reshape(rsd_grid,outputshape)
-
+            uI = rsd_grid.unit
             for iz, zi in enumerate(z):
                 interp_per_z = RectBivariateSpline(logkMpc,mu,rsd_grid[:,:,iz])
                 rsd_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value), mu_ap[:,:,iz], grid=False)
+            rsd_ap *= uI
 
         # Obtain shotnoise contribution (AP effect only enters when computing scale dependent shot noise)
         if cfg.settings["do_onehalo"] and cfg.settings["halo_model_PS"]:
             Ps_ap = np.zeros(outputshape)
             # in this case actucally there is the AP effect to be considerd due to the halo self correlation
             Ps_grid = np.reshape(self.shotnoise(z, k=k, BAOpars=self.BAOpars),(*k.shape,*z.shape))
+            uI = Ps_grid.unit
             for iz, zi in enumerate(z):
                 interp_per_z = UnivariateSpline(logkMpc,Ps_grid[:,:,iz])
-                Ps_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))       
+                Ps_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))
+            Ps_ap *= uI
         else:
             Ps_ap = np.atleast_1d(self.shotnoise(z, BAOpars=self.BAOpars))[None,None,:]
 
-        self.Pk_obs = rsd_ap * Pk_ap + Ps_ap * (qparr * np.power(qperp,2))[None,None,:]
+        self.Pk_obs = (rsd_ap * Pk_ap + Ps_ap) * (qparr * np.power(qperp,2))[None,None,:]

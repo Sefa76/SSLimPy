@@ -28,8 +28,11 @@ class halo_mass_functions:
         """
         Sheth-Tormen halo mass function
         """
-        sigmaM = self.sigmaM(Mvec, z)
-        dsigmaM_dM = self.dsigmaM_dM(Mvec, z).to(self.Msunh**-1)
+        Mvec = np.atleast_1d(Mvec)
+        z = np.atleast_1d(z)
+
+        sigmaM = np.reshape(self.sigmaM(Mvec, z),(*Mvec.shape,*z.shape))
+        dsigmaM_dM = np.reshape(self.dsigmaM_dM(Mvec, z).to(self.Msunh**-1),(*Mvec.shape,*z.shape))
 
         deltac = 1.686
         nu = (deltac / sigmaM) ** 2.0
