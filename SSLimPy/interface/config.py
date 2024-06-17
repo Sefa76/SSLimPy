@@ -65,7 +65,7 @@ def init(
     settings.setdefault("kmax", 10 * u.Mpc**-1)
     settings.setdefault("nk",200)
     settings.setdefault("k_kind","log")
-    settings.setdefault("nmu", 127)
+    settings.setdefault("nmu", 128)
 
     # Pk specifications
     settings.setdefault("sigma_scatter",0)

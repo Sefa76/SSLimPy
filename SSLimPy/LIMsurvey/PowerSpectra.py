@@ -2,7 +2,8 @@ from astropy import units as u
 from astropy import constants as c
 
 from scipy.interpolate import RectBivariateSpline, UnivariateSpline, interp1d
-from scipy.special import sici
+from scipy.special import sici, legendre
+from scipy.integrate import simpson
 
 import numpy as np
 from SSLimPy.interface import config as cfg
@@ -45,9 +46,18 @@ class PowerSpectra:
         self.k_par = self.k[:, None] * self.mu[None, :]
         self.k_perp = self.k[:, None] * np.sqrt(1 - np.power(self.mu[None, :], 2))
 
+        ##########################
+        # The LIM power spectrum #
+        ##########################
+
+        # Compute the power spectrum on the internal grid
         self.c_NFW = self.prepare_c_NFW()
 
         self.compute_power_spectra()
+        self.compute_power_spectra_moments()
+
+        # Create interpolationg fucuntion
+        self.Pk_obs_func = self.create_pk_interp()
 
     ###################
     # Halo Properties #
@@ -366,6 +376,9 @@ class PowerSpectra:
         return np.squeeze(Ps)
 
     def compute_power_spectra(self):
+        """This function computes the full shape observed power spectrum
+        with (nearly) fully vectorized function
+        """
         #grid quantities
         k = self.k
         mu = self.mu
@@ -435,4 +448,50 @@ class PowerSpectra:
         else:
             Ps_ap = np.atleast_1d(self.shotnoise(z, BAOpars=self.BAOpars))[None,None,:]
 
-        self.Pk_obs = (rsd_ap * Pk_ap + Ps_ap) * (qparr * np.power(qperp,2))[None,None,:]
+        self.Pk_Obs = (rsd_ap * Pk_ap + Ps_ap) * (qparr * np.power(qperp,2))[None,None,:]
+
+    def compute_power_spectra_moments(self):
+        """
+        This function computes the power spectrum monopole, quadropole and hexadecapole
+        For other moments it creats a new callable function to compute them 
+        """
+        #grid quantities
+        mu = self.mu
+        Pobs = self.Pk_Obs
+
+        def Pk_ell_moments(ell):
+            norm = (2*ell+1)/2
+            L_ell = legendre(ell)
+            return simpson(y=Pobs * norm * L_ell(mu)[None,:,None],x=mu,axis=1)
+
+        self.Pk_0bs = Pk_ell_moments(0)
+        self.Pk_2bs = Pk_ell_moments(2)
+        self.Pk_4bs = Pk_ell_moments(4)
+        self.Pk_ell_moments = Pk_ell_moments
+
+    def create_pk_interp(self):
+        k = self.k
+        mu = self.mu
+        z = self.z
+        Pk_Obs = self.Pk_Obs
+
+        # fix units go to logscale
+        uP = Pk_Obs.unit
+        logP = np.log(Pk_Obs.value)
+        uk = k.unit
+        logk = np.log(k.value)
+
+        # interpolate in loglog
+        interp_per_z = []
+        for iz,zi in enumerate(z):
+            interp_per_z.append(RectBivariateSpline(logk,mu,logP))
+        
+        def Pk_from_grid(pk,pmu):
+            pk = np.atleast_1d(pk)
+            pmu = np.atleast_1d(pmu)
+            logpk = np.log(pk.to(uk).value)
+            fromgrid = np.array([interp(logpk,pmu) for interp in interp_per_z])
+            result = np.exp(fromgrid) * uP
+            return np.squeeze(result)
+        
+        return Pk_from_grid
