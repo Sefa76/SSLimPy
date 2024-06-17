@@ -63,7 +63,7 @@ def init(
     # Pk numerics
     settings.setdefault("kmin", 1.e-3 * u.Mpc**-1)
     settings.setdefault("kmax", 10 * u.Mpc**-1)
-    settings.setdefault("nk",100)
+    settings.setdefault("nk",200)
     settings.setdefault("k_kind","log")
     settings.setdefault("nmu", 127)
 

@@ -353,7 +353,7 @@ class PowerSpectra:
         Ps = 0
         if cfg.settings["do_onehalo"] :
             if cfg.settings["halo_model_PS"]:
-                Ps = self.halomoments(k,z,moment=2)
+                Ps = self.halomoments(k,z,moment=2)*self.astro.CLT(z)**2
             else:
                 Ps = self.astro.Tmoments(z,moment=2)
 
@@ -371,6 +371,7 @@ class PowerSpectra:
         mu = self.mu
         z = self.z
         outputshape = (*k.shape,*mu.shape,*z.shape)
+        print("requested Pk shape:",outputshape)
 
         #fix units
         k *= self.dragscale()
@@ -378,9 +379,9 @@ class PowerSpectra:
 
         # Apply AP effect
         qparr = np.atleast_1d(self.qparallel(z, self.BAOpars))
-        kparr_ap = k[:,None,None] * mu[None,None,:] * qparr[None,None,:]
+        kparr_ap = k[:,None,None] * mu[None,:,None] * qparr[None,None,:]
         qperp = np.atleast_1d(self.qperpendicular(z, self.BAOpars))
-        kperp_ap = k[:,None,None] *np.sqrt(1- np.power(mu[None,None,:],2)) * qperp[None,None,:]
+        kperp_ap = k[:,None,None] *np.sqrt(1- np.power(mu[None,:,None],2)) * qperp[None,None,:]
 
         # Compute related quantities
         k_ap = np.sqrt(np.power(kparr_ap,2)+np.power(kperp_ap,2))
@@ -391,17 +392,19 @@ class PowerSpectra:
             # Obtain the normalized dewiggled power spectrum
             Pk_dw_grid = np.reshape(self.dewiggled_pdd(k,mu,z,BAOpars=self.BAOpars),outputshape)
             uI = Pk_dw_grid.unit
+            logPk_dw_grid = np.log(Pk_dw_grid.value)
             for iz,zi in enumerate(z):
-                interp_per_z = RectBivariateSpline(logkMpc,mu,Pk_dw_grid[:,:,iz])
-                Pk_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value), mu_ap[:,:,iz], grid=False) \
+                interp_per_z = RectBivariateSpline(logkMpc,mu,logPk_dw_grid[:,:,iz])
+                Pk_ap[:,:,iz] = np.exp(interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value), mu_ap[:,:,iz], grid=False)) \
                                 / np.atleast_1d(np.power(self.cosmology.sigma8_of_z(zi,tracer=self.tracer),2))[None,None,:]
         else:
             # Use linear power spectrum
             Pk_grid = np.reshape(self.cosmology.matpow(k,z),(*k.shape,*z.shape))
             uI = Pk_grid.unit
+            logPk_grid = np.log(Pk_grid.value)
             for iz,zi in enumerate(z):
-                interp_per_z = UnivariateSpline(logkMpc,Pk_grid[:,iz])
-                Pk_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value)) \
+                interp_per_z = UnivariateSpline(logkMpc,logPk_grid[:,iz])
+                Pk_ap[:,:,iz] = np.exp(interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))) \
                                 / np.atleast_1d(np.power(self.cosmology.sigma8_of_z(zi,tracer=self.tracer),2))[None,None,:]
         Pk_ap *= uI
 
@@ -423,10 +426,11 @@ class PowerSpectra:
             Ps_ap = np.zeros(outputshape)
             # in this case actucally there is the AP effect to be considerd due to the halo self correlation
             Ps_grid = np.reshape(self.shotnoise(z, k=k, BAOpars=self.BAOpars),(*k.shape,*z.shape))
+            logPs_grid = np.log(Ps_grid.value)
             uI = Ps_grid.unit
             for iz, zi in enumerate(z):
-                interp_per_z = UnivariateSpline(logkMpc,Ps_grid[:,:,iz])
-                Ps_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))
+                interp_per_z = UnivariateSpline(logkMpc,logPs_grid[:,iz])
+                Ps_ap[:,:,iz] = np.exp(interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value)))
             Ps_ap *= uI
         else:
             Ps_ap = np.atleast_1d(self.shotnoise(z, BAOpars=self.BAOpars))[None,None,:]
