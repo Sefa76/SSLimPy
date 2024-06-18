@@ -9,7 +9,7 @@ from copy import deepcopy
 
 sys.path.append("../")
 from SSLimPy.interface import config as cfg
-from SSLimPy.cosmology import cosmology
+from SSLimPy.interface import updater
 from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
@@ -17,7 +17,7 @@ from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
 
 
 class astro_functions:
-    def __init__(self, cosmopars=dict(), astropars=dict()):
+    def __init__(self, cosmopars=dict(), astropars=dict(), cosmology = None):
 
         self.astroparams = deepcopy(astropars)
         self.set_astrophysics_defaults()
@@ -27,17 +27,12 @@ class astro_functions:
         if cfg.settings["verbosity"] > 1:
             self.recap_astro()
         ##################
-
-        if cosmopars:
-            self.cosmopars = deepcopy(cfg.fiducialcosmoparams)
+        if cosmology:
+            self.cosmopars = cosmology.fullcosmoparams
+            self.cosmology = cosmology
         else:
-            self.cosmopars = deepcopy(cosmopars)
-
-        if self.cosmopars == cfg.fiducialcosmoparams:
-            # No need to recompute the cosmology
-            self.cosmology = cfg.fiducialcosmo
-        else:
-            self.cosmology = cosmology.cosmo_functions(cosmopars, cfg.input_type)
+            self.cosmopars = cosmopars
+            self.cosmology = updater._update_cosmo(cfg.fiducialcosmo,cosmopars)
 
         # Current units
         self.hubble = self.cosmology.h()
@@ -108,7 +103,7 @@ class astro_functions:
 
         bh = self._b_of_M(M, z, self.delta_crit)
 
-        if "f_NL" in self.cosmology.input_cosmoparams:
+        if "f_NL" in self.cosmology.fullcosmoparams:
             Delta_b = np.reshape(self.Delta_b(k, M, z), (*k.shape, *M.shape, *z.shape))
             bh = bh[None, :, :] + Delta_b
 
@@ -129,7 +124,7 @@ class astro_functions:
 
         dndM = np.reshape(self._dn_dM_of_M(M, rho_input, z), (*M.shape, *z.shape))
 
-        if "f_NL" in self.cosmology.input_cosmoparams:
+        if "f_NL" in self.cosmology.fullcosmoparams:
             Delta_HMF = np.reshape(self.Delta_HMF(M, z), (*M.shape, *z.shape))
             dndm *= 1 + Delta_HMF
 
@@ -156,7 +151,7 @@ class astro_functions:
 
         I1 = np.trapz(itgrnd1,M,axis=1)
         I2 = np.trapz(itgrnd2,M,axis=1)
-        b_line =  I1/I2 
+        b_line =  I1/I2
         return np.squeeze(b_line.to(1).value)
 
     def nbar(self, z):
@@ -489,7 +484,7 @@ class astro_functions:
         dS3_dM = np.trapz(dS3_dM, k, axis=0)
         dS3_dM = np.trapz(dS3_dM, mu, axis=0)
 
-        fac = self.cosmology.input_cosmoparams["f_NL"] * 6 / 8 / np.pi**4
+        fac = self.cosmology.fullcosmoparams["f_NL"] * 6 / 8 / np.pi**4
         S3 = -1 * fac * np.squeeze(S3)
         dS3_dm = -1 * fac * np.squeeze(dS3_dm)
         return -S3, dS3_dm
@@ -543,7 +538,7 @@ class astro_functions:
         f2 = (
             3
             * self.cosmology.Omega(0, tracer=tracer)
-            * self.cosmology.input_cosmoparams["f_NL"]
+            * self.cosmology.fullcosmoparams["f_NL"]
         )
 
         f1_of_k = f1[:, None, None]

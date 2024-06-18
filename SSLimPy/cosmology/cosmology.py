@@ -537,16 +537,23 @@ class cosmo_functions:
     celeritas = c.c
 
     """
-    This class is where you can extract all of the EBS results. When modifying the code try to keep using the funcitons of this class instead of the callables inside of results.
+    This class is where you can extract all of the EBS results.
+    When modifying the code try to keep using the funcitons of this class
+    instead of the callables inside of results.
     It also handles the nuiscance-like cosmological parameters.
     """
 
     def __init__(
-        self, cosmopars=dict(), nuiscance_like=dict(), input=None, cosmology=None
+        self, cosmopars=dict(),
+        nuiscance_like=dict(),
+        input=None,
+        cosmology=None,
     ):
         self.settings = cfg.settings
 
-        self.input_cosmoparams = {**cosmopars, **nuiscance_like}
+        self.cosmopars = deepcopy(cosmopars)
+        self.nuiscance_like = deepcopy(nuiscance_like)
+        self.fullcosmoparams = {**cosmopars, **nuiscance_like}
 
         self.fiducialcosmopars = cfg.fiducialcosmoparams
         if input is None:
@@ -580,7 +587,7 @@ class cosmo_functions:
                 self.classcosmopars = cosmology.classcomopars
             if self.code == "camb":
                 self.cambcosmopars = cosmology.cambcosmopars
-        
+
         self.growth_factor, self.growth_rate = self.create_growth()
 
     ##############
@@ -884,11 +891,11 @@ class cosmo_functions:
         """
         Transfer function to suppress small-scale power due to non-CDM models as presented in 2404.11609.
         """
-        if "f_NL" in self.input_cosmoparams:
+        if "f_NL" in self.fullcosmoparams:
             raise ValueError("Cannot have non-zero f_NL and non-CDM.")
         else:
-            kcut = self.input_cosmoparams["kcut"]
-            slope = self.input_cosmoparams["slope"]
+            kcut = self.fullcosmoparams["kcut"]
+            slope = self.fullcosmoparams["slope"]
             # make sure k's are in the proper units
             kcut = kcut.to(1.0 / u.Mpc).value
             k = ncdmk
@@ -1002,7 +1009,7 @@ class cosmo_functions:
                 warn("Did not recognize tracer: reverted to matter")
                 D = np.squeeze(np.exp(logDm_inter(logk,z)))
             return D
-        
+
         def growth_rate(k, z, tracer="matter"):
             k = np.atleast_1d(k)
             z = np.atleast_1d(z)

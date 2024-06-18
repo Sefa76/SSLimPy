@@ -1,8 +1,13 @@
 import sys
 from warnings import warn
+from copy import deepcopy
+
+from numpy import atleast_1d
 
 sys.path.append("../")
 import SSLimPy.interface.config as cfg
+import SSLimPy.interface.updater as updater
+
 class sslimpy:
     def __init__(
         self,
@@ -12,7 +17,8 @@ class sslimpy:
         specifications = None,
         cosmopars = dict(),
         astropars = dict(),
-        BAOpars = dict()
+        BAOpars = dict(),
+        freepars = dict(),
     ):
 
         print("#--------------------------------------------------#")
@@ -46,7 +52,11 @@ class sslimpy:
 
         self.obspars = cfg.obspars
         self.vidpars = cfg.vidpars
-        self.output = cfg.settings["output"]
+        self.output = atleast_1d(cfg.settings["output"])
+
+        ### save very fist cosmology ###
+        self.curent_cosmo = deepcopy(self.fiducialcosmo)
+        self.curent_astro = deepcopy(self.fiducialastro)
 
         ### TEXT VOMIT ###
         if cfg.settings["verbosity"]>1:
@@ -54,25 +64,36 @@ class sslimpy:
         ##################
 
     def compute(self, cosmopars, astropars, BAOpars):
-        if self.output is not None:
-            for ops in self.output:
-                if ops=="power spectrum":
-                    self._compute_ps(cosmology)
-                if ops=="Covaraiance":
-                    self._compute_cov(cosmology)
-                else:
-                    warn("Output {} asked for not recognised \n Skiped".format(ops))
+        outputdict = {obs: None for obs in self.output}
+
+        for obs in self.output:
+            if obs=="Power spectrum":
+                outputdict[obs] = self._compute_ps(cosmopars, astropars, BAOpars)
+            if obs=="Covaraiance":
+                outputdict[obs] = self._compute_cov(cosmopars, astropars, BAOpars)
+            else:
+                warn("Output {} asked for not recognised \n Skiped".format(obs))
         print("Done!")
 
-    def _compute_ps(self, cosmology, astro, BAOpars):
+    def _compute_ps(self, cosmopars, astropars, BAOpars):
         from SSLimPy.LIMsurvey.PowerSpectra import PowerSpectra
-        return PowerSpectra(cosmology=cosmology, astro= astro, BAOpars=BAOpars)
+        cosmo = updater.update_cosmo(self.curent_cosmo,
+                                     cosmopars
+                                     )
+
+        astro = updater.update_astro(self.curent_cosmo,
+                                     cosmopars,
+                                     self.curent_astro,
+                                     astropars,
+                                     updated_cosmo=cosmo)
+
+        return PowerSpectra(cosmo,astro,BAOpars)
 
 
-    def _compute_cov(self, cosmology):
+    def _compute_cov(self, cosmopars, astropars, BAOpars):
         from SSLimPy.LIMsurvey.Covariance import Covariance
-        ps = self._compute_ps(cosmology)
-        return Covariance(cosmology, ps)
+        ps = self._compute_ps(cosmopars,astropars,BAOpars)
+        return Covariance(ps)
 
     def recap_options(self):
         """This will print all the selected options into the standard output"""

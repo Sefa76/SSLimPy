@@ -86,7 +86,7 @@ def init(
 
     # Output settings
     settings.setdefault("verbosity",1)
-    settings.setdefault("output", None)
+    settings.setdefault("output", [])
 
     # Load Boltzmann solver files
     global input_type
@@ -159,16 +159,27 @@ def init(
     global fiducialastroparams
     fiducialastroparams = astropars
 
-    global fiducialcosmo
     # seperate the nuiscance-like cosmology parameters
     # add new ones here
-    nuiscance_like_params_names = ["f_NL","slope_ncdm","k_cut_ncdm"]
-    nuiscance_like = dict()
+    global nuiscance_like_params_names
+    nuiscance_like_params_names = ["f_NL",
+                                   "slope_ncdm",
+                                   "k_cut_ncdm"]
+
+    global fiducialnuiscancelikeparams
+    fiducialnuiscancelikeparams = dict()
     for key in cosmopars:
         if key in nuiscance_like_params_names:
-            nuiscance_like[key]=cosmopars.pop(key)
+            fiducialnuiscancelikeparams[key]=cosmopars.pop(key)
 
-    fiducialcosmo = cosmology.cosmo_functions(cosmopars=cosmopars,nuiscance_like=nuiscance_like,input=input_type)
+    global fiducialfullcosmoparams
+    fiducialfullcosmoparams = {**fiducialcosmoparams, **fiducialnuiscancelikeparams}
+
+    global fiducialcosmo
+    fiducialcosmo = cosmology.cosmo_functions(cosmopars=cosmopars,
+                                              nuiscance_like=fiducialnuiscancelikeparams,
+                                              input=input_type,
+                                              )
 
     global fiducialastro
     fiducialastro = astro.astro_functions(cosmopars, astropars)
