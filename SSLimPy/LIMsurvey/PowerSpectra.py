@@ -380,9 +380,9 @@ class PowerSpectra:
         with (nearly) fully vectorized function
         """
         #grid quantities
-        k = self.k
-        mu = self.mu
-        z = self.z
+        k = copy(self.k)
+        mu = copy(self.mu)
+        z = copy(self.z)
         outputshape = (*k.shape,*mu.shape,*z.shape)
         print("requested Pk shape:",outputshape)
 

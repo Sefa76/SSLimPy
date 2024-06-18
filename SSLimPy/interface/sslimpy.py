@@ -1,6 +1,6 @@
 import sys
 from warnings import warn
-from copy import deepcopy
+from copy import copy
 
 from numpy import atleast_1d
 
@@ -55,8 +55,8 @@ class sslimpy:
         self.output = atleast_1d(cfg.settings["output"])
 
         ### save very fist cosmology ###
-        self.curent_cosmo = deepcopy(self.fiducialcosmo)
-        self.curent_astro = deepcopy(self.fiducialastro)
+        self.curent_cosmo = copy(self.fiducialcosmo)
+        self.curent_astro = copy(self.fiducialastro)
 
         ### TEXT VOMIT ###
         if cfg.settings["verbosity"]>1:
@@ -73,7 +73,9 @@ class sslimpy:
                 outputdict[obs] = self._compute_cov(cosmopars, astropars, BAOpars)
             else:
                 warn("Output {} asked for not recognised \n Skiped".format(obs))
+        
         print("Done!")
+        return outputdict
 
     def _compute_ps(self, cosmopars, astropars, BAOpars):
         from SSLimPy.LIMsurvey.PowerSpectra import PowerSpectra

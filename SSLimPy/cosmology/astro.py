@@ -9,7 +9,6 @@ from copy import deepcopy
 
 sys.path.append("../")
 from SSLimPy.interface import config as cfg
-from SSLimPy.interface import updater
 from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
@@ -31,8 +30,9 @@ class astro_functions:
             self.cosmopars = cosmology.fullcosmoparams
             self.cosmology = cosmology
         else:
+            from SSLimPy.interface import updater
             self.cosmopars = cosmopars
-            self.cosmology = updater._update_cosmo(cfg.fiducialcosmo,cosmopars)
+            self.cosmology = updater.update_cosmo(cfg.fiducialcosmo,cosmopars)
 
         # Current units
         self.hubble = self.cosmology.h()
