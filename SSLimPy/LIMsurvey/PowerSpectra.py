@@ -265,7 +265,7 @@ class PowerSpectra:
 
     def bias_term(self, z, k=None, BAOpars=dict()):
         """
-        Function to compute the bias term that enters the lienar Kaiser formula
+        Function to compute the bias term that enters the linear Kaiser formula
         If BAOpars is passed checks for bmean
         """
         k = np.atleast_1d(k)
@@ -274,8 +274,19 @@ class PowerSpectra:
             bmean = np.atleast_1d(BAOpars["bmean"])
             if len(bmean) != len(z):
                 raise ValueError("did not pass mean bias for every z asked for")
+
             # Does not contain correction for f_nl yet
-            Biasterm = bmean[None,:] * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
+            bmean = bmean[None,:]
+            if "f_NL" in self.cosmology.fullcosmoparams:
+                M = self.M
+                fac = ((bmean-1)
+                       / np.reshape(self.astro._b_of_M(M,z)-1,(*M.shape, *z.shape)))
+                Delta_b = (self.astro.Delta_b(k, M, z) * fac[None,:,:])
+                Delta_b = Delta_b[:,0,:] # Actually this is now M-independent
+                
+                bmeam = bmean + Delta_b
+
+            Biasterm = bmean * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
         else:
             Biasterm = (self.astro.restore_shape(self.astro.bavg(z, k=k),k,z)
                         * np.reshape(self.astro.Tmoments(z,moment=1),z.shape)[None,:]
@@ -284,7 +295,7 @@ class PowerSpectra:
 
     def f_term(self,k,mu,z, BAOpars=dict()):
         """
-        Function to compute the linear redshift space distortion that enters the lienar Kaiser formula
+        Function to compute the linear redshift space distortion that enters the linear Kaiser formula
         If BAOpars is passed checks for Tmean
         """
         k = np.atleast_1d(k)
