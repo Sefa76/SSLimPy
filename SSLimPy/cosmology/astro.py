@@ -135,15 +135,15 @@ class astro_functions:
         galactic rotation curves.
         """
         Mvec = np.atleast_1d(M)[:, None]
-        zvec = np.atleast_1d(z)[None, :] 
+        zvec = np.atleast_1d(z)[None, :]
 
         vM = np.atleast_1d(self.astroparams["v_of_M"](Mvec))
         Hz = np.atleast_1d(self.cosmology.Hubble(zvec))
-        sv = vM * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
+        sv = vM/self.cosmology.celeritas * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
 
         return np.squeeze(sv)
 
-    def broadening_FT(self, k, mu, M, z)
+    def broadening_FT(self, k, mu, M, z):
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
         M = np.atleast_1d(M)
@@ -173,13 +173,14 @@ class astro_functions:
         LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
         dndM = np.reshape(self.halomassfunction(M,z),(*M.shape,*z.shape))
         bh = self.restore_shape(self.halobias(M,z,k=k),k,M,z)
-        
+
         Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
         if self.astroparams["v_of_M"]:
-           Fv = self.broadening_FT(k, mu, M, z)
+           Fv = np.reshape(self.broadening_FT(k, mu, M, z),
+                           (*k.shape, *mu.shape, *M.shape, *z.shape))
 
-        itgrnd1 = Fv * LofM[None,None,:,:] * dndM[None,None,:,:] * bh[:, None, :, :]
-        itgrnd2 = Fv * LofM[None,None,:,:] * dndM[None,None,:,:]
+        itgrnd1 = Fv * LofM[None, None, :, :] * dndM[None, None, :, :] * bh[:, None, :, :]
+        itgrnd2 = Fv * LofM[None, None, :, :] * dndM[None, None, :, :]
 
         I1 = np.trapz(itgrnd1,M,axis=2)
         I2 = np.trapz(itgrnd2,M,axis=2)
@@ -233,9 +234,10 @@ class astro_functions:
 
             Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
             if self.astroparams["v_of_M"]:
-               Fv = self.broadening_FT(k, mu, M, z)
+                Fv = np.reshape(self.broadening_FT(k, mu, M, z),
+                                (*k.shape, *mu.shape, *M.shape, *z.shape))
 
-            itgrnd = dndM * np.power(L, moment) * Fv
+            itgrnd = dndM * np.power(L* Fv, moment)
             Lmoment = np.trapz(itgrnd, M, axis=2)
 
             # Special case for Tony Li model- scatter does not preserve LCO
@@ -243,8 +245,8 @@ class astro_functions:
                 model_pars = self.astroparams["model_par"]
                 alpha = model_pars["alpha"]
                 sig_SFR = model_pars["sig_SFR"]
-                correction = np.exp((moment * alpha**-2 - alpha**-1) 
-                                    * moment * sig_SFR**2 * np.log(10)**2 
+                correction = np.exp((moment * alpha**-2 - alpha**-1)
+                                    * moment * sig_SFR**2 * np.log(10)**2
                                     / 2)
                 Lmoment *= correction
 
@@ -384,7 +386,7 @@ class astro_functions:
         if "ML" in self.astroparams["model_type"]:
             sigma = np.maximum(cfg.settings["sigma_scatter"], 0.05)
             # Special case for Tony Li model- scatter does not preserve LCO
-            if self.model_name == "TonyLi":
+            if self.astroparams["model_name"] == "TonyLi":
                 alpha = self.model_par["alpha"]
                 sig_SFR = self.model_par["sig_SFR"]
                 # assume sigma and sig_SFR are totally uncorrelated
