@@ -50,9 +50,11 @@ class astro_functions:
             self.astroparams["Lmin"], self.astroparams["Lmax"], self.astroparams["nL"]
         )
         # find the redshifts for fequencies asked for:
-        self.nu = self.astroparams["nu"]
-        self.nuObs = self.astroparams["nuObs"]
+        self.nu = np.atleast_1d(self.astroparams["nu"])
+        self.nuObs = np.atleast_1d(self.astroparams["nuObs"])
+
         self.z = np.atleast_1d((self.nu / self.nuObs).to(1).value - 1)
+        self.z = np.sort(self.z)
 
         self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
 

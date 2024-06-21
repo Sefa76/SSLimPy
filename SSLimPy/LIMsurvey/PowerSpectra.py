@@ -546,7 +546,7 @@ class PowerSpectra:
         # interpolate in loglog
         interp_per_z = []
         for iz,zi in enumerate(z):
-            interp_per_z.append(RectBivariateSpline(logk,mu,logP))
+            interp_per_z.append(RectBivariateSpline(logk,mu,logP[:,:,iz]))
 
         def Pk_from_grid(pk,pmu):
             pk = np.atleast_1d(pk)
