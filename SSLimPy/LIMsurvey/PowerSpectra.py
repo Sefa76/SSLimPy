@@ -374,6 +374,16 @@ class PowerSpectra:
 
     #TODO: #1 Add Functions for Line Broadening and Supression because of Survey Resolution
 
+    def sigma_parr(self, z, nu_obs):
+        x = (cfg.obspars["dnu"] / nu_obs).to(1).value
+        y = (1+z) / self.cosmo.Hubble(z)
+        return x * y
+
+    def sigma_perp(self, z):
+        x = cfg.obspars["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
+        y = self.cosmo.angdist(z)
+        return x * y
+
     #######################
     # Power Spectra Terms #
     #######################
