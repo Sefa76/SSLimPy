@@ -372,17 +372,42 @@ class PowerSpectra:
     # Line Broadening and Resolution #
     ##################################
 
-    #TODO: #1 Add Functions for Line Broadening and Supression because of Survey Resolution
+    #TODO: #1 Add Functions for Line Broadening end Suppression because of Survey Resolution
 
+    # Call these functions before applying the AP transformations, scale fixes, ect 
     def sigma_parr(self, z, nu_obs):
         x = (cfg.obspars["dnu"] / nu_obs).to(1).value
-        y = (1+z) / self.cosmo.Hubble(z)
+        y = (1+z) / self.fiducialcosmo.Hubble(z)
         return x * y
 
     def sigma_perp(self, z):
         x = cfg.obspars["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
-        y = self.cosmo.angdist(z)
+        y = self.fiducialcosmo.angdist(z)
         return x * y
+
+    def F_parr(self, k, mu, z, nu_obs):
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        z = np.atleast_1d(z)
+
+        logF = -0.5 * np.power(k[:, None, None]
+                               * mu[None, :, None]
+                               * self.sigma_parr(z, nu_obs)[None, None, :],
+                               2)
+
+        return np.squeeze(np.exp(logF))
+
+    def F_perp(self, k, mu, z):
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        z = np.atleast_1d(z)
+
+        logF = -0.5 * np.power(k[:, None, None]
+                               * np.sqrt(1 - mu[None, :, None]**2)
+                               * self.sigma_perp(z)[None, None, :],
+                               2)
+
+        return np.squeeze(np.exp(logF))
 
     #######################
     # Power Spectra Terms #
@@ -428,6 +453,10 @@ class PowerSpectra:
         if cfg.settings["verbosity"] >1:
             print("requested Pk shape:",outputshape)
             tstart = time()
+
+        # The dampning from resolution is to be computed without any cosmolgy dependance
+        F_parr = np.reshape(self.F_parr(k, mu, z, self.astro.nuObs), outputshape)
+        F_perp = np.reshape(self.F_perp(k, mu, z), outputshape)
 
         #fix units
         k *= self.dragscale()
@@ -518,7 +547,10 @@ class PowerSpectra:
             tps = time()
             print("Shot-noise obtained in {} seconds".format(tps-trsd))
 
-        self.Pk_Obs = (rsd_ap * Pk_ap + Ps_ap) * (qparr * np.power(qperp,2))[None,None,:]
+        self.Pk_Obs = ((qparr * np.power(qperp,2))[None,None,:] 
+                       * (rsd_ap * Pk_ap + Ps_ap)
+                       * F_perp * F_parr)
+
         if cfg.settings["verbosity"] >1:
             print("Observed power spectrum obtained in {} seconds".format(time()-tstart))
 
