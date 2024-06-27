@@ -24,6 +24,7 @@ class PowerSpectra:
         # Properties of target redshift #
         #################################
         self.nu = self.astro.nu
+        self.nuObs = self.astro.nuObs
         self.z = self.astro.z
         self.H = self.cosmology.Hubble(self.z, physical=True)
 
@@ -455,7 +456,7 @@ class PowerSpectra:
             tstart = time()
 
         # The dampning from resolution is to be computed without any cosmolgy dependance
-        F_parr = np.reshape(self.F_parr(k, mu, z, self.astro.nuObs), outputshape)
+        F_parr = np.reshape(self.F_parr(k, mu, z, self.nuObs), outputshape)
         F_perp = np.reshape(self.F_perp(k, mu, z), outputshape)
 
         #fix units
