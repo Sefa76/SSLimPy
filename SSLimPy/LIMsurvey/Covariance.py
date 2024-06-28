@@ -12,13 +12,13 @@ class Covariance:
         self.cosmology = fiducialcosmology
         self.powerspectrum = powerspectrum       
 
-    def Lfield(self, z1, z2)
+    def Lfield(self, z1, z2):
         zgrid = ([z1, z2])
         Lgrid = self.cosmology.comoving(zgrid)
         return Lgrid[1] - Lgrid[0]
 
     def Sfield(self, zc, Omegafield):
-        r2 = np.power(self.cosmolgy.comoving(zgrid).to(u.Mpc), 2)
+        r2 = np.power(self.cosmolgy.comoving(zc).to(u.Mpc), 2)
         sO = Omegafield.to(u.rad**2).value
         return r2*sO
 
@@ -56,8 +56,8 @@ class Covariance:
 
         normkmq = np.sqrt(np.power(vk, 2)
                           + np.power(vq, 2)
-                          - 2 * (kparr * vparr +
-                                 kperp * vperp * np.cos(vdeltaphi)
+                          - 2 * (kparr * qparr +
+                                 kperp * qperp * np.cos(vdeltaphi)
                                  )
                           )
         mukmq = (kperp - qperp) / normkmq
@@ -66,12 +66,15 @@ class Covariance:
         nu = self.powerspectrum.nu
         nuObs = self.powerspectrum.nuObs
         Delta_nu = cfg.obspars["Delta_nu"]
-        z_min = (nu / (nuObs + Deltanu / 2) - 1).to(1).value
-        z_max = (nu / (nuObs - Deltanu / 2) - 1).to(1).value
+        z_min = (nu / (nuObs + Delta_nu / 2) - 1).to(1).value
+        z_max = (nu / (nuObs - Delta_nu / 2) - 1).to(1).value
 
         # Construct W_survey (now just a cylinder)
         Lperp = np.sqrt(self.Sfield(z, cfg.obspars["Omega_field"])/np.pi)
-        Wperp = 2 * np.pi * Lperp * j1((q_perp * L_perp).to(1).value) / q_perp
+        Wperp = 2 * np.pi * Lperp * j1((qperp * Lperp).to(1).value) / qperp
         Lparr = self.Lfield(z_min, z_max) 
-        Wparr = 2 * np.sin((q_par * Lpar / 2).to(1).value) / q_par
+        Wparr = 2 * np.sin((qparr * Lparr / 2).to(1).value) / qparr
+        print(Wparr.shape)
+        print(Wparr)
+
 
