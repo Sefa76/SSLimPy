@@ -66,6 +66,8 @@ def init(
     settings.setdefault("nk",200)
     settings.setdefault("k_kind","log")
     settings.setdefault("nmu", 128)
+    settings.setdefault("downsample_conv_q",1)
+    settings.setdefault("downsample_conv_muq",8)
 
     # Pk specifications
     settings.setdefault("sigma_scatter",0)
