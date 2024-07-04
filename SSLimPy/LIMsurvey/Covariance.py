@@ -1,12 +1,15 @@
-from astropy import units as u
-from astropy import constants as c
-from scipy.special import j1, spherical_jn
-from scipy.interpolate import RectBivariateSpline
+from copy import copy
 from time import time
 
 import numpy as np
+from astropy import constants as c
+from astropy import units as u
+from numba import njit, prange
+from scipy.integrate import trapezoid
+from scipy.interpolate import RectBivariateSpline
+from scipy.special import j1, spherical_jn
+
 from SSLimPy.interface import config as cfg
-from copy import copy
 
 
 class Covariance:
@@ -42,7 +45,7 @@ class Covariance:
 
         # Construct W_survey (now just a cylinder)
         Sfield = self.Sfield(z, cfg.obspars["Omega_field"])
-        Lperp = np.sqrt( Sfield/ np.pi)
+        Lperp = np.sqrt(Sfield / np.pi)
         Lparr = self.Lfield(z_min, z_max)
         Wperp = 2 * np.pi * Lperp * j1((qperp * Lperp).to(1).value) / qperp
         Wparr = Lparr * spherical_jn(0, (qparr * Lparr / 2).to(1).value)
@@ -60,15 +63,14 @@ class Covariance:
         k = self.powerspectrum.k
         mu = self.powerspectrum.mu
         Pobs = self.powerspectrum.Pk_Obs
+        nz = Pobs.shape[-1]
 
         # Downsample q, muq and deltaphi
         q = np.geomspace(
-            k[0], k[-1],
-            np.uint8(len(k) / cfg.settings["downsample_conv_q"])
+            k[0], k[-1], np.uint8(len(k) / cfg.settings["downsample_conv_q"])
         )
         muq = np.linspace(
-            -1, 1,
-            np.uint8((len(mu) + 1) / cfg.settings["downsample_conv_muq"])
+            -1, 1, np.uint8((len(mu) + 1) / cfg.settings["downsample_conv_muq"])
         )
         muq = (muq[1:] + muq[:-1]) / 2.0
         deltaphi = np.linspace(-np.pi, np.pi, 2 * len(muq))
@@ -76,43 +78,141 @@ class Covariance:
         # Obtain survey Window
         Wsurvey, Vsurvey = self.Wsurvey(q, muq)
 
-        Pconv = np.zeros_like(Pobs)
+        Pconv = np.empty(Pobs.shape)
         # Do the convolution for each redshift bin
-        for iz in range(Pobs.shape[-1]):
-            # Obtain a Interpolator of the Observed PS for these redshift to compute the P(k-q)
-            logk = np.log(k.to(u.Mpc**-1).value)
-            logP = np.log(Pobs.value)
-            Pofz = RectBivariateSpline(logk, mu, logP[Ellipsis, iz], kx=1, ky=1)
-
-            # Do the 3D integration over q (for now) in order phi, mu, q
-            q_integrant = np.zeros((*Pobs[Ellipsis, iz].shape, *q.shape))
-            for iq, qi in enumerate(q):
-                mu_integrant = np.zeros((*Pobs[Ellipsis, iz].shape, *muq.shape))
-                for imuq, muqi in enumerate(muq):
-                    abskminusq = np.sqrt(
-                        k[:, None, None] ** 2
-                        + qi**2
-                        - 2
-                        * (
-                            qi * muqi * k[:, None, None] * mu[None, :, None]
-                            + qi
-                            * np.sqrt(1 - muqi**2)
-                            * k[:, None, None]
-                            * np.sqrt(1 - mu[None, :, None] ** 2)
-                            * np.cos(deltaphi)[None, None, :]
-                        )
-                    )
-                    mukminusq = (
-                        qi * muqi + k[:, None, None] * mu[None, :, None]
-                    ) / abskminusq
-                    logPofphi = Pofz(
-                        np.log(abskminusq.to(u.Mpc**-1).value),
-                        mukminusq,
-                        grid=False,
-                    )
-                    phiintegrant = 1 / (2*np.pi)**3 * qi**2 * np.abs(Wsurvey[iq, imuq, iz])**2 * np.exp(logPofphi)*Pobs.unit
-                    mu_integrant[: , :, imuq] = np.trapz(phiintegrant, deltaphi, axis=-1)
-                q_integrant[:, :, iq] = np.trapz(mu_integrant, muq, axis=-1)
-            Pconv[:, :, iz] = np.trapz(q_integrant * q[None, None, :].to(u.Mpc**-1), np.log(q.to(u.Mpc**-1).value), axis=-1)
-        print("done!")
+        for iz in range(nz):
+            Pconv[..., iz] = convolve(
+                    k.value,
+                    mu,
+                    q.value,
+                    muq,
+                    deltaphi,
+                    Pobs[:, :, iz],
+                    Wsurvey[:, :, iz],
+                )
         return Pconv / Vsurvey
+
+#########################
+# Getting Jitty with it #
+#########################
+
+
+@njit("(float64[::1], float64[::1], float64[:,:], float64[::1], float64[::1])", fastmath=True)
+def _bilinear_interpolate(xi, yj, zij, x, y):
+    # Check input sizes
+    xl, yl = zij.shape
+    rxl = x.size
+    ryl = y.size
+    assert xl == xi.size, "xi should be the same size as axis 0 of zij"
+    assert yl == yj.size, "yj should be the same size as axis 1 of zij"
+    assert ryl == rxl, "for every x should be a y"
+
+    # Find the indices of the grid points surrounding (xi, yi)
+    # Handle linear extrapolation for larger x,y
+    x1_idx = np.searchsorted(xi, x)
+    x1_idx[np.where(x1_idx == xl)] = x1_idx[np.where(x1_idx == xl)] - 1
+    x2_idx = x1_idx + 1
+    y1_idx = np.searchsorted(yj, y)
+    y1_idx[np.where(y1_idx == yl)] = y1_idx[np.where(y1_idx == yl)] - 1
+    y2_idx = y1_idx + 1
+
+    # Get the coordinates of the grid points
+    x1, x2 = xi[x1_idx], xi[x2_idx]
+    y1, y2 = yj[y1_idx], yj[y2_idx]
+
+    results = np.empty(rxl)
+    for i in range(rxl):
+        # Get the values at the grid points
+        Q11 = zij[y1_idx[i], x1_idx[i]]
+        Q21 = zij[y1_idx[i], x2_idx[i]]
+        Q12 = zij[y2_idx[i], x1_idx[i]]
+        Q22 = zij[y2_idx[i], x2_idx[i]]
+
+        results[i] = (
+            Q11 * (x2[i] - x[i]) * (y2[i] - y[i])
+            + Q21 * (x[i] - x1[i]) * (y2[i] - y[i])
+            + Q12 * (x2[i] - x[i]) * (y[i] - y1[i])
+            + Q22 * (x[i] - x1[i]) * (y[i] - y1[i])
+        ) / ((x2[i] - x1[i]) * (y2[i] - y1[i]))
+    return results
+
+
+# The numba trapz for phi, muq, and q
+@njit("(float64[::1], float64[::1])", fastmath=True)
+def _trapezoid(y, x):
+    s = 0.0
+    for i in range(x.size - 1):
+        dx = x[i + 1] - x[i]
+        dy = y[i] + y[i + 1]
+        s += dx * dy
+    return s * 0.5
+
+
+@njit(
+    "(float64[::1], float64[::1], "
+    + "float64[::1], float64[::1], float64[::1], "
+    + "float64[:,:], float64[:,:])",
+    parallel=True,
+)
+def convolve(k, mu, q, muq, deltaphi, P, W):
+    # Check input sizes
+    kl, mul = P.shape
+    assert kl == k.size, "k should be the same size as axis 0 of P"
+    assert mul == mu.size, "mu should be the same size as axis 1 of P"
+    ql, muql = W.shape
+    deltaphil = deltaphi.size
+    assert ql == q.size, "q should be the same size as axis 0 of W"
+    assert muql == muq.size, "muq should be the same size as axis 1 of W"
+
+    # create Return array to be filled in parallel
+    Pconv = np.empty_like(P, dtype=np.float64)
+    for ik in prange(kl):
+        for imu in prange(mul):
+            # use q, muq, deltaphi and obtain abs k-q and the polar angle of k-q
+            abskminusq = np.empty((ql, muql, deltaphil))
+            mukminusq = np.empty((ql, muql, deltaphil))
+            for iq in range(ql):
+                for imuq in range(muql):
+                    for ideltaphi in range(deltaphil):
+                        abskminusq[iq, imuq, ideltaphi] = np.sqrt(
+                            k[ik] ** 2
+                            + np.power(q[iq], 2)
+                            - 2
+                            * q[iq]
+                            * k[ik]
+                            * (
+                                mu[imuq] * mu[imu]
+                                + np.sqrt(1 - np.power(muq[imuq], 2))
+                                * np.sqrt(1 - mu[imu] ** 2)
+                                * np.cos(deltaphi[ideltaphi])
+                            )
+                        )
+                        mukminusq[iq, imuq, ideltaphi] = (
+                            q[iq] * muq[imuq] + k[ik] * mu[imu]
+                        ) / abskminusq[iq, imuq, ideltaphi]
+
+            # flatten the axis last axis first
+            abskminusq = abskminusq.flatten()
+            mukminusq = mukminusq.flatten()
+            # interpolate the logP on mu logk and fill with new values
+            logPkminusq = _bilinear_interpolate(
+                np.log(k), mu, np.log(P), abskminusq, mukminusq
+            )
+            logPkminusq = np.reshape(logPkminusq, (ql, muql, deltaphil))
+
+            # Do the 3D trapezoid integration
+            q_integrand = np.empty(ql)
+            for iq in range(ql):
+                muq_integrand = np.empty(muql)
+                for imuq in range(muql):
+                    phi_integrand = (
+                        1
+                        / (2 * np.pi) ** 3
+                        * q[iq] ** 2
+                        * (np.abs(W[iq, imuq]) ** 2)
+                        * np.exp(logPkminusq[iq, imuq, :])
+                    )
+                    muq_integrand[imuq] = _trapezoid(phi_integrand, deltaphi)
+                q_integrand[iq] = _trapezoid(muq_integrand, muq)
+            Pconv[ik, imu] = _trapezoid(q_integrand * q, np.log(q))
+    return Pconv
