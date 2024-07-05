@@ -1,3 +1,4 @@
+import sys
 from copy import copy
 from time import time
 
@@ -5,8 +6,6 @@ import numpy as np
 from astropy import constants as c
 from astropy import units as u
 from numba import njit, prange
-from scipy.integrate import trapezoid
-from scipy.interpolate import RectBivariateSpline
 from scipy.special import j1, spherical_jn
 
 from SSLimPy.interface import config as cfg
@@ -87,8 +86,8 @@ class Covariance:
                     q.value,
                     muq,
                     deltaphi,
-                    Pobs[:, :, iz],
-                    Wsurvey[:, :, iz],
+                    Pobs[:, :, iz].value,
+                    Wsurvey[:, :, iz].value,
                 )
         return Pconv / Vsurvey
 
@@ -152,7 +151,7 @@ def _trapezoid(y, x):
     "(float64[::1], float64[::1], "
     + "float64[::1], float64[::1], float64[::1], "
     + "float64[:,:], float64[:,:])",
-    parallel=True,
+    parallel=True
 )
 def convolve(k, mu, q, muq, deltaphi, P, W):
     # Check input sizes
@@ -174,16 +173,16 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
             for iq in range(ql):
                 for imuq in range(muql):
                     for ideltaphi in range(deltaphil):
-                        abskminusq[iq, imuq, ideltaphi] = np.sqrt(
-                            k[ik] ** 2
+                        abskminusq[iq, imuq, ideltaphi]= np.sqrt(
+                            np.power(k[ik], 2)
                             + np.power(q[iq], 2)
                             - 2
                             * q[iq]
                             * k[ik]
                             * (
-                                mu[imuq] * mu[imu]
+                                muq[imuq] * mu[imu]
                                 + np.sqrt(1 - np.power(muq[imuq], 2))
-                                * np.sqrt(1 - mu[imu] ** 2)
+                                * np.sqrt(1 - np.power(mu[imu], 2))
                                 * np.cos(deltaphi[ideltaphi])
                             )
                         )
