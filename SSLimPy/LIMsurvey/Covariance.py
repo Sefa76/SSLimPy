@@ -65,12 +65,11 @@ class Covariance:
         nz = Pobs.shape[-1]
 
         # Downsample q, muq and deltaphi
-        q = np.geomspace(
-            k[0], k[-1], np.uint8(len(k) / cfg.settings["downsample_conv_q"])
-        )
-        muq = np.linspace(
-            -1, 1, np.uint8((len(mu) + 1) / cfg.settings["downsample_conv_muq"])
-        )
+        nq = np.uint8(len(k) / cfg.settings["downsample_conv_q"])
+        q = np.geomspace(k[0], k[-1], nq)
+        nmuq = np.uint8((len(mu)) / cfg.settings["downsample_conv_muq"])
+        nmuq = nmuq + 1 - nmuq % 2
+        muq = np.linspace(-1, 1, nmuq)
         muq = (muq[1:] + muq[:-1]) / 2.0
         deltaphi = np.linspace(-np.pi, np.pi, 2 * len(muq))
 
@@ -109,11 +108,14 @@ def _bilinear_interpolate(xi, yj, zij, x, y):
     # Find the indices of the grid points surrounding (xi, yi)
     # Handle linear extrapolation for larger x,y
     x1_idx = np.searchsorted(xi, x)
-    x1_idx[np.where(x1_idx == xl)] = x1_idx[np.where(x1_idx == xl)] - 1
-    x2_idx = x1_idx + 1
+    x1_idx[np.where(x1_idx==0)] = 1
+    x1_idx[np.where(x1_idx==xl)] = xl - 1
+    x2_idx = x1_idx - 1
+
     y1_idx = np.searchsorted(yj, y)
-    y1_idx[np.where(y1_idx == yl)] = y1_idx[np.where(y1_idx == yl)] - 1
-    y2_idx = y1_idx + 1
+    y1_idx[np.where(y1_idx==0)] = 1
+    y1_idx[np.where(y1_idx==yl)] = yl - 1
+    y2_idx = y1_idx - 1
 
     # Get the coordinates of the grid points
     x1, x2 = xi[x1_idx], xi[x2_idx]
@@ -122,10 +124,10 @@ def _bilinear_interpolate(xi, yj, zij, x, y):
     results = np.empty(rxl)
     for i in range(rxl):
         # Get the values at the grid points
-        Q11 = zij[y1_idx[i], x1_idx[i]]
-        Q21 = zij[y1_idx[i], x2_idx[i]]
-        Q12 = zij[y2_idx[i], x1_idx[i]]
-        Q22 = zij[y2_idx[i], x2_idx[i]]
+        Q11 = zij[x1_idx[i], y1_idx[i]]
+        Q21 = zij[x2_idx[i], y1_idx[i]]
+        Q12 = zij[x1_idx[i], y2_idx[i]]
+        Q22 = zij[x2_idx[i], y2_idx[i]]
 
         results[i] = (
             Q11 * (x2[i] - x[i]) * (y2[i] - y[i])
@@ -187,7 +189,7 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
                             )
                         )
                         mukminusq[iq, imuq, ideltaphi] = (
-                            q[iq] * muq[imuq] + k[ik] * mu[imu]
+                            k[ik] * mu[imu] - q[iq] * muq[imuq]
                         ) / abskminusq[iq, imuq, ideltaphi]
 
             # flatten the axis last axis first
