@@ -80,22 +80,26 @@ class Covariance:
         # Do the convolution for each redshift bin
         for iz in range(nz):
             Pconv[..., iz] = convolve(
-                    k.value,
-                    mu,
-                    q.value,
-                    muq,
-                    deltaphi,
-                    Pobs[:, :, iz].value,
-                    Wsurvey[:, :, iz].value,
-                )
+                k.value,
+                mu,
+                q.value,
+                muq,
+                deltaphi,
+                Pobs[:, :, iz].value,
+                Wsurvey[:, :, iz].value,
+            )
         return Pconv / Vsurvey
+
 
 #########################
 # Getting Jitty with it #
 #########################
 
 
-@njit("(float64[::1], float64[::1], float64[:,:], float64[::1], float64[::1])", fastmath=True)
+@njit(
+    "(float64[::1], float64[::1], float64[:,:], float64[::1], float64[::1])",
+    fastmath=True,
+)
 def _bilinear_interpolate(xi, yj, zij, x, y):
     # Check input sizes
     xl, yl = zij.shape
@@ -108,13 +112,13 @@ def _bilinear_interpolate(xi, yj, zij, x, y):
     # Find the indices of the grid points surrounding (xi, yi)
     # Handle linear extrapolation for larger x,y
     x1_idx = np.searchsorted(xi, x)
-    x1_idx[np.where(x1_idx==0)] = 1
-    x1_idx[np.where(x1_idx==xl)] = xl - 1
+    x1_idx[np.where(x1_idx == 0)] = 1
+    x1_idx[np.where(x1_idx == xl)] = xl - 1
     x2_idx = x1_idx - 1
 
     y1_idx = np.searchsorted(yj, y)
-    y1_idx[np.where(y1_idx==0)] = 1
-    y1_idx[np.where(y1_idx==yl)] = yl - 1
+    y1_idx[np.where(y1_idx == 0)] = 1
+    y1_idx[np.where(y1_idx == yl)] = yl - 1
     y2_idx = y1_idx - 1
 
     # Get the coordinates of the grid points
@@ -153,7 +157,7 @@ def _trapezoid(y, x):
     "(float64[::1], float64[::1], "
     + "float64[::1], float64[::1], float64[::1], "
     + "float64[:,:], float64[:,:])",
-    parallel=True
+    parallel=True,
 )
 def convolve(k, mu, q, muq, deltaphi, P, W):
     # Check input sizes
@@ -175,7 +179,7 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
             for iq in range(ql):
                 for imuq in range(muql):
                     for ideltaphi in range(deltaphil):
-                        abskminusq[iq, imuq, ideltaphi]= np.sqrt(
+                        abskminusq[iq, imuq, ideltaphi] = np.sqrt(
                             np.power(k[ik], 2)
                             + np.power(q[iq], 2)
                             - 2
