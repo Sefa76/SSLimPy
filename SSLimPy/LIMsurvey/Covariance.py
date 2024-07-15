@@ -66,7 +66,11 @@ class Covariance:
 
         # Downsample q, muq and deltaphi
         nq = np.uint8(len(k) / cfg.settings["downsample_conv_q"])
-        q = np.geomspace(k[0], k[-1], nq)
+        if "log" in cfg.settings["k_kind"]:
+            q = np.geomspace(k[0], k[-1], nq)
+        else:
+            q = np.linspace(k[0], k[-1], nq)
+
         nmuq = np.uint8((len(mu)) / cfg.settings["downsample_conv_muq"])
         nmuq = nmuq + 1 - nmuq % 2
         muq = np.linspace(-1, 1, nmuq)
