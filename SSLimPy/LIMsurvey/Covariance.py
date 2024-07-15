@@ -205,7 +205,7 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
             mukminusq = mukminusq.flatten()
             # interpolate the logP on mu logk and fill with new values
             logPkminusq = _bilinear_interpolate(
-                np.log(k), mu, np.log(P), abskminusq, mukminusq
+                np.log(k), mu, np.log(P), np.log(abskminusq), mukminusq
             )
             logPkminusq = np.reshape(logPkminusq, (ql, muql, deltaphil))
 
