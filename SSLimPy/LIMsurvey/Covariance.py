@@ -7,6 +7,7 @@ from astropy import constants as c
 from astropy import units as u
 from numba import njit, prange
 from scipy.special import j1, spherical_jn
+from scipy.integrate import simpson
 
 from SSLimPy.interface import config as cfg
 
@@ -50,7 +51,7 @@ class Covariance:
         Wparr = Lparr * spherical_jn(0, (qparr * Lparr / 2).to(1).value)
 
         Wsurvey = Wperp * Wparr
-        Vsurvey = Sfield * Lperp
+        Vsurvey = simpson(q[:,None]**3*simpson(np.abs(Wsurvey)**2, muq, axis=1), np.log(q.value), axis=0)
         return Wsurvey, Vsurvey
 
     def convolved_Pk(self):

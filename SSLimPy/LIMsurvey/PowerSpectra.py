@@ -301,9 +301,21 @@ class PowerSpectra:
                 Delta_b = (self.astro.Delta_b(k, M, z) * fac[None,:,:])
                 Delta_b = Delta_b[:,0,:] # Actually this is now M-independent
 
-                bmeam = bmean + Delta_b
+                bmean = bmean + Delta_b
 
-            Biasterm = bmean * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
+            if "Tmean" in BAOpars:
+                Tmean = np.atleast_1d(BAOpars["Tmean"])
+                if len(Tmean) != len(z):
+                    raise ValueError("did not pass mean Temperature for every z asked for")
+                Tmean = Tmean[None, None, :]
+            else:
+                Tmean = self.astro.restore_shape(self.astro.Tmoments(z, k=k, mu=mu, moment=1), k, mu, z)
+
+            Biasterm = (
+                bmean[:, None, :]
+                * Tmean
+                * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
+            )
         else:
             Biasterm = (self.astro.restore_shape(self.astro.bavg(z, k=k, mu=mu), k, mu, z)
                         * self.astro.restore_shape(self.astro.Tmoments(z, k=k, mu=mu, moment=1), k, mu, z)
@@ -375,7 +387,7 @@ class PowerSpectra:
 
     #TODO: #1 Add Functions for Line Broadening end Suppression because of Survey Resolution
 
-    # Call these functions before applying the AP transformations, scale fixes, ect 
+    # Call these functions before applying the AP transformations, scale fixes, ect
     def sigma_parr(self, z, nu_obs):
         x = (cfg.obspars["dnu"] / nu_obs).to(1).value
         y = (1+z) / self.fiducialcosmo.Hubble(z)
@@ -510,6 +522,28 @@ class PowerSpectra:
                 interp_per_z = RectBivariateSpline(logkMpc,mu,rsd_grid[:,:,iz])
                 rsd_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value), mu_ap[:,:,iz], grid=False)
             rsd_ap *= uI
+        else:
+            if self.astro.astroparams["v_of_M"]:
+                # In this case the mean temperature is a function of k*mu due to the smoothing
+                bterm_grid = np.reshape(self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),(*k.shape, *mu.shape, *z.shape))
+                uI = bterm_grid.unit
+                for iz, zi in enumerate(z):
+                    interp_per_z = RectBivariateSpline(logkMpc, mu, bterm_grid[:,:,iz])
+                    rsd_ap[:,:,iz] = (
+                        interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value),
+                        mu_ap[:,:,iz],
+                        grid=False)**2
+                    )
+                rsd_ap *= uI
+            elif "f_NL" in self.cosmology.fullcosmoparams:
+                # In this case the bias is scale dependent
+                bterm_grid = np.reshape(self.bias_term(z, k=k, BAOpars=self.BAOpars),(*k.shape, *z.shape))
+                uI = bterm_grid.unit
+                for iz, zi in enumerate(z):
+                    interp_per_z = UnivariateSpline(logkMpc,bterm_grid[:,iz])
+                    rsd_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))**2
+            else:
+                Ps_ap = np.atleast_1d(self.bias_term(z, BAOpars=self.BAOpars)**2)[None,None,:]
 
         if cfg.settings["verbosity"] >1:
             trsd = time()
@@ -548,7 +582,7 @@ class PowerSpectra:
             tps = time()
             print("Shot-noise obtained in {} seconds".format(tps-trsd))
 
-        self.Pk_Obs = ((qparr * np.power(qperp,2))[None,None,:] 
+        self.Pk_Obs = ((qparr * np.power(qperp,2))[None,None,:]
                        * (rsd_ap * Pk_ap + Ps_ap)
                        * F_perp * F_parr)
 
