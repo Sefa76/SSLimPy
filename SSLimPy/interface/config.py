@@ -81,10 +81,9 @@ def init(
     settings.setdefault("do_RSD", True)
     settings.setdefault("nonlinearRSD", True)
     settings.setdefault("FoG_damp", "Lorentzian")
-    settings.setdefault("do_onehalo", True)
     settings.setdefault("halo_model_PS", False)
-    settings.setdefault("smooth", False)
-    settings.setdefault("do_conv_Wkmin", False)
+    settings.setdefault("Smooth_resolution", True)
+    settings.setdefault("Smooth_window", False)
 
     # Output settings
     settings.setdefault("verbosity",1)

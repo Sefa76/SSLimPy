@@ -1,15 +1,31 @@
-from astropy import units as u
-from astropy import constants as c
-
+from copy import copy
 from time import time
-
-from scipy.interpolate import RectBivariateSpline, UnivariateSpline, interp1d
-from scipy.special import sici, legendre
-from scipy.integrate import simpson
+from typing import Tuple, Union
 
 import numpy as np
+from astropy import constants as c
+from astropy import units as u
+from astropy.units import Quantity
+from numpy.typing import DTypeLike, NDArray
+from scipy.integrate import simpson
+from scipy.interpolate import RectBivariateSpline, UnivariateSpline, interp1d
+from scipy.special import j1, legendre, sici, spherical_jn
+
 from SSLimPy.interface import config as cfg
-from copy import copy
+from SSLimPy.utils.utils import convolve
+
+k_types = Union[
+    Quantity,
+    NDArray,
+    Tuple[Quantity, ...],
+    Tuple[NDArray, ...]
+]
+mu_types = Union[
+    DTypeLike,
+    NDArray,
+    Tuple[DTypeLike, ...],
+    Tuple[NDArray, ...]
+]
 
 class PowerSpectra:
     def __init__(self, cosmology, astro, BAOpars=dict()):
@@ -150,7 +166,7 @@ class PowerSpectra:
                   np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
         return np.squeeze(u_km/gc)
 
-    def halomoments(self,k,z, mu=None,moment=1):
+    def halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, bias_order:int = 0):
         """
         Computes the Luminosity weight halo profile
         In ML models this is equivalent to the n-halo-self-correlation terms
@@ -164,6 +180,13 @@ class PowerSpectra:
         dn_dM = np.reshape(self.astro.halomassfunction(M,z),(*M.shape,*z.shape))
         L_of_M = np.reshape(self.astro.massluminosityfunction(M,z),(*M.shape,*z.shape))
 
+        if bias_order == 0:
+            bias = np.ones((*k.shape, *M.shape, *z.shape))
+        elif bias_order == 1:
+            bias = self.astro.restore_shape(self.astro.halobias(M,z,k=k),k,M,z)
+        else:
+            raise ValueError("Order of bias asked for does is not implemented: {}".format(bias_order))
+
         Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
         if self.astro.astroparams["v_of_M"]:
             Fv = np.reshape(self.astro.broadening_FT(k, mu, M, z),
@@ -171,11 +194,16 @@ class PowerSpectra:
 
         normhaloprofile = np.reshape(self.ft_NFW(k, M, z),(*k.shape, *M.shape, *z.shape))
 
-        integrnd = (dn_dM[None, None,:,:]
-                    * np.power(L_of_M[None, None,:,:]
-                               * normhaloprofile[:, None,:,:]
-                               * Fv,
-                               moment))
+        integrnd = (
+            dn_dM[None, None,:,:]
+            * np.power(
+                L_of_M[None, None,:,:]
+                * normhaloprofile[:, None,:,:]
+                * Fv,
+                moment,
+            )
+            * bias[:,None,:,:]
+        )
         hm_corr = np.trapz(integrnd,M,axis=2)
         return np.squeeze(hm_corr)
 
@@ -422,6 +450,100 @@ class PowerSpectra:
 
         return np.squeeze(np.exp(logF))
 
+    ##################################
+    # Convolution and Survey Windows #
+    ##################################
+
+    def Lfield(self, z1, z2):
+        zgrid = [z1, z2]
+        Lgrid = self.fiducialcosmo.comoving(zgrid)
+        return Lgrid[1] - Lgrid[0]
+
+    def Sfield(self, zc, Omegafield):
+        r2 = np.power(self.fiducialcosmo.comoving(zc).to(u.Mpc), 2)
+        sO = Omegafield.to(u.rad**2).value
+        return r2 * sO
+
+    def Wsurvey(self, q, muq):
+        """Compute the Fourier-transformed sky selection window function"""
+        q = np.atleast_1d(q)
+        muq = np.atleast_1d(muq)
+
+        qparr = q[:, None, None] * muq[None, :, None]
+        qperp = q[:, None, None] * np.sqrt(1 - np.power(muq[None, :, None], 2))
+
+        # Calculate dz from deltanu
+        nu = self.nu
+        nuObs = self.nuObs
+        Delta_nu = cfg.obspars["Delta_nu"]
+        z = (nu / nuObs - 1).to(1).value
+        z_min = (nu / (nuObs + Delta_nu / 2) - 1).to(1).value
+        z_max = (nu / (nuObs - Delta_nu / 2) - 1).to(1).value
+
+        # Construct W_survey (now just a cylinder)
+        Sfield = self.Sfield(z, cfg.obspars["Omega_field"])
+        Lperp = np.sqrt(Sfield / np.pi)
+        Lparr = self.Lfield(z_min, z_max)
+        Wperp = 2 * np.pi * Lperp * j1((qperp * Lperp).to(1).value) / qperp
+        Wparr = Lparr * spherical_jn(0, (qparr * Lparr / 2).to(1).value)
+
+        Wsurvey = Wperp * Wparr
+        Vsurvey = simpson(
+            q[:,None]**3
+            * simpson(
+                np.abs(Wsurvey)**2 / (2 * np.pi)**2, 
+                muq,
+                axis=1
+            ),
+            np.log(q.value),
+            axis=0,
+        )
+        return Wsurvey, Vsurvey
+
+    def convolved_Pk(self):
+        """Convolves the Observed power spectrum with the survey volume
+
+        This enters as the gaussian term in the final covariance
+        """
+        # Extract the pre-computed power spectrum
+        k = self.k
+        mu = self.mu
+        Pobs = self.Pk_Obs
+        nz = Pobs.shape[-1]
+
+        # Downsample q, muq and deltaphi
+        nq = np.uint8(len(k) / cfg.settings["downsample_conv_q"])
+        if "log" in cfg.settings["k_kind"]:
+            q = np.geomspace(k[0], k[-1], nq)
+        else:
+            q = np.linspace(k[0], k[-1], nq)
+
+        nmuq = np.uint8((len(mu)) / cfg.settings["downsample_conv_muq"])
+        nmuq = nmuq + 1 - nmuq % 2
+        muq = np.linspace(-1, 1, nmuq)
+        muq = (muq[1:] + muq[:-1]) / 2.0
+        deltaphi = np.linspace(-np.pi, np.pi, 2 * len(muq))
+
+        # Obtain survey Window
+        Wsurvey, Vsurvey = self.Wsurvey(q, muq)
+
+        Pconv = np.empty(Pobs.shape)
+        # Do the convolution for each redshift bin
+        for iz in range(nz):
+            Pconv[..., iz] = convolve(
+                k.value,
+                mu,
+                q.value,
+                muq,
+                deltaphi,
+                Pobs[:, :, iz].value,
+                Wsurvey[:, :, iz].value,
+            )
+        
+        self.Pk_true = copy(Pobs)
+        self.Pk_Obs = Pconv *Pobs.unit / Vsurvey
+        return self.Pk_Obs
+
     #######################
     # Power Spectra Terms #
     #######################
@@ -439,12 +561,11 @@ class PowerSpectra:
         z = np.atleast_1d(z)
 
         Ps = 0
-        if cfg.settings["do_onehalo"] :
-            if cfg.settings["halo_model_PS"]:
-                Ps = self.astro.restore_shape(self.halomoments(k, z, mu=mu, moment=2), k, mu, z)
-                Ps *= self.astro.CLT(z)[None,None,:]**2
-            else:
-                Ps = self.astro.restore_shape(self.astro.Tmoments(z, k=k, mu=mu, moment=2), k, mu, z)
+        if cfg.settings["halo_model_PS"]:
+            Ps = self.astro.restore_shape(self.halomoments(k, z, mu=mu, moment=2), k, mu, z)
+            Ps *= self.astro.CLT(z)[None,None,:]**2
+        else:
+            Ps = self.astro.restore_shape(self.astro.Tmoments(z, k=k, mu=mu, moment=2), k, mu, z)
 
         if "Pshot" in BAOpars:
             Pshot = np.atleast_1d(BAOpars["Pshot"])
@@ -467,9 +588,12 @@ class PowerSpectra:
             print("requested Pk shape:",outputshape)
             tstart = time()
 
-        # The dampning from resolution is to be computed without any cosmolgy dependance
-        F_parr = np.reshape(self.F_parr(k, mu, z, self.nuObs), outputshape)
-        F_perp = np.reshape(self.F_perp(k, mu, z), outputshape)
+        Fnu = np.ones(outputshape)
+        if cfg.settings["Smooth_resolution"]:
+            # The dampning from resolution is to be computed without any cosmolgy dependance
+            F_parr = np.reshape(self.F_parr(k, mu, z, self.nuObs), outputshape)
+            F_perp = np.reshape(self.F_perp(k, mu, z), outputshape)
+            Fnu = F_parr*F_perp
 
         #fix units
         k *= self.dragscale()
@@ -564,7 +688,7 @@ class PowerSpectra:
                     grid=False))
             Ps_ap *= uI
 
-        elif cfg.settings["do_onehalo"] and cfg.settings["halo_model_PS"]:
+        elif cfg.settings["halo_model_PS"]:
             # In this case, the one-halo self correlation is only a function of k
             Ps_ap = np.zeros(outputshape)
             Ps_grid = np.reshape(self.shotnoise(z, k=k, BAOpars=self.BAOpars),(*k.shape,*z.shape))
@@ -582,9 +706,15 @@ class PowerSpectra:
             tps = time()
             print("Shot-noise obtained in {} seconds".format(tps-trsd))
 
-        self.Pk_Obs = ((qparr * np.power(qperp,2))[None,None,:]
-                       * (rsd_ap * Pk_ap + Ps_ap)
-                       * F_perp * F_parr)
+        self.Pk_Obs = (
+            (qparr * np.power(qperp,2))[None,None,:]
+            * (rsd_ap * Pk_ap + Ps_ap)
+            * Fnu
+        )
+
+        if cfg.settings["Smooth_window"]:
+            self.Pk_true = copy(self.Pk_Obs)
+            self.Pk_Obs = self.convolved_Pk()
 
         if cfg.settings["verbosity"] >1:
             print("Observed power spectrum obtained in {} seconds".format(time()-tstart))

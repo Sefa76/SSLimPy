@@ -369,7 +369,7 @@ class astro_functions:
 
         elif "LF" in self.astroparams["model_type"]:
             LF_par = {
-                "A": 1.0,
+                "A": 2.0e-6,
                 "b": 1.0,
                 "Mcut_min": self.astroparams["Mmin"],
                 "Mcut_max": self.astroparams["Mmax"],
