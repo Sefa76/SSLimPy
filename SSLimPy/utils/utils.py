@@ -133,3 +133,25 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
                 q_integrand[iq] = _trapezoid(muq_integrand, muq)
             Pconv[ik, imu] = _trapezoid(q_integrand * q, np.log(q))
     return Pconv
+
+@njit(
+    "uint16, uint16"
+    + "float64[::1], float64[::1], float64[::1], "
+    + "float64[::1], float64[:,:])"
+    + "float64[::1]",
+    parallel=True,
+)
+def construct_gaussian_cov(nk, nz, C00, C20, C40, C22, C42, C44):
+    cov = np.empty((nk,3,3,nz))
+    for ki in prange(nk):
+        for zi in range(nz):
+            cov[ki, 0, 0, zi] = C00[ki, zi]
+            cov[ki, 1, 0, zi] = C20[ki, zi]
+            cov[ki, 2, 0, zi] = C40[ki, zi]
+            cov[ki, 0, 1, zi] = C20[ki, zi]
+            cov[ki, 0, 2, zi] = C40[ki, zi]
+            cov[ki, 1, 1, zi] = C22[ki, zi]
+            cov[ki, 1, 2, zi] = C42[ki, zi]
+            cov[ki, 2, 1, zi] = C42[ki, zi]
+            cov[ki, 2, 2, zi] = C44[ki, zi]
+    return cov

@@ -63,10 +63,13 @@ class sslimpy:
             self.recap_options()
         ##################
 
-    def compute(self, cosmopars, astropars, BAOpars):
+    def compute(self, cosmopars, astropars, BAOpars, output=None):
         outputdict = {obs: None for obs in self.output}
 
-        for obs in self.output:
+        if not output:
+            output = self.output
+
+        for obs in output:
             if obs=="Power spectrum":
                 outputdict[obs] = self._compute_ps(cosmopars, astropars, BAOpars)
             if obs=="Covaraiance":
