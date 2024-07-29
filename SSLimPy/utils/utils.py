@@ -135,10 +135,10 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
     return Pconv
 
 @njit(
-    "uint16, uint16"
-    + "float64[::1], float64[::1], float64[::1], "
-    + "float64[::1], float64[:,:])"
-    + "float64[::1]",
+    "(uint16, uint16, "
+    +"float64[:,:], float64[:,:], float64[:,:], "
+    +"float64[:,:], float64[:,:], "
+    +"float64[:,:])",
     parallel=True,
 )
 def construct_gaussian_cov(nk, nz, C00, C20, C40, C22, C42, C44):

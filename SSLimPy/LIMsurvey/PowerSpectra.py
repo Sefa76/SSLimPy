@@ -342,7 +342,7 @@ class PowerSpectra:
             Biasterm = (
                 bmean[:, None, :]
                 * Tmean
-                * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
+                * np.atleast_1d(self.cosmology.sigma8_of_z(z,tracer=self.tracer))[None,:]
             )
         else:
             Biasterm = (self.astro.restore_shape(self.astro.bavg(z, k=k, mu=mu), k, mu, z)
