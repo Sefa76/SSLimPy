@@ -16,6 +16,7 @@ from scipy.interpolate import (
     InterpolatedUnivariateSpline,
     RectBivariateSpline,
     UnivariateSpline,
+    make_interp_spline,
 )
 from scipy.signal import savgol_filter
 
@@ -871,21 +872,30 @@ class cosmo_functions:
         n_savgol = int(np.round(savgol_width / np.log(1 + dlnk_loc)))
 
         P = self.matpow(
-            np.exp(log_kgrid_loc) / u.Mpc, z, nonlinear=nonlinear, tracer=tracer
-        ).flatten()
+            np.exp(log_kgrid_loc) / u.Mpc,
+            z,
+            nonlinear=nonlinear,
+            tracer=tracer
+        )
         uP = P.unit
 
-        intp_p = InterpolatedUnivariateSpline(
-            log_kgrid_loc,
+        pow_sg = savgol_filter(
             np.log(P.value),
-            k=1,
+            n_savgol,
+            poly_order,
+            axis= 0,
         )
 
-        pow_sg = savgol_filter(intp_p(log_kgrid_loc), n_savgol, poly_order)
-        intp_pnw = InterpolatedUnivariateSpline(
-            np.exp(log_kgrid_loc), np.exp(pow_sg), k=1
+        intp_pnw = make_interp_spline(
+            log_kgrid_loc,
+            pow_sg,
+            k=1,
+            axis=0,
         )
-        return intp_pnw(k) * uP
+
+        P_nw = np.exp(intp_pnw(
+            np.log(k.to(u.Mpc**-1).value))) * uP
+        return P_nw
 
     def transfer_ncdm(self, ncdmk):
         """

@@ -50,9 +50,11 @@ class astro_functions:
             self.astroparams["Lmin"], self.astroparams["Lmax"], self.astroparams["nL"]
         )
         # find the redshifts for fequencies asked for:
-        self.nu = self.astroparams["nu"]
-        self.nuObs = self.astroparams["nuObs"]
+        self.nu = np.atleast_1d(self.astroparams["nu"])
+        self.nuObs = np.atleast_1d(self.astroparams["nuObs"])
+
         self.z = np.atleast_1d((self.nu / self.nuObs).to(1).value - 1)
+        self.z = np.sort(self.z)
 
         self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
 
@@ -130,27 +132,60 @@ class astro_functions:
 
         return np.squeeze(dndM).to(u.Mpc**-3 * u.Msun**-1)
 
-    def bavg(self, z, k=None):
+    def sigmav_broadening(self, M, z):
+        """ Computes the physical scale of the line broadening due to
+        galactic rotation curves.
+        """
+        Mvec = np.atleast_1d(M)[:, None]
+        zvec = np.atleast_1d(z)[None, :]
+
+        vM = np.atleast_1d(self.astroparams["v_of_M"](Mvec))
+        Hz = np.atleast_1d(self.cosmology.Hubble(zvec))
+        sv = vM/self.cosmology.celeritas * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
+
+        return np.squeeze(sv)
+
+    def broadening_FT(self, k, mu, M, z):
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+
+        sv = np.reshape(self.sigmav_broadening(M,z),(1, 1, *M.shape, *z.shape))
+        fac = np.exp(-1 / 2 * np.power(k[:, None, None, None] *
+                                       mu[None, :, None, None] *
+                                       sv,
+                                       2)
+                     )
+        return np.squeeze(fac)
+
+    def bavg(self, z, k=None, mu=None):
         '''
         Average luminosity-weighted bias for the given cosmology and line
-        model.  ASSUMED TO BE WEIGHTED LINERALY BY MASS FOR 'LF' MODELS
+        model.  ASSUMED TO BE WEIGHED LINEARLY BY MASS FOR 'LF' MODELS
 
         Includes the effects of f_NL though the wrapping functions in astro
         '''
         # Integrands for mass-averaging
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
         M = self.M.to(self.Msunh)
         z = np.atleast_1d(z)
-        k = np.atleast_1d(k)
 
         LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
         dndM = np.reshape(self.halomassfunction(M,z),(*M.shape,*z.shape))
         bh = self.restore_shape(self.halobias(M,z,k=k),k,M,z)
 
-        itgrnd1 = LofM[None,:,:]*dndM[None,:,:]*bh
-        itgrnd2 = LofM[None,:,:]*dndM[None,:,:]
+        Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
+        if self.astroparams["v_of_M"]:
+           Fv = np.reshape(self.broadening_FT(k, mu, M, z),
+                           (*k.shape, *mu.shape, *M.shape, *z.shape))
 
-        I1 = np.trapz(itgrnd1,M,axis=1)
-        I2 = np.trapz(itgrnd2,M,axis=1)
+        itgrnd1 = Fv * LofM[None, None, :, :] * dndM[None, None, :, :] * bh[:, None, :, :]
+        itgrnd2 = Fv * LofM[None, None, :, :] * dndM[None, None, :, :]
+
+        I1 = np.trapz(itgrnd1,M,axis=2)
+        I2 = np.trapz(itgrnd2,M,axis=2)
         b_line =  I1/I2
         return np.squeeze(b_line.to(1).value)
 
@@ -177,24 +212,54 @@ class astro_functions:
             CLT = x.to(u.uK * u.Mpc**3 / u.Lsun)
         return CLT
 
-    def Lmoments(self,z,moment=1):
+    def Lmoments(self, z, k=None, mu=None, moment=1):
         '''
         Sky-averaged luminosity density moments at nuObs from target line.
         Has two cases for 'LF' and 'ML' models that where handeld in create_luminosty_function
         '''
-        L = self.L
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
-        dndL = np.reshape(self.haloluminosityfunction(L,z),(*L.shape,*z.shape))
-        itgrnd1 = dndL * np.power(L,moment)[:,None]
-        Lmoment = np.trapz(itgrnd1,L,axis=0)
+        model_type = self.astroparams["model_type"]
+        if model_type == "LF":
+            if self.astroparams["v_of_M"]:
+                raise ValueError("Line width modelling only available for ML models")
+            else:
+                L = self.L
+                dndL = np.reshape(self.haloluminosityfunction(L,z),(*L.shape,*z.shape))
+                itgrnd1 = dndL * np.power(L,moment)[:,None]
+                Lmoment = np.trapz(itgrnd1,L,axis=0)
+        elif model_type == "ML":
+            M = self.M
+            dndM = np.reshape(self.halomassfunction(M,z),(1, 1, *M.shape, *z.shape))
+            L = np.reshape(self.massluminosityfunction(M,z),(1, 1, *M.shape, *z.shape))
+
+            Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
+            if self.astroparams["v_of_M"]:
+                Fv = np.reshape(self.broadening_FT(k, mu, M, z),
+                                (*k.shape, *mu.shape, *M.shape, *z.shape))
+
+            itgrnd = dndM * np.power(L* Fv, moment)
+            Lmoment = np.trapz(itgrnd, M, axis=2)
+
+            # Special case for Tony Li model- scatter does not preserve LCO
+            if self.astroparams["model_name"] == "TonyLi":
+                model_pars = self.astroparams["model_par"]
+                alpha = model_pars["alpha"]
+                sig_SFR = model_pars["sig_SFR"]
+                correction = np.exp((moment * alpha**-2 - alpha**-1)
+                                    * moment * sig_SFR**2 * np.log(10)**2
+                                    / 2)
+                Lmoment *= correction
+
         return np.squeeze(Lmoment)
 
-    def Tmoments(self,z,moment=1):
+    def Tmoments(self,z, k=None, mu=None, moment=1):
         '''
         Sky-averaged brightness temperature moments at nuObs from target line.
         Else, you can directly input Tmean using TOY model
         '''
-        return np.power(self.CLT(z),moment) * self.Lmoments(z,moment=moment)
+        return np.power(self.CLT(z),moment) * self.Lmoments(z, k=k, mu=mu, moment=moment)
 
     #############################
     # Additional Init Functions #
@@ -304,7 +369,7 @@ class astro_functions:
 
         elif "LF" in self.astroparams["model_type"]:
             LF_par = {
-                "A": 1.0,
+                "A": 2.0e-6,
                 "b": 1.0,
                 "Mcut_min": self.astroparams["Mmin"],
                 "Mcut_max": self.astroparams["Mmax"],
@@ -323,7 +388,7 @@ class astro_functions:
         if "ML" in self.astroparams["model_type"]:
             sigma = np.maximum(cfg.settings["sigma_scatter"], 0.05)
             # Special case for Tony Li model- scatter does not preserve LCO
-            if self.model_name == "TonyLi":
+            if self.astroparams["model_name"] == "TonyLi":
                 alpha = self.model_par["alpha"]
                 sig_SFR = self.model_par["sig_SFR"]
                 # assume sigma and sig_SFR are totally uncorrelated
