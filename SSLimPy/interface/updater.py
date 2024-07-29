@@ -1,7 +1,8 @@
 from copy import copy
+from typing import Union
+
 import SSLimPy.interface.config as cfg
-from SSLimPy.cosmology import cosmology
-from SSLimPy.cosmology import astro
+from SSLimPy.cosmology import astro, cosmology
 
 def update_cosmo(current_cosmo: cosmology.cosmo_functions,
                    cosmopars: dict,
@@ -43,11 +44,12 @@ def update_cosmo(current_cosmo: cosmology.cosmo_functions,
 
     return cosmo
 
+updated_cosmo_type = Union[cosmology.cosmo_functions, None]
 def update_astro(current_cosmo: cosmology.cosmo_functions,
                   cosmopars: dict,
                   current_astro: astro.astro_functions,
                   astropars: dict,
-                  updated_cosmo: cosmology.cosmo_functions = None,
+                  updated_cosmo: updated_cosmo_type = None,
                 ) -> astro.astro_functions:
     """This function gets the old astro object aswell as a new set of
     parameters. It recomputes the cosmology if needed and then compares

@@ -8,8 +8,8 @@ import SSLimPy.LIMsurvey.PowerSpectra as powspe
 from SSLimPy.utils.utils import construct_gaussian_cov
 
 class Covariance:
-    def __init__(self, fiducialcosmology: cosmo.cosmo_functions, powerspectrum: powspe.PowerSpectra):
-        self.cosmology = fiducialcosmology
+    def __init__(self, powerspectrum: powspe.PowerSpectra):
+        self.cosmology = powerspectrum.fiducialcosmo
         self.powerspectrum = powerspectrum
         self.k = self.powerspectrum.k
         dk = self.powerspectrum.dk
