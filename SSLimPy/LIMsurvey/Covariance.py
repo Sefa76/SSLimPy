@@ -56,4 +56,4 @@ class Covariance:
                                      cov_00, cov_20, cov_40,
                                      cov_22, cov_42,
                                      cov_44)
-        return cov
+        return cov * (Pobs**2).unit

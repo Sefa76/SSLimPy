@@ -72,11 +72,11 @@ class PowerSpectra:
         # Compute the power spectrum on the internal grid
         self.c_NFW = self.prepare_c_NFW()
 
-        self.compute_power_spectra()
-        self.compute_power_spectra_moments()
+        # self.compute_power_spectra()
+        # self.compute_power_spectra_moments()
 
         # Create interpolationg fucuntion
-        self.Pk_obs_func = self.create_pk_interp()
+        # self.Pk_obs_func = self.create_pk_interp()
 
     ###################
     # Halo Properties #
@@ -220,12 +220,17 @@ class PowerSpectra:
             cosmo = self.cosmology
 
         if "sigmav" in BAOpars:
-            sigmav = BAOpars["sigmaV"]
+            sigmav = np.atleast_1d(BAOpars["sigmav"])
             if len(sigmav) != len(z):
                 raise ValueError("did not pass velocity dispertion for every z asked for")
             # scale independent f
-            f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
-            sv2 = sigmav[None,:]*(1-np.power(mu,2)[:,None]+np.power(mu,2)[:,None]*(1+f_scaleindependent[None,:]))
+            f_scaleindependent = np.atleast_1d(cosmo.growth_rate(1e-4/u.Mpc,z))
+            sv2 = np.power(sigmav[None,:],2) * (
+                1 
+                - np.power(mu,2)[:,None]
+                + np.power(mu,2)[:,None]
+                * (1 + f_scaleindependent[None,:])**2
+                )
         else:
             f0 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 0), 2))[:,None]
             f1 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 1), 2))[:,None]
@@ -389,14 +394,14 @@ class PowerSpectra:
         else:
             cosmo = self.cosmology
 
-        if "sigmav" in BAOpars:
+        if "sigmap" in BAOpars:
             # This quantitiy is different from the old lim one by a factor of f^2
-            sigmav = BAOpars["sigmaV"]
-            if len(sigmav) != len(z):
+            sigmap = np.atleast_1d(BAOpars["sigmap"])
+            if len(sigmap) != len(z):
                 raise ValueError("did not pass velocity dispertion for every z asked for")
             # scale independent f
             f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
-            sp = sigmav*f_scaleindependent
+            sp = sigmap*f_scaleindependent
         else:
             sp = np.atleast_1d(cosmo.P_ThetaTheta_Moments(z,moment=2))
         FoG_damp = cfg.settings["FoG_damp"]
@@ -497,7 +502,7 @@ class PowerSpectra:
             ),
             np.log(q.value),
             axis=0,
-        )
+        ) * (Sfield * Lparr).unit
         return Wsurvey, Vsurvey
 
     def convolved_Pk(self):
@@ -700,6 +705,7 @@ class PowerSpectra:
             Ps_ap *= uI
 
         else:
+            print("here!")
             Ps_ap = np.atleast_1d(self.shotnoise(z, BAOpars=self.BAOpars))[None,None,:]
 
         if cfg.settings["verbosity"] >1:
@@ -731,7 +737,7 @@ class PowerSpectra:
         def Pk_ell_moments(ell):
             norm = (2*ell+1)/2
             L_ell = legendre(ell)
-            return simpson(y=Pobs * norm * L_ell(mu)[None,:,None],x=mu,axis=1)
+            return simpson(y=Pobs * norm * L_ell(mu)[None,:,None],x=mu,axis=1) * Pobs.unit
 
         self.Pk_0bs = Pk_ell_moments(0)
         self.Pk_2bs = Pk_ell_moments(2)

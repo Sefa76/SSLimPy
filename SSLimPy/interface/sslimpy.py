@@ -78,7 +78,7 @@ class sslimpy:
                 if "Power spectrum" in outputdict:
                     continue
                 self._compute_ps(cosmopars, astropars, BAOpars, outputdict)
-            if obs=="Covariance":
+            elif obs=="Covariance":
                 if not "Power spectrum" in outputdict:
                     self._compute_ps(cosmopars, astropars, BAOpars, outputdict)
 
