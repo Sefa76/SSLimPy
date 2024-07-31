@@ -20,6 +20,8 @@ OBS:
   'Tsys_NEFD' : 40
   'Nfeeds' : 19
   'beam_FWHM' : 4.1
+  'nu': 115
+  'nuObs': 30
   'Delta_nu' : 8
   'dnu' : 15.6
   'tobs' : 6000 

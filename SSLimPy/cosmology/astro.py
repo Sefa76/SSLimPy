@@ -50,11 +50,8 @@ class astro_functions:
             self.astroparams["Lmin"], self.astroparams["Lmax"], self.astroparams["nL"]
         )
         # find the redshifts for fequencies asked for:
-        self.nu = np.atleast_1d(self.astroparams["nu"])
-        self.nuObs = np.atleast_1d(self.astroparams["nuObs"])
-
-        self.z = np.atleast_1d((self.nu / self.nuObs).to(1).value - 1)
-        self.z = np.sort(self.z)
+        self.nu = cfg.obspars["nu"]
+        self.nuObs = cfg.obspars["nuObs"]
 
         self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
 
@@ -705,8 +702,6 @@ class astro_functions:
         self.astroparams.setdefault("hmf_model", "ST")
         self.astroparams.setdefault("bias_model", "ST99")
         self.astroparams.setdefault("bias_par", {})
-        self.astroparams.setdefault("nu", 115 * u.GHz)
-        self.astroparams.setdefault("nuObs", 30 * u.GHz)
         self.astroparams.setdefault("Mmin", 1e9 * u.Msun)
         self.astroparams.setdefault("Mmax", 1e15 * u.Msun)
         self.astroparams.setdefault("nM", 500)

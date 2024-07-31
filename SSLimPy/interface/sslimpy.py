@@ -105,6 +105,8 @@ class sslimpy:
                                      )
 
         outputdict["Power spectrum"] = PowerSpectra(cosmo,astro,BAOpars)
+        outputdict["Power spectrum"].compute_power_spectra()
+        outputdict["Power spectrum"].compute_power_spectra_moments()
 
 
     def _compute_cov(self, power_spectrum, outputdict):

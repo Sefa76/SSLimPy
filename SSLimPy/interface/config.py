@@ -148,11 +148,17 @@ def init(
 
     obspars["Tsys_NEFD"] *= u.K
     obspars["beam_FWHM"] *= u.arcmin
+    obspars["nu"] *= u.GHz
+    obspars["nuObs"] *= u.GHz
     obspars["Delta_nu"] *= u.GHz
     obspars["dnu"] *= u.MHz
     obspars["tobs"] *= u.hr
     obspars["Omega_field"] *= u.deg**2
     obspars["a_FG"] *= u.Mpc**-1
+
+    global z
+    z = np.atleast_1d((obspars["nu"] / obspars["nuObs"]).to(1).value - 1)
+    z = np.sort(z)
 
     global fiducialcosmoparams
     fiducialcosmoparams = cosmopars

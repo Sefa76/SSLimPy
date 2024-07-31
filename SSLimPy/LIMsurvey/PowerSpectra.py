@@ -39,9 +39,10 @@ class PowerSpectra:
         #################################
         # Properties of target redshift #
         #################################
-        self.nu = self.astro.nu
-        self.nuObs = self.astro.nuObs
-        self.z = self.astro.z
+        self.nu = cfg.obspars["nu"]
+        self.nuObs = cfg.obspars["nuObs"]
+        self.Delta_nu = cfg.obspars["Delta_nu"]
+        self.z = cfg.z
         self.H = self.cosmology.Hubble(self.z, physical=True)
 
         #########################################
@@ -480,7 +481,7 @@ class PowerSpectra:
         # Calculate dz from deltanu
         nu = self.nu
         nuObs = self.nuObs
-        Delta_nu = cfg.obspars["Delta_nu"]
+        Delta_nu = self.Delta_nu
         z = (nu / nuObs - 1).to(1).value
         z_min = (nu / (nuObs + Delta_nu / 2) - 1).to(1).value
         z_max = (nu / (nuObs - Delta_nu / 2) - 1).to(1).value
