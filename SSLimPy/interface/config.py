@@ -152,7 +152,8 @@ def init(
     obspars["nuObs"] *= u.GHz
     obspars["Delta_nu"] *= u.GHz
     obspars["dnu"] *= u.MHz
-    obspars["tobs"] *= u.hr
+    # We should change the other parameters also like this to read the units
+    obspars["tobs"] = obspars["tobs"][:-1] * getattr(u,obspars["tobs"][-1])
     obspars["Omega_field"] *= u.deg**2
     obspars["a_FG"] *= u.Mpc**-1
 

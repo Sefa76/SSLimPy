@@ -547,7 +547,7 @@ class PowerSpectra:
             )
         
         self.Pk_true = copy(Pobs)
-        self.Pk_Obs = Pconv *Pobs.unit / Vsurvey
+        self.Pk_Obs = Pconv *Pobs.unit / Vsurvey.value
         return self.Pk_Obs
 
     #######################
@@ -706,7 +706,6 @@ class PowerSpectra:
             Ps_ap *= uI
 
         else:
-            print("here!")
             Ps_ap = np.atleast_1d(self.shotnoise(z, BAOpars=self.BAOpars))[None,None,:]
 
         if cfg.settings["verbosity"] >1:

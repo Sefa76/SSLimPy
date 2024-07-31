@@ -1,11 +1,15 @@
 import numpy as np
+from astropy import units as u
+from astropy import constants as c
+
 from scipy.integrate import trapezoid
 from scipy.special import legendre
 
 import SSLimPy.cosmology.cosmology as cosmo
 import SSLimPy.LIMsurvey.PowerSpectra as powspe
-
+from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import construct_gaussian_cov
+
 
 class Covariance:
     def __init__(self, powerspectrum: powspe.PowerSpectra):
@@ -22,9 +26,27 @@ class Covariance:
         _, Vw = self.powerspectrum.Wsurvey(self.k,self.mu)
         return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi)**3)
 
+    def Detector_noise(self):
+        F1 = (
+            cfg.obspars["Tsys_NEFD"]**2
+            * cfg.obspars["Omega_field"].to(u.sr).value
+            / (2 * cfg.obspars["nD"]
+               * cfg.obspars["tobs"]
+            )
+        )
+        F2 = c.c / cfg.obspars["nu"]
+        F3 = (
+            self.cosmology.comoving(self.z)**2
+            * (1+ self.z)**2
+            / self.cosmology.Hubble(self.z, physical=True)
+        )
+        PI = (F1 * F2 * F3).to(self.powerspectrum.Pk_Obs.unit)
+        return PI
+
     def gaussian_cov(self):
         Pobs = self.powerspectrum.Pk_Obs
-        sigma = Pobs**2 / self.Nmodes()[:,None,:]
+        PI = self.Detector_noise()
+        sigma = (Pobs+PI)**2 / self.Nmodes()[:,None,:]
 
         # compute the C_ell covaraiance
         cov_00 = trapezoid(

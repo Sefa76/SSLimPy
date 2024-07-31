@@ -24,7 +24,8 @@ OBS:
   'nuObs': 30
   'Delta_nu' : 8
   'dnu' : 15.6
-  'tobs' : 6000 
+  'tobs' : [1300, "hr"]
+  'nD' : 1
   'Omega_field' : 2.25
   'Nfield' : 1
   'N_FG_par' : 1
