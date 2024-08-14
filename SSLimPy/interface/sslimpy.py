@@ -51,7 +51,7 @@ class sslimpy:
         self.fiducialastroparams = cfg.fiducialastroparams
 
         self.obspars = cfg.obspars
-        self.vidpars = cfg.vidpars
+        #self.vidpars = cfg.vidpars
         self.output = atleast_1d(cfg.settings["output"])
 
         ### save very fist cosmology ###
@@ -125,7 +125,7 @@ class sslimpy:
         print("Observational Parameters:")
         for key in cfg.obspars:
             print("   " + key + ": {}".format(cfg.obspars[key]))
-        print("VID Parameters:")
-        for key in cfg.vidpars:
-            print("   " + key + ": {}".format(cfg.vidpars[key]))
+        #print("VID Parameters:")
+        #for key in cfg.vidpars:
+        #    print("   " + key + ": {}".format(cfg.vidpars[key]))
 
