@@ -36,6 +36,10 @@ def init(
                       A path containing the configuration of the EBS class. Defaults to the default
     cosmopars       : dict, optional
                       A dictionary containing the fiducial cosmological parameters
+    astropars       : dict, optional
+                      A dictionary containing the fiducial astrophysical parameters
+    BAOpars         : dict, optional
+                      A dictionary containing the fiducial BAO toy-model parameters for BAO-only analysis
     """
 
     #Set global defaults for the settings dictionary
@@ -139,6 +143,25 @@ def init(
         boltzmann_classpars = file_content_class
 
     #Set global defaults and inputs for the survey specifications
+    global obspars
+    obspars = specifications
+
+    obspars.setdefault("Tsys_NEFD", 40*u.uK)
+    obspars.setdefault("Nfeeds", 19)
+    obspars.setdefault("beam_FWHM", 4.1*u.arcmin)
+    obspars.setdefault("nu", 115*u.GHz)
+    obspars.setdefault("nuObs", 30*u.GHz)
+    obspars.setdefault("Delta_nu", 8*u.GHz)
+    obspars.setdefault("dnu", 15*u.MHz)
+    obspars.setdefault("tobs", 1300*u.h)
+    obspars.setdefault("nD", 1)
+    obspars.setdefault("Omega_field", 4*u.deg**2)
+    obspars.setdefault("N_FG_par", 1)
+    obspars.setdefault("N_FG_perp", 1)
+    obspars.setdefault("do_FG_wedge", False)
+    obspars.setdefault("a_FG", 0.)
+    obspars.setdefault("b_FG", 0.)
+
     """ # Load Survey specifications from file
     if specifications:
         if os.path.exists(specifications):

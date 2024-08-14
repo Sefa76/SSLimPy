@@ -14,7 +14,7 @@ class sslimpy:
         settings_dict = dict(),
         camb_yaml_file = None,
         class_yaml_file = None,
-        specifications = None,
+        specifications = dict(),
         cosmopars = dict(),
         astropars = dict(),
         BAOpars = dict(),
