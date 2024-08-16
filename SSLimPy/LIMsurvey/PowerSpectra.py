@@ -429,7 +429,7 @@ class PowerSpectra:
 
     def sigma_perp(self, z):
         x = cfg.obspars["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
-        y = self.fiducialcosmo.angdist(z)
+        y = self.fiducialcosmo.angdist(z)*(1+z)
         return x * y
 
     def F_parr(self, k, mu, z, nu_obs):
