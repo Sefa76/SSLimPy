@@ -385,7 +385,7 @@ class PowerSpectra:
             beta = np.atleast_1d(BAOpars["beta"])
             if len(beta) != len(z):
                 raise ValueError("did not pass RSD amplitude for every z asked for")
-            fterm = beta * np.power(mu[None,:,None], 2)
+            fterm = np.ones(len(self.k))[:,None,None] * beta[None,None,:] * np.power(mu[None,:,None], 2)
             linear_Kaiser = np.power(bterm * (1 + fterm), 2)
         else:
             fterm = np.reshape(self.f_term(k,mu,z,BAOpars=BAOpars),(*k.shape,*mu.shape,*z.shape))
