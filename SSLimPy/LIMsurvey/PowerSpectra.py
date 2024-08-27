@@ -567,18 +567,17 @@ class PowerSpectra:
         z = np.atleast_1d(z)
 
         Ps = 0
-        if cfg.settings["halo_model_PS"]:
-            Ps = self.astro.restore_shape(self.halomoments(k, z, mu=mu, moment=2), k, mu, z)
-            Ps *= self.astro.CLT(z)[None,None,:]**2
-        else:
-            Ps = self.astro.restore_shape(self.astro.Tmoments(z, k=k, mu=mu, moment=2), k, mu, z)
-
         if "Pshot" in BAOpars:
             Pshot = np.atleast_1d(BAOpars["Pshot"])
             if len(Pshot) != len(z):
                 raise ValueError("did not pass the shotnoise for every z asked for")
-            Ps = Ps + Pshot[None, None,:]
-
+            Ps = Pshot[None, None,:]
+        else:
+            if cfg.settings["halo_model_PS"]:
+                Ps = self.astro.restore_shape(self.halomoments(k, z, mu=mu, moment=2), k, mu, z)
+                Ps *= self.astro.CLT(z)[None,None,:]**2
+            else:
+                Ps = self.astro.restore_shape(self.astro.Tmoments(z, k=k, mu=mu, moment=2), k, mu, z)
         return np.squeeze(Ps)
 
     def compute_power_spectra(self):
@@ -673,7 +672,7 @@ class PowerSpectra:
                     interp_per_z = UnivariateSpline(logkMpc,bterm_grid[:,iz])
                     rsd_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))**2
             else:
-                Ps_ap = np.atleast_1d(self.bias_term(z, BAOpars=self.BAOpars)**2)[None,None,:]
+                rsd_ap = np.atleast_1d(self.bias_term(z, BAOpars=self.BAOpars)**2)[None,None,:]
 
         if cfg.settings["verbosity"] >1:
             trsd = time()
