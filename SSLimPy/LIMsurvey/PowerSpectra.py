@@ -52,15 +52,15 @@ class PowerSpectra:
         self.L = astro.L
         if "log" in cfg.settings["k_kind"]:
             self.k_edge = np.geomspace(
-                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]
+                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]+1
             )
         else:
             self.k_edge = np.linspace(
-                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]
+                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]+1
             )
         self.k = (self.k_edge[:-1] + self.k_edge[1:]) / 2.0
         self.dk = np.diff(self.k)
-        self.mu_edge = np.linspace(-1, 1, cfg.settings["nmu"])
+        self.mu_edge = np.linspace(-1, 1, cfg.settings["nmu"]+1)
         self.mu = (self.mu_edge[:-1] + self.mu_edge[1:]) / 2.0
         self.dmu = np.diff(self.mu)
         self.k_par = self.k[:, None] * self.mu[None, :]
