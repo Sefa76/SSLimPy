@@ -63,7 +63,7 @@ class sslimpy:
             self.recap_options()
         ##################
 
-    def compute(self, cosmopars, astropars, BAOpars, output=None):
+    def compute(self, cosmopars, astropars, BAOpars, obspars=dict(), output=None):
         """Main interface to compute the different SSLimPy outputs
 
         Inputs the different SSLimPy output options.
@@ -77,10 +77,10 @@ class sslimpy:
             if obs=="Power spectrum":
                 if "Power spectrum" in outputdict:
                     continue
-                self._compute_ps(cosmopars, astropars, BAOpars, outputdict)
+                self._compute_ps(cosmopars, astropars, BAOpars, obspars, outputdict)
             elif obs=="Covariance":
                 if not "Power spectrum" in outputdict:
-                    self._compute_ps(cosmopars, astropars, BAOpars, outputdict)
+                    self._compute_ps(cosmopars, astropars, BAOpars, obspars, outputdict)
 
                 self._compute_cov(outputdict["Power spectrum"],
                                   outputdict,
@@ -91,7 +91,7 @@ class sslimpy:
         print("Done!")
         return outputdict
 
-    def _compute_ps(self, cosmopars, astropars, BAOpars, outputdict):
+    def _compute_ps(self, cosmopars, astropars, BAOpars, obspars, outputdict):
         from SSLimPy.LIMsurvey.PowerSpectra import PowerSpectra
         cosmo = updater.update_cosmo(self.curent_cosmo,
                                      cosmopars,
@@ -103,6 +103,10 @@ class sslimpy:
                                      astropars,
                                      updated_cosmo=cosmo,
                                      )
+
+        astro = updater.update_obspars(obspars,
+                                       astro,
+                                       )
 
         outputdict["Power spectrum"] = PowerSpectra(cosmo,astro,BAOpars)
         outputdict["Power spectrum"].compute_power_spectra()

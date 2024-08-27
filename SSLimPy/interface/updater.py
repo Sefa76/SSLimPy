@@ -82,3 +82,19 @@ def update_astro(current_cosmo: cosmology.cosmo_functions,
                                              cosmology=cosmo,
                                              )
     return astro_object
+
+def update_obspars(obspars: dict,
+                   current_astro: astro.astro_functions,
+                   ) -> astro.astro_functions:
+    """The astro_functions objects need the observed frequency
+    if it ever is changed this is to ensure that the conversion factors and
+    line rescaling is done consistently
+    """
+
+    cfg.obspars.update(obspars)
+
+    setattr(current_astro, "nu", cfg.obspars["nu"])
+    setattr(current_astro, "nuObs", cfg.obspars["nuObs"])
+    current_astro.init_model()
+
+    return current_astro
