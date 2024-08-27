@@ -381,8 +381,15 @@ class PowerSpectra:
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
         bterm = self.astro.restore_shape(self.bias_term(z, k=k, mu=mu, BAOpars=BAOpars),k, mu, z)
-        fterm = np.reshape(self.f_term(k,mu,z,BAOpars=BAOpars),(*k.shape,*mu.shape,*z.shape))
-        linear_Kaiser = np.power(bterm + fterm ,2)
+        if "beta" in BAOpars:
+            beta = np.atleast_1d(BAOpars["beta"])
+            if len(beta) != len(z):
+                raise ValueError("did not pass RSD amplitude for every z asked for")
+            fterm = beta * np.power(mu[None,:,None], 2)
+            linear_Kaiser = np.power(bterm * (1 + fterm), 2)
+        else:
+            fterm = np.reshape(self.f_term(k,mu,z,BAOpars=BAOpars),(*k.shape,*mu.shape,*z.shape))
+            linear_Kaiser = np.power(bterm + fterm ,2)
         return np.squeeze(linear_Kaiser)
 
     def fingers_of_god(self, k, mu, z, BAOpars = dict()):
@@ -418,8 +425,6 @@ class PowerSpectra:
     ##################################
     # Line Broadening and Resolution #
     ##################################
-
-    #TODO: #1 Add Functions for Line Broadening end Suppression because of Survey Resolution
 
     # Call these functions before applying the AP transformations, scale fixes, ect
     def sigma_parr(self, z, nu_obs):
