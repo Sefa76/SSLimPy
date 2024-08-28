@@ -17,7 +17,7 @@ def init(
     settings_dict = dict(),
     camb_yaml_file = None,
     class_yaml_file = None,
-    specifications = dict(),
+    obspars_dict = dict(),
     cosmopars = dict(),
     astropars = dict(),
     BAOpars = dict(),
@@ -28,7 +28,7 @@ def init(
     ----------
     settings        : dict
                       A dictionary containing all additional neccessary options for the computation
-    specifications  : dict
+    obspars_dict    : dict
                       A dictionary containing survey specifications
     camb_yaml_file  : String
                       A path containing the configuration of the EBS camb. Defaults to the default
@@ -144,7 +144,7 @@ def init(
 
     #Set global defaults and inputs for the survey specifications
     global obspars
-    obspars = specifications
+    obspars = obspars_dict
 
     obspars.setdefault("Tsys_NEFD", 40*u.uK)
     obspars.setdefault("Nfeeds", 19)
