@@ -635,7 +635,7 @@ class PowerSpectra:
             uI = Pk_grid.unit
             logPk_grid = np.log(Pk_grid.value)
             for iz,zi in enumerate(z):
-                interp_per_z = UnivariateSpline(logkMpc,logPk_grid[:,iz])
+                interp_per_z = UnivariateSpline(logkMpc, logPk_grid[:,iz], s=0)
                 Pk_ap[:,:,iz] = np.exp(interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))) \
                                 / np.atleast_1d(np.power(self.cosmology.sigma8_of_z(zi,tracer=self.tracer),2))[None,None,:]
         Pk_ap *= uI
@@ -674,7 +674,7 @@ class PowerSpectra:
                 bterm_grid = np.reshape(self.bias_term(z, k=k, BAOpars=self.BAOpars),(*k.shape, *z.shape))
                 uI = bterm_grid.unit
                 for iz, zi in enumerate(z):
-                    interp_per_z = UnivariateSpline(logkMpc,bterm_grid[:,iz])
+                    interp_per_z = UnivariateSpline(logkMpc, bterm_grid[:,iz], s=0)
                     rsd_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))**2
             else:
                 rsd_ap = np.atleast_1d(self.bias_term(z, BAOpars=self.BAOpars)**2)[None,None,:]
@@ -705,7 +705,7 @@ class PowerSpectra:
             logPs_grid = np.log(Ps_grid.value)
             uI = Ps_grid.unit
             for iz, zi in enumerate(z):
-                interp_per_z = UnivariateSpline(logkMpc,logPs_grid[:,iz])
+                interp_per_z = UnivariateSpline(logkMpc, logPs_grid[:,iz], s=0)
                 Ps_ap[:,:,iz] = np.exp(interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value)))
             Ps_ap *= uI
 
