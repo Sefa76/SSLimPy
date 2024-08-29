@@ -4,7 +4,7 @@ import numpy as np
 import SSLimPy.cosmology.cosmology as cosmology
 import SSLimPy.cosmology.astro as astrophysics
 
-from SSLimPy.utils.utils import _bilinear_interpolate, _trapezoid
+from SSLimPy.utils.utils import _linear_interpolate, _trapezoid
 from SSLimPy.interface import config as cfg
 
 
@@ -16,6 +16,17 @@ class nonGuassianCov:
         self.astro = astro
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
+def addVectors(k1, mu1, ph1,
+               k2, mu2, ph2,
+               ):
+    k1pk2 = (
+        k1 * k2 * (np.sqrt((1 - mu1**2) * (1 - mu2**2)) * np.cos(ph1 - ph2) + mu1 * mu2)
+    )
+    k12 = np.sqrt(k1**2 + 2 * k1pk2 + k2**2)
+    mu12 = (k1 * mu1 + k2 * mu2) / k12
+    phi12 = np.arctan2(k1 * np.sqrt(1 - mu1**2) * np.sin(ph1) + k2 * np.sqrt(1 - mu2**2) * np.sin(ph2),
+                       k1 * np.sqrt(1 - mu1**2) * np.cos(ph1) + k2 * np.sqrt(1 - mu2**2) * np.cos(ph2))
+    return k12, mu12, phi12
 
 def vF2(k1, mu1, k2, mu2, Dphi):
     """Computes the F2 mode coupling kernel
@@ -30,7 +41,6 @@ def vF2(k1, mu1, k2, mu2, Dphi):
     )
     return F2
 
-
 def vG2(k1, mu1, k2, mu2, Dphi):
     """Computes the G2 mode coupling kernel
     All computations are done on a vector grid
@@ -43,7 +53,6 @@ def vG2(k1, mu1, k2, mu2, Dphi):
         + 4 / 7 * k1pk2**2 / (k1 * k2) ** 2
     )
     return G2
-
 
 def vF3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Computes the F3 mode coupling kernel
@@ -64,3 +73,46 @@ def vF3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
         vG2(k2, mu2, k3, mu3, ph2 - ph3) + vG2(k1, mu1, k2, mu2, ph1 - ph2)
     )
     return T1 + T2
+
+def BispectrumLO(k1, mu1, ph1,
+                 k2, mu2, ph2,
+                 k3, mu3, ph3,
+                 kgrid, Pgrid):
+    """Computes the tree level Bispectrum
+    """
+    # Obtain the Power Spectra
+    vk = np.array([k1, k2, k3])
+    vP = _linear_interpolate(kgrid, Pgrid, vk)
+
+    # Compute over all permutations of F2 diagrams
+    Tp1 = vP[0] * vP[1] * vF2(k1, mu1, k2, mu2, ph1 - ph2)
+    Tp2 = vP[0] * vP[2] * vF2(k1, mu1, k3, mu3, ph1 - ph3)
+    Tp3 = vP[1] * vP[3] * vF2(k2, mu2, k3, mu3, ph2 - ph3)
+
+    return Tp1 + Tp2 + Tp3
+
+def TrispectrumL0(k1, mu1, ph1,
+                  k2, mu2, ph2,
+                  k3, mu3, ph3,
+                  k4, mu4, ph4,
+                  kgrid, Pgrid):
+    """ Compute the tree level Trispectrum
+    """
+    # Compute coordinates of added wavevectors 
+    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    k13, mu13, ph13 = addVectors(k1, mu1, ph1, k3, mu3, ph3)
+    k14, mu14, ph14 = addVectors(k1, mu1, ph1, k4, mu4, ph4)
+    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    k24, mu24, ph24 = addVectors(k2, mu2, ph2, k4, mu4, ph4)
+    k34, mu34, ph34 = addVectors(k3, mu3, ph3, k4, mu4, ph4)
+
+    # Obtain the Power Spectra
+    vk = np.array([k1, k2, k3, k4,
+                   k12, k13, k14,
+                   k23, k24,
+                   k34])
+    vP = _linear_interpolate(kgrid, Pgrid, vk)
+
+    # Compute over all ṕermutations of F2 F2 diagrams
+
+    # Compute over all permutations of F3 diagrams
