@@ -5,6 +5,34 @@ import numpy as np
 # Base Functions #
 ##################
 
+
+@njit(
+    "(float64[::1], float64[::1], float64[::1])",
+    fastmath=True,
+)
+def _linear_interpolate(xi, yi, x):
+    xl = yi.size
+    rxl = x.size
+    assert xl == xi.size, "xi should be the same size as yi"
+
+    # Find the indices of the grid points surrounding xi
+    # Handle linear extrapolation for larger x
+    x1_idx = np.searchsorted(xi, x)
+    x1_idx[np.where(x1_idx == 0)] = 1
+    x1_idx[np.where(x1_idx == xl)] = xl - 1
+    x2_idx = x1_idx - 1
+
+    x1, x2 = xi[x1_idx], xi[x2_idx]
+
+    results = np.empty(rxl)
+    for i in range(rxl):
+        y1 = yi[x1_idx[i]]
+        y2 = yi[x2_idx[i]]
+
+        results[i] = (y2 * (x1[i] - x[i]) + y1 * (x[i] - x2[i])) / (x1[i] - x2[i])
+    return results
+
+
 @njit(
     "(float64[::1], float64[::1], float64[:,:], float64[::1], float64[::1])",
     fastmath=True,
@@ -61,9 +89,11 @@ def _trapezoid(y, x):
         s += dx * dy
     return s * 0.5
 
+
 #########################
 # Specialized Functions #
 #########################
+
 
 @njit(
     "(float64[::1], float64[::1], "
@@ -134,15 +164,16 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
             Pconv[ik, imu] = _trapezoid(q_integrand * q, np.log(q))
     return Pconv
 
+
 @njit(
     "(uint16, uint16, "
-    +"float64[:,:], float64[:,:], float64[:,:], "
-    +"float64[:,:], float64[:,:], "
-    +"float64[:,:])",
+    + "float64[:,:], float64[:,:], float64[:,:], "
+    + "float64[:,:], float64[:,:], "
+    + "float64[:,:])",
     parallel=True,
 )
 def construct_gaussian_cov(nk, nz, C00, C20, C40, C22, C42, C44):
-    cov = np.empty((nk,3,3,nz))
+    cov = np.empty((nk, 3, 3, nz))
     for ki in prange(nk):
         for zi in range(nz):
             cov[ki, 0, 0, zi] = C00[ki, zi]
