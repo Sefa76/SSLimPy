@@ -1,20 +1,53 @@
-from numba import njit, prange
 import numpy as np
+import vegas
 
-import SSLimPy.cosmology.cosmology as cosmology
-import SSLimPy.cosmology.astro as astrophysics
-
-from SSLimPy.utils.utils import _linear_interpolate, _trapezoid
+import SSLimPy.LIMsurvey.PowerSpectra as Pobs
 from SSLimPy.interface import config as cfg
+from SSLimPy.utils.utils import _linear_interpolate
 
+from functools import partial
 
 class nonGuassianCov:
     def __init__(
-        self, cosmo: cosmology.cosmo_functions, astro: astrophysics.astro_functions
+        self, powerSpectrum: Pobs.PowerSpectra
     ):
-        self.cosmo = cosmo
-        self.astro = astro
+        self.cosmo = powerSpectrum.cosmology
+        self.astro = powerSpectrum.astro
+        self.k = powerSpectrum.k
+        self.z = powerSpectrum.z
         self.tracer = cfg.settings["TracerPowerSpectrum"]
+
+    def _integrate_TPT(self,k1,k2):
+        k = self.k
+        z = self.z
+        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
+
+        # fill starting arguments
+        partialTS = partial(TrispectrumL0, k1=k1, k2=k1, k3=k2, k4=k2, kgrid=k, Pgrid=Pk)
+
+        # We only consider squeezed quadrilaterals
+        squeezedTS = lambda mu1, mu2, phi1, phi2: partialTS(mu1, phi1, -mu1, phi1 + np.pi, mu2, phi2, -mu2, phi2 + np.pi)
+
+        muv, phiv =[-1,1] , [-np.pi, np.pi]
+        integ = vegas.Integrator(muv, phiv, muv, phiv)
+        result = integ(squeezedTS, nitn=10, neval=1000)
+
+        if cfg.settings["verbose"]>2:
+            print(result.summary())
+            print('result = %s    Q = %.2f' % (result, result.Q))
+        return result
+
+    def _integrate_BPT(self,k1,k2):
+        k = self.k
+        z = self.z
+        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
+        pass
+
+    def _integrate_PPT(self,k1,k2):
+        k = self.k
+        z = self.z
+        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
+        pass
 
 def addVectors(k1, mu1, ph1,
                k2, mu2, ph2,
@@ -98,7 +131,7 @@ def TrispectrumL0(k1, mu1, ph1,
                   kgrid, Pgrid):
     """ Compute the tree level Trispectrum
     """
-    # Compute coordinates of added wavevectors 
+    # Compute coordinates of added wavevectors
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     k13, mu13, ph13 = addVectors(k1, mu1, ph1, k3, mu3, ph3)
     k14, mu14, ph14 = addVectors(k1, mu1, ph1, k4, mu4, ph4)
