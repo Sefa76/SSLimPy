@@ -804,9 +804,9 @@ class cosmo_functions:
         Returns:
             float: The value of the MM power spectrum at the given redshift and wavenumber.
         """
-        if nonlinear is True:
+        if nonlinear:
             power = self.results.Pk_nl(z, k, grid=False)
-        elif nonlinear is False:
+        else:
             power = self.results.Pk_l(z, k, grid=False)
         return power
 
@@ -822,9 +822,9 @@ class cosmo_functions:
         Returns:
             The value of the CB power spectrum at the given redshift and wavenumber.
         """
-        if nonlinear is True:
+        if nonlinear:
             power = self.results.Pk_cb_nl(z, k, grid=False)
-        elif nonlinear is False:
+        else:
             power = self.results.Pk_cb_l(z, k, grid=False)
         return power
 
