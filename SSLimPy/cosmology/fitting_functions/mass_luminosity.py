@@ -14,12 +14,13 @@ TODO:
 Add in models from Matlab code
 """
 
-import numpy as np
-from copy import deepcopy
-import astropy.units as u
-import astropy.constants as cu
-from scipy.interpolate import RegularGridInterpolator, interp1d
 import os
+from copy import deepcopy
+
+import astropy.constants as cu
+import astropy.units as u
+import numpy as np
+from scipy.interpolate import RegularGridInterpolator, interp1d
 
 
 class mass_luminosity:

@@ -1,7 +1,9 @@
+from copy import copy
+
 import astropy.units as u
 import numpy as np
+
 import SSLimPy.interface.config as cfg
-from copy import copy
 
 """
 This class is for handeling all the cosmology-independent nuisance effects and corrections

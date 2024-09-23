@@ -7,17 +7,12 @@ import types
 from copy import deepcopy
 from warnings import warn
 
-import numpy as np
-
-import astropy.units as u
 import astropy.constants as c
-
-from scipy.interpolate import (
-    InterpolatedUnivariateSpline,
-    RectBivariateSpline,
-    UnivariateSpline,
-    make_interp_spline,
-)
+import astropy.units as u
+import numpy as np
+from scipy.interpolate import (InterpolatedUnivariateSpline,
+                               RectBivariateSpline, UnivariateSpline,
+                               make_interp_spline)
 from scipy.signal import savgol_filter
 
 # Import SSLimPy functions

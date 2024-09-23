@@ -1,132 +1,90 @@
-from functools import partial
-
-import astropy.units as u
 import numpy as np
-import vegas
 
-import SSLimPy.LIMsurvey.PowerSpectra as Pobs
-from SSLimPy.interface import config as cfg
-from SSLimPy.utils.utils import _linear_interpolate
+from SSLimPy.utils.utils import (_addVectors, _linear_interpolate,
+                                 _scalarProduct)
 
+######################################
+# (symetrised) mode coupling kernels #
+######################################
 
-class nonGuassianCov:
-    def __init__(
-        self, powerSpectrum: Pobs.PowerSpectra
-    ):
-        self.cosmo = powerSpectrum.cosmology
-        self.astro = powerSpectrum.astro
-        self.powerSpectrum = powerSpectrum
-        self.k = powerSpectrum.k
-        self.z = powerSpectrum.z
-        self.tracer = cfg.settings["TracerPowerSpectrum"]
+def _F2(k1, mu1, k2, mu2, Dphi):
+    """Unsymetrised F2 kernel
+    """
+    k1pk2 = _scalarProduct(k1, mu1, Dphi, k2, mu2, 0.0)
+    F2 = (
+        5 / 7
+        + 1 / 7 * (6 / k1**2 + 1 / k2**2) * k1pk2
+        + 2 / 7 * k1pk2**2 / (k1 * k2) ** 2
+        )
+    return F2
 
-    def _integrate_4h(self,k1,k2):
-        k = self.k
-        z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
-
-        # fill starting arguments
-        partialTS = partial(TrispectrumL0,
-                            k1=k1.to(u.Mpc**-1).value,
-                            k2=k1.to(u.Mpc**-1).value,
-                            k3=k2.to(u.Mpc**-1).value,
-                            k4=k2.to(u.Mpc**-1).value,
-                            kgrid=k.to(u.Mpc**-1).value,
-                            Pgrid=Pk.to(u.Mpc**3).value,
-                            )
-
-        # We only consider squeezed quadrilaterals
-        def squeezedTS(x):
-            """Returns the 4point halo correlator for a squeezed quadrilateral configuration"""
-            mu1 = x[0]
-            phi1 = x[1]
-            mu2 = x[2]
-            phi2 = x[3]
-            partialTS(mu1=mu1, ph1=phi1, mu2=-mu1, ph2=phi1 + np.pi,
-                      mu3=mu2, ph3=phi2, mu4=-mu2, ph4=phi2 + np.pi)
-
-        muv, phiv =[-1,1] , [-np.pi, np.pi]
-        integ = vegas.Integrator([muv, phiv, muv, phiv])
-        result = integ(squeezedTS, nitn=10, neval=1000)
-
-        if cfg.settings["verbose"]>2:
-            print(result.summary())
-            print('result = %s    Q = %.2f' % (result, result.Q))
-
-        I1 = self.powerSpectrum.halomoments(k1, z, bias_order=1, moment=1)
-        I2 = self.powerSpectrum.halomoments(k2, z, bias_order=1, moment=1)
-
-        return result * I1**2 * I2**2
-
-    def _integrate_3h(self,k1,k2):
-        k = self.k
-        z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
-        pass
-
-    def _integrate_PPT(self,k1,k2):
-        k = self.k
-        z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
-        pass
-
-def addVectors(k1, mu1, ph1,
-               k2, mu2, ph2,
-               ):
-    k1pk2 = (
-        k1 * k2 * (np.sqrt((1 - mu1**2) * (1 - mu2**2)) * np.cos(ph1 - ph2) + mu1 * mu2)
-    )
-    k12 = np.sqrt(k1**2 + 2 * k1pk2 + k2**2)
-    mu12 = (k1 * mu1 + k2 * mu2) / k12
-    phi12 = np.arctan2(k1 * np.sqrt(1 - mu1**2) * np.sin(ph1) + k2 * np.sqrt(1 - mu2**2) * np.sin(ph2),
-                       k1 * np.sqrt(1 - mu1**2) * np.cos(ph1) + k2 * np.sqrt(1 - mu2**2) * np.cos(ph2))
-    return k12, mu12, phi12
 
 def vF2(k1, mu1, k2, mu2, Dphi):
     """Computes the F2 mode coupling kernel
     All computations are done on a vector grid
     """
-    k1pk2 = k1 * k2 * (np.sqrt((1 - mu1**2) * (1 - mu2**2)) * np.cos(Dphi) + mu1 * mu2)
-
-    F2 = (
-        5 / 7
-        + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
-        + 2 / 7 * k1pk2**2 / (k1 * k2) ** 2
-    )
+    F2 = _F2(k1, mu1, k2, mu2, Dphi)
+    F2 += _F2(k2, mu2, k1, mu1, -Dphi)
+    F2 *= 1 / 2
     return F2
+
+
+def _G2(k1, mu1, k2, mu2, Dphi):
+    """Unsymetrised G2 kernel
+    """
+    k1pk2 = _scalarProduct(k1, mu1, Dphi, k2, mu2, 0.0)
+    G2 = (
+        3 / 7
+        + 1 / 7 * (5 / k1**2 + 2 / k2**2) * k1pk2
+        + 4 / 7 * k1pk2**2 / (k1 * k2) ** 2
+    )
+    return G2
+
 
 def vG2(k1, mu1, k2, mu2, Dphi):
     """Computes the G2 mode coupling kernel
     All computations are done on a vector grid
     """
-    k1pk2 = k1 * k2 * (np.sqrt((1 - mu1**2) * (1 - mu2**2)) * np.cos(Dphi) + mu1 * mu2)
-
-    G2 = (
-        3 / 5
-        + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
-        + 4 / 7 * k1pk2**2 / (k1 * k2) ** 2
-    )
+    G2 = _G2(k1, mu1, k2, mu2, Dphi)
+    G2 += _G2(k2, mu2, k1, mu1, -Dphi)
+    G2 *= 1 / 2
     return G2
+
+
+def _F3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    """Unsymetrised F3 kernel
+    """
+    k12, mu12, ph12 = _addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    k23, mu23, ph23 = _addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    k, mu, ph = _addVectors(k1, mu1, ph1, k23, mu23, ph23)
+    kpk23 = _scalarProduct(k,mu, ph, k23, mu23, ph23)
+    T1 = 7 * kpk23 / k1**2 * _F2(k2, mu2, k3, mu3, ph2 - ph3)
+    k1pk23 = _scalarProduct(k1, mu1, ph1, k23, mu23, ph23)
+    T2 = (k**2 * k1pk23) / (k1**2 * k23**2) * _G2(k2, mu2, k3, mu3, ph2 - ph3)
+    kpk3 = _scalarProduct(k, mu, ph, k3, mu3, ph3)
+    T3 = 7 * kpk3 / k12**2 * _G2(k1, mu1, k2, mu2, ph1 - ph2)
+    k12pk3 = _scalarProduct(k12, mu12, ph12, k3, mu3, ph3)
+    T4 = (k**2 * k12pk3) / (k12**2 * k3**2) * _G2(k1, mu1, k2, mu2, ph1 - ph2)
+    return (T1 + T2 + T3 + T4) / 18
+
 
 def vF3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Computes the F3 mode coupling kernel
     All computations are done on a vector grid
     """
-    k1pk2 = (
-        k1 * k2 * (np.sqrt((1 - mu1**2) * (1 - mu2**2)) * np.cos(ph1 - ph2) + mu1 * mu2)
-    )
+    F3 = _F3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    F3 += _F3(k1, mu1, ph1, k3, mu3, ph3, k2, mu2, ph2)
+    F3 += _F3(k2, mu2, ph2, k1, mu1, ph1, k3, mu3, ph3)
+    F3 += _F3(k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
+    F3 += _F3(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
+    F3 += _F3(k3, mu3, ph3, k2, mu2, ph2, k1, mu1, ph1)
+    F3 *= 1 / 6
+    return F3
 
-    T1 = (
-        7
-        / 18
-        * (k1**2 + k1pk2)
-        / k1**2
-        * (vF2(k2, mu2, k3, mu3, ph2 - ph3) + vG2(k1, mu1, k2, mu2, ph1 - ph2))
-    )
-    T2 = 1 / 18 * (k1**2 + 2 * k1pk2 + k2**2) * k1pk2 / (k1 * k2) ** 2 + (
-        vG2(k2, mu2, k3, mu3, ph2 - ph3) + vG2(k1, mu1, k2, mu2, ph1 - ph2)
-    )
-    return T1 + T2
+
+#######################
+# N-point correlators #
+#######################
 
 def BispectrumLO(k1, mu1, ph1,
                  k2, mu2, ph2,
@@ -155,12 +113,12 @@ def TrispectrumL0(k1, mu1, ph1,
     """ Compute the tree level Trispectrum
     """
     # Compute coordinates of added wavevectors
-    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
-    k13, mu13, ph13 = addVectors(k1, mu1, ph1, k3, mu3, ph3)
-    k14, mu14, ph14 = addVectors(k1, mu1, ph1, k4, mu4, ph4)
-    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
-    k24, mu24, ph24 = addVectors(k2, mu2, ph2, k4, mu4, ph4)
-    k34, mu34, ph34 = addVectors(k3, mu3, ph3, k4, mu4, ph4)
+    k12, mu12, ph12 = _addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    k13, mu13, ph13 = _addVectors(k1, mu1, ph1, k3, mu3, ph3)
+    k14, mu14, ph14 = _addVectors(k1, mu1, ph1, k4, mu4, ph4)
+    k23, mu23, ph23 = _addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    k24, mu24, ph24 = _addVectors(k2, mu2, ph2, k4, mu4, ph4)
+    k34, mu34, ph34 = _addVectors(k3, mu3, ph3, k4, mu4, ph4)
 
     # Obtain the Power Spectra
     vk = np.array([k1, k2, k3, k4,
@@ -198,5 +156,4 @@ def TrispectrumL0(k1, mu1, ph1,
     T2 += vP[3] * vP[0] * vP[1] * vF3(k4, mu4, ph4, k1, mu1, ph1, k2, mu2, ph2)
     T2 *= 6
 
-    print(T1, T2)
     return T1 + T2

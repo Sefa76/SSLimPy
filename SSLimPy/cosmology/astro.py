@@ -1,18 +1,18 @@
 import sys
 import types
-import numpy as np
-from scipy.interpolate import interp1d, RectBivariateSpline
-import astropy.units as u
-import astropy.constants as c
-
 from copy import deepcopy
 
+import astropy.constants as c
+import astropy.units as u
+import numpy as np
+from scipy.interpolate import RectBivariateSpline, interp1d
+
 sys.path.append("../")
-from SSLimPy.interface import config as cfg
 from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
+from SSLimPy.interface import config as cfg
 
 
 class astro_functions:

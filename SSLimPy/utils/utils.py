@@ -7,6 +7,45 @@ import numpy as np
 
 
 @njit(
+    "(float64, float64, float64, float64, float64, float64)",
+    fastmath=True,
+)
+def _scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
+    return k1 * k2 * (np.sqrt((1 - mu1**2) * (1 - mu2**2)) * np.cos(ph1 - ph2) + mu1 * mu2)
+
+@njit(
+    "(float64, float64, float64, float64, float64, float64)",
+    fastmath=True,
+)
+def _addVectors(
+    k1,
+    mu1,
+    ph1,
+    k2,
+    mu2,
+    ph2,
+):
+    k1pk2 = _scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
+    
+    k12 = np.sqrt(np.abs(k1**2 + 2 * k1pk2 + k2**2))
+    if np.isclose(k12, 0):
+        m12 = 0
+        phi12 = 0
+    else:
+        mu12 = (k1 * mu1 + k2 * mu2) / k12
+        if np.isclose(np.abs(mu12), 1):
+            phi12 = 0
+        else:
+            phi12 = np.arctan2(
+                k1 * np.sqrt(1 - mu1**2) * np.sin(ph1)
+                + k2 * np.sqrt(1 - mu2**2) * np.sin(ph2),
+                k1 * np.sqrt(1 - mu1**2) * np.cos(ph1)
+                + k2 * np.sqrt(1 - mu2**2) * np.cos(ph2),
+            )
+    return k12, mu12, phi12
+
+
+@njit(
     "(float64[::1], float64[::1], float64[::1])",
     fastmath=True,
 )
@@ -121,22 +160,11 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
             for iq in range(ql):
                 for imuq in range(muql):
                     for ideltaphi in range(deltaphil):
-                        abskminusq[iq, imuq, ideltaphi] = np.sqrt(
-                            np.power(k[ik], 2)
-                            + np.power(q[iq], 2)
-                            - 2
-                            * q[iq]
-                            * k[ik]
-                            * (
-                                muq[imuq] * mu[imu]
-                                + np.sqrt(1 - np.power(muq[imuq], 2))
-                                * np.sqrt(1 - np.power(mu[imu], 2))
-                                * np.cos(deltaphi[ideltaphi])
-                            )
+                        kmq, mukmq, _ = _addVectors(
+                            k[ik], mu[imu], deltaphi[ideltaphi], q[iq], -mu[imuq], np.pi
                         )
-                        mukminusq[iq, imuq, ideltaphi] = (
-                            k[ik] * mu[imu] - q[iq] * muq[imuq]
-                        ) / abskminusq[iq, imuq, ideltaphi]
+                        abskminusq[iq, imuq, ideltaphi] = kmq
+                        mukminusq[iq, imuq, ideltaphi] = mukmq
 
             # flatten the axis last axis first
             abskminusq = abskminusq.flatten()
