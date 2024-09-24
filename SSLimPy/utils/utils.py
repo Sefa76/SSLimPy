@@ -11,7 +11,10 @@ import numpy as np
     fastmath=True,
 )
 def _scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
-    return k1 * k2 * (np.sqrt((1 - mu1**2) * (1 - mu2**2)) * np.cos(ph1 - ph2) + mu1 * mu2)
+    radicant = (1 - mu1**2) * (1 - mu2**2)
+    if radicant<0:
+        radicant = 0
+    return k1 * k2 * (np.sqrt(radicant) * np.cos(ph1 - ph2) + mu1 * mu2)
 
 @njit(
     "(float64, float64, float64, float64, float64, float64)",
@@ -26,12 +29,13 @@ def _addVectors(
     ph2,
 ):
     k1pk2 = _scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
-    
-    k12 = np.sqrt(np.abs(k1**2 + 2 * k1pk2 + k2**2))
-    if np.isclose(k12, 0):
-        m12 = 0
+    radicant = k1**2 + 2 * k1pk2 + k2**2
+    if np.isclose(radicant, 0):
+        k12 = 0
+        mu12 = 0
         phi12 = 0
     else:
+        k12 = np.sqrt(radicant)
         mu12 = (k1 * mu1 + k2 * mu2) / k12
         if np.isclose(np.abs(mu12), 1):
             phi12 = 0
