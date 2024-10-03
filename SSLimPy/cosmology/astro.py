@@ -402,6 +402,7 @@ class astro_functions:
                 np.log(L_of_M.value)[:, None, :] - 0.5 * sigma_base_e**2.0,
                 sigma_base_e,
             )
+
             CFL = flognorm * dn_dM_of_M_and_z[:, None, :]
             dn_dL_of_L = np.trapz(CFL, self.M, axis=0)
 
@@ -413,6 +414,7 @@ class astro_functions:
             dn_dL_of_L = dn_dL_of_L_func(L)[:,None] * np.ones_like(z)[None, :]
 
         logL = np.log(L.to(u.Lsun).value)
+        dn_dL_of_L[dn_dL_of_L.value == 0] = 1e-99*dn_dL_of_L.unit
         logLF = np.log(dn_dL_of_L.to(u.Mpc ** (-3) * u.Lsun ** (-1)).value)
         logLF_inter = RectBivariateSpline(logL, z, logLF)
 
