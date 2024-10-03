@@ -39,6 +39,10 @@ class mass_luminosity:
             + "SSLimPy/SFR_tables/"
         )
 
+        # Units and Redshifts
+        self.Mpch = astro.Mpch
+        self.Msunh = astro.Msunh
+
     def MassPow(self, Mvec, z):
         """
         Power law L(M)/L_sun = A*(M/M_sun)^b (See Breysse et al. 2015)
