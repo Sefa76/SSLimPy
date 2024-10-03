@@ -654,7 +654,7 @@ class mass_luminosity:
         ).to(u.Msun)
 
         M_HI = M0 * (M_grid / Mmin) ** alpha * np.exp(-((Mmin / M_grid) ** 0.35))
-        M_HI[Mvec >= Mmax, :] = 0
+        M_HI[Mvec[:,None] >= Mmax] = 1e-44*M_HI.unit
 
         CLM = 6.25e-9 * u.Lsun / u.Msun  # Conversion factor btw MHI and LHI
         L = CLM * M_HI
