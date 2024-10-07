@@ -1,6 +1,6 @@
 import numpy as np
 
-from SSLimPy.utils.utils import _addVectors, _linear_interpolate, _scalarProduct
+from SSLimPy.utils.utils import addVectors, linear_interpolate, scalarProduct
 
 ######################################
 # (symetrised) mode coupling kernels #
@@ -9,7 +9,7 @@ from SSLimPy.utils.utils import _addVectors, _linear_interpolate, _scalarProduct
 
 def _F2(k1, mu1, k2, mu2, Dphi):
     """Unsymetrised F2 kernel"""
-    k1pk2 = _scalarProduct(k1, mu1, Dphi, k2, mu2, 0.0)
+    k1pk2 = scalarProduct(k1, mu1, Dphi, k2, mu2, 0.0)
     F2 = (
         5 / 7
         + 1 / 7 * (6 / k1**2 + 1 / k2**2) * k1pk2
@@ -31,24 +31,24 @@ def _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """in this combination the ir divergence can be resummed
     symetrsed in the first and second argument
     """
-    k12, mu12, ph12 = _addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     if np.isclose(k12, 0):
         return 0
     else:
-        k, mu, ph = _addVectors(k3, mu3, ph3, k12, mu12, ph12)
+        k, mu, ph = addVectors(k3, mu3, ph3, k12, mu12, ph12)
 
         F1 = 1 / 3 * 1 / k3**2
-        F2T1 = 1 / 21 * _scalarProduct(k1, mu1, ph1, k2, mu2, ph2) / (k1**2 * k2**2)
+        F2T1 = 1 / 21 * scalarProduct(k1, mu1, ph1, k2, mu2, ph2) / (k1**2 * k2**2)
         F2T2 = (
             1 / 28
             * (
-                _scalarProduct(k1, mu1, ph1, k12, mu12, ph12) / (k1**2 * k12**2)
-                + _scalarProduct(k2, mu2, ph2, k12, mu12, ph12) / (k2**2 * k12**2)
+                scalarProduct(k1, mu1, ph1, k12, mu12, ph12) / (k1**2 * k12**2)
+                + scalarProduct(k2, mu2, ph2, k12, mu12, ph12) / (k2**2 * k12**2)
             )
         )
-        F3 = 7 * k3**2 * _scalarProduct(
+        F3 = 7 * k3**2 * scalarProduct(
             k12, mu12, ph12, k, mu, ph
-        ) + k**2 * _scalarProduct(k3, mu3, ph3, k12, mu12, ph12)
+        ) + k**2 * scalarProduct(k3, mu3, ph3, k12, mu12, ph12)
         return F1 * (F2T1 + F2T2) * F3
 
 
@@ -65,19 +65,19 @@ def _F3_T2_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """in this combination the ir divergence can be resummed
     symetrsed in the second and third argument
     """
-    k23, mu23, ph23 = _addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
     if np.isclose(k23, 0):
         return 0
     else:
-        k, mu, ph = _addVectors(k1, mu1, ph1, k23, mu23, ph23)
+        k, mu, ph = addVectors(k1, mu1, ph1, k23, mu23, ph23)
 
-        F1 = 1 / 3 * 1 / k1**2 * (k**2 * _scalarProduct(k1, mu1, ph1, k23, mu23, ph23))
-        F2T1 = 1 / 21 * _scalarProduct(k2, mu2, ph2, k3, mu3, ph3) / (k2**2 * k3**2)
+        F1 = 1 / 3 * 1 / k1**2 * (k**2 * scalarProduct(k1, mu1, ph1, k23, mu23, ph23))
+        F2T1 = 1 / 21 * scalarProduct(k2, mu2, ph2, k3, mu3, ph3) / (k2**2 * k3**2)
         F2T2 = (
             1 / 28
             * (
-                _scalarProduct(k2, mu2, ph2, k23, mu23, ph23) / (k2**2 * k23**2)
-                + _scalarProduct(k3, mu3, ph3, k23, mu23, ph23) / (k3**2 * k23**2)
+                scalarProduct(k2, mu2, ph2, k23, mu23, ph23) / (k2**2 * k23**2)
+                + scalarProduct(k3, mu3, ph3, k23, mu23, ph23) / (k3**2 * k23**2)
             )
         )
         return F1 * (F2T1 + F2T2)
@@ -96,19 +96,19 @@ def _F3_T3_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Thrid term of the F3 mode coupling kernel
     symetrsed in the second and third argument
     """
-    k23, mu23, ph23 = _addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
     if np.isclose(k23, 0):
         return 0
     else:
-        k, mu, ph = _addVectors(k1, mu1, ph1, k23, mu23, ph23)
+        k, mu, ph = addVectors(k1, mu1, ph1, k23, mu23, ph23)
 
-        F1 = _scalarProduct(k1, mu1, ph1, k, mu, ph) / (18 * k1**2)
-        F2T1 = _scalarProduct(k2, mu2, ph2, k3, mu3, ph3) * k23**2 / (k2**2 * k3**2)
+        F1 = scalarProduct(k1, mu1, ph1, k, mu, ph) / (18 * k1**2)
+        F2T1 = scalarProduct(k2, mu2, ph2, k3, mu3, ph3) * k23**2 / (k2**2 * k3**2)
         F2T2 = (
             5 / 2
             * (
-                _scalarProduct(k2, mu2, ph2, k23, mu23, ph23) / k2**2
-                + _scalarProduct(k3, mu3, ph3, k23, mu23, ph23) / k3**2
+                scalarProduct(k2, mu2, ph2, k23, mu23, ph23) / k2**2
+                + scalarProduct(k3, mu3, ph3, k23, mu23, ph23) / k3**2
             )
         )
         return F1 * (F2T1 + F2T2)
@@ -144,7 +144,7 @@ def BispectrumLO(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, kgrid, Pgrid):
     # Obtain the Power Spectra
     vk = np.array([k1, k2, k3])
     # powerlaw extrapoltion
-    vlogP = _linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk))
+    vlogP = linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk))
     vP = np.exp(vlogP)
 
     # Compute over all permutations of F2 diagrams
@@ -158,17 +158,17 @@ def BispectrumLO(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, kgrid, Pgrid):
 def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid, Pgrid):
     """Compute the tree level Trispectrum"""
     # Compute coordinates of added wavevectors
-    k12, mu12, ph12 = _addVectors(k1, mu1, ph1, k2, mu2, ph2)
-    k13, mu13, ph13 = _addVectors(k1, mu1, ph1, k3, mu3, ph3)
-    k14, mu14, ph14 = _addVectors(k1, mu1, ph1, k4, mu4, ph4)
-    k23, mu23, ph23 = _addVectors(k2, mu2, ph2, k3, mu3, ph3)
-    k24, mu24, ph24 = _addVectors(k2, mu2, ph2, k4, mu4, ph4)
-    k34, mu34, ph34 = _addVectors(k3, mu3, ph3, k4, mu4, ph4)
+    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    k13, mu13, ph13 = addVectors(k1, mu1, ph1, k3, mu3, ph3)
+    k14, mu14, ph14 = addVectors(k1, mu1, ph1, k4, mu4, ph4)
+    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    k24, mu24, ph24 = addVectors(k2, mu2, ph2, k4, mu4, ph4)
+    k34, mu34, ph34 = addVectors(k3, mu3, ph3, k4, mu4, ph4)
 
     # Obtain the Power Spectra
     vk = np.array([k1, k2, k3, k4, k12, k13, k14, k23, k24, k34])
     # powerlaw extrapoltion
-    vlogP = _linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk))
+    vlogP = linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk))
     vP = np.exp(vlogP)
 
     T1 = 0

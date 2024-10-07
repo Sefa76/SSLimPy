@@ -10,7 +10,7 @@ import numpy as np
     "(float64, float64, float64, float64, float64, float64)",
     fastmath=True,
 )
-def _scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
+def scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
     radicant = (1 - mu1**2) * (1 - mu2**2)
     if radicant<0:
         radicant = 0
@@ -20,7 +20,7 @@ def _scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
     "(float64, float64, float64, float64, float64, float64)",
     fastmath=True,
 )
-def _addVectors(
+def addVectors(
     k1,
     mu1,
     ph1,
@@ -28,7 +28,7 @@ def _addVectors(
     mu2,
     ph2,
 ):
-    k1pk2 = _scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
+    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
     radicant = k1**2 + 2 * k1pk2 + k2**2
     if np.isclose(radicant, 0):
         k12 = 0
@@ -53,7 +53,7 @@ def _addVectors(
     "(float64[::1], float64[::1], float64[::1])",
     fastmath=True,
 )
-def _linear_interpolate(xi, yi, x):
+def linear_interpolate(xi, yi, x):
     xl = yi.size
     rxl = x.size
     assert xl == xi.size, "xi should be the same size as yi"
@@ -80,7 +80,7 @@ def _linear_interpolate(xi, yi, x):
     "(float64[::1], float64[::1], float64[:,:], float64[::1], float64[::1])",
     fastmath=True,
 )
-def _bilinear_interpolate(xi, yj, zij, x, y):
+def bilinear_interpolate(xi, yj, zij, x, y):
     # Check input sizes
     xl, yl = zij.shape
     rxl = x.size
@@ -124,7 +124,7 @@ def _bilinear_interpolate(xi, yj, zij, x, y):
 
 # The numba trapezoid for phi, muq, and q
 @njit("(float64[::1], float64[::1])", fastmath=True)
-def _trapezoid(y, x):
+def trapezoid(y, x):
     s = 0.0
     for i in range(x.size - 1):
         dx = x[i + 1] - x[i]
@@ -134,7 +134,7 @@ def _trapezoid(y, x):
 
 
 @njit("(float64[::1], float64[::1], float64, float64)", fastmath=True)
-def _gauss_legendre(y,x,a,b):
+def gauss_legendre(y,x,a,b):
     """Compute the 5-point Gauss legendre quadrature
     integrates the function from a to b
     """
@@ -149,7 +149,7 @@ def _gauss_legendre(y,x,a,b):
     # perform the change of interval
     jac = (b - a) / 2
     xi = (b - a) / 2 * xii + (b + a) / 2
-    fi = _linear_interpolate(x, y, xi)
+    fi = linear_interpolate(x, y, xi)
 
     wi = np.array([(322 - 13 * np.sqrt(70)) / 900,
                    (322 + 13 * np.sqrt(70)) / 900,
@@ -192,7 +192,7 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
             for iq in range(ql):
                 for imuq in range(muql):
                     for ideltaphi in range(deltaphil):
-                        kmq, mukmq, _ = _addVectors(
+                        kmq, mukmq, _ = addVectors(
                             k[ik], mu[imu], deltaphi[ideltaphi], q[iq], -mu[imuq], np.pi
                         )
                         abskminusq[iq, imuq, ideltaphi] = kmq
@@ -202,7 +202,7 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
             abskminusq = abskminusq.flatten()
             mukminusq = mukminusq.flatten()
             # interpolate the logP on mu logk and fill with new values
-            logPkminusq = _bilinear_interpolate(
+            logPkminusq = bilinear_interpolate(
                 np.log(k), mu, np.log(P), np.log(abskminusq), mukminusq
             )
             logPkminusq = np.reshape(logPkminusq, (ql, muql, deltaphil))
@@ -219,9 +219,9 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
                         * (np.abs(W[iq, imuq]) ** 2)
                         * np.exp(logPkminusq[iq, imuq, :])
                     )
-                    muq_integrand[imuq] = _trapezoid(phi_integrand, deltaphi)
-                q_integrand[iq] = _trapezoid(muq_integrand, muq)
-            Pconv[ik, imu] = _trapezoid(q_integrand * q, np.log(q))
+                    muq_integrand[imuq] = trapezoid(phi_integrand, deltaphi)
+                q_integrand[iq] = trapezoid(muq_integrand, muq)
+            Pconv[ik, imu] = trapezoid(q_integrand * q, np.log(q))
     return Pconv
 
 
