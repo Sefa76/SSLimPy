@@ -1,6 +1,26 @@
 from numba import njit, prange
 import numpy as np
 
+#####################
+# Special Functions #
+#####################
+
+
+@njit
+def legendre_0(mu):
+    return np.ones_like(mu)
+
+
+@njit
+def legendre_2(mu):
+    return 1 / 2 * (3 * np.power(mu, 2) - 1)
+
+
+@njit
+def legendre_4(mu):
+    return 1 / 8 * (35 * np.power(mu, 4) - 30 * np.power(mu, 2) + 3)
+
+
 ##################
 # Base Functions #
 ##################
@@ -12,9 +32,10 @@ import numpy as np
 )
 def scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
     radicant = (1 - mu1**2) * (1 - mu2**2)
-    if radicant<0:
+    if radicant < 0:
         radicant = 0
     return k1 * k2 * (np.sqrt(radicant) * np.cos(ph1 - ph2) + mu1 * mu2)
+
 
 @njit(
     "(float64, float64, float64, float64, float64, float64)",
@@ -134,32 +155,40 @@ def trapezoid(y, x):
 
 
 @njit("(float64[::1], float64[::1], float64, float64)", fastmath=True)
-def gauss_legendre(y,x,a,b):
+def gauss_legendre(y, x, a, b):
     """Compute the 5-point Gauss legendre quadrature
     integrates the function from a to b
     """
-    assert b > a ,"b should be larger than a"
+    assert b > a, "b should be larger than a"
 
-    xii = np.array([-1 / 3 * np.sqrt(5 + 2 * np.sqrt(10/7)),
-                    -1 / 3 * np.sqrt(5 - 2 * np.sqrt(10/7)),
-                    0,
-                    1 / 3 * np.sqrt(5 - 2 * np.sqrt(10/7)),
-                    1 / 3 * np.sqrt(5 + 2 * np.sqrt(10/7))])
+    xii = np.array(
+        [
+            -1 / 3 * np.sqrt(5 + 2 * np.sqrt(10 / 7)),
+            -1 / 3 * np.sqrt(5 - 2 * np.sqrt(10 / 7)),
+            0,
+            1 / 3 * np.sqrt(5 - 2 * np.sqrt(10 / 7)),
+            1 / 3 * np.sqrt(5 + 2 * np.sqrt(10 / 7)),
+        ]
+    )
 
     # perform the change of interval
     jac = (b - a) / 2
     xi = (b - a) / 2 * xii + (b + a) / 2
     fi = linear_interpolate(x, y, xi)
 
-    wi = np.array([(322 - 13 * np.sqrt(70)) / 900,
-                   (322 + 13 * np.sqrt(70)) / 900,
-                   128 / 225,
-                   (322 + 13 * np.sqrt(70)) / 900,
-                   (322 - 13 * np.sqrt(70)) / 900,
-                   ])
+    wi = np.array(
+        [
+            (322 - 13 * np.sqrt(70)) / 900,
+            (322 + 13 * np.sqrt(70)) / 900,
+            128 / 225,
+            (322 + 13 * np.sqrt(70)) / 900,
+            (322 - 13 * np.sqrt(70)) / 900,
+        ]
+    )
 
     # compute the integral
     return jac * np.sum(fi * wi)
+
 
 #########################
 # Specialized Functions #

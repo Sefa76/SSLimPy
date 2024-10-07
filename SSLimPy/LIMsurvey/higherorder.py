@@ -1,12 +1,15 @@
 import numpy as np
-
-from SSLimPy.utils.utils import addVectors, linear_interpolate, scalarProduct
+from SSLimPy.utils.utils import *
+from numba import njit, prange
 
 ######################################
 # (symetrised) mode coupling kernels #
 ######################################
 
 
+@njit(
+    "(float64,float64,float64,float64,float64)", fastmath=True
+)
 def _F2(k1, mu1, k2, mu2, Dphi):
     """Unsymetrised F2 kernel"""
     k1pk2 = scalarProduct(k1, mu1, Dphi, k2, mu2, 0.0)
@@ -18,6 +21,9 @@ def _F2(k1, mu1, k2, mu2, Dphi):
     return F2
 
 
+@njit(
+    "(float64,float64,float64,float64,float64)", fastmath=True
+)
 def vF2(k1, mu1, k2, mu2, Dphi):
     """Computes the F2 mode coupling kernel
     All computations are done on a vector grid
@@ -27,6 +33,13 @@ def vF2(k1, mu1, k2, mu2, Dphi):
     F2 *= 1 / 2
     return F2
 
+
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
 def _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """in this combination the ir divergence can be resummed
     symetrsed in the first and second argument
@@ -52,6 +65,12 @@ def _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
         return F1 * (F2T1 + F2T2) * F3
 
 
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
 def _F3_T1_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Fully symetrized first term in the F3"""
     F3_T1 = _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
@@ -61,6 +80,12 @@ def _F3_T1_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     return F3_T1
 
 
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
 def _F3_T2_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """in this combination the ir divergence can be resummed
     symetrsed in the second and third argument
@@ -83,6 +108,12 @@ def _F3_T2_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
         return F1 * (F2T1 + F2T2)
 
 
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
 def _F3_T2_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Fully symetrized second term in the F3"""
     F3_T2 = _F3_T2_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
@@ -92,6 +123,12 @@ def _F3_T2_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     return F3_T2
 
 
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
 def _F3_T3_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Thrid term of the F3 mode coupling kernel
     symetrsed in the second and third argument
@@ -114,6 +151,12 @@ def _F3_T3_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
         return F1 * (F2T1 + F2T2)
 
 
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
 def _F3_T3_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Fully symetrized third term in the F3"""
     F3_T3 = _F3_T3_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
@@ -123,6 +166,12 @@ def _F3_T3_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     return F3_T3
 
 
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
 def vF3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Computes the F3 mode coupling kernel
     All computations are done on a vector grid
@@ -154,7 +203,14 @@ def BispectrumLO(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, kgrid, Pgrid):
 
     return 2 * (Tp1 + Tp2 + Tp3)
 
-
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64[::1], float64[::1])",
+    fastmath=True,
+)
 def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid, Pgrid):
     """Compute the tree level Trispectrum"""
     # Compute coordinates of added wavevectors
@@ -173,7 +229,6 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
 
     T1 = 0
     # Compute over all permutations of F2 F2 diagrams
-    print(k12,k13, k14)
     if not np.isclose(k12, 0):
         T1 += (
             vP[0] * vP[3] * vP[4]
@@ -253,3 +308,79 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
         raise RuntimeError("NaN encounterd")
 
     return T1 + T2
+
+
+@njit(
+    "(float64[::1], float64[::1], float64[::1], float64[::1], float64[::1])",
+    parallel=True,
+)
+def integrate_Trispectrum(k, mu, phi, kgrid, Pgrid):
+    kl = len(k)
+    mul = len(mu)
+    phil = len(phi)
+
+    # obtain neccessary legendre functions
+    L0 = legendre_0(mu) * (2 * 0 + 1) / 2
+    L2 = legendre_2(mu) * (2 * 2 + 1) / 2
+    L4 = legendre_4(mu) * (2 * 4 + 1) / 2
+
+    pseudo_Cov = np.zeros((kl, kl, 3, 3))
+    for ik1 in prange(kl):
+        for ik2 in prange(ik1, kl):
+
+            mu1_integ0 = np.empty(mul)
+            mu1_integ2 = np.empty(mul)
+            mu1_integ4 = np.empty(mul)
+            for imu1 in range(mul):
+                mu2_integ = np.empty(mul)
+                for imu2 in range(mul):
+                    phi1_integ = np.empty(phil)
+                    for iphi1 in range(phil):
+                        phi2_integ = np.empty(phil)
+                        for iphi2 in range(phil):
+                            phi2_integ[iphi2] = TrispectrumL0(
+                                k[ik1],
+                                mu[imu1],
+                                phi[iphi1],
+                                k[ik1],
+                                -mu[imu1],
+                                phi[iphi1] + np.pi,
+                                k[ik2],
+                                mu[imu2],
+                                phi[iphi2],
+                                k[ik2],
+                                -mu[imu2],
+                                phi[iphi2] + np.pi,
+                                kgrid,
+                                Pgrid,
+                            )
+                        phi1_integ[iphi1] = gauss_legendre(
+                            phi2_integ, phi, -np.pi, np.pi
+                        )
+                    mu2_integ[imu2] = gauss_legendre(phi1_integ, phi, -np.pi, np.pi)
+                # integrate over mu2 first
+                mu1_integ0[imu1] = gauss_legendre(mu2_integ * L0, mu, -1, 1)
+                mu1_integ2[imu1] = gauss_legendre(mu2_integ * L2, mu, -1, 1)
+                mu1_integ4[imu1] = gauss_legendre(mu2_integ * L4, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 0, 0] = gauss_legendre(mu1_integ0 * L0, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 0, 1] = gauss_legendre(mu1_integ2 * L0, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 0, 2] = gauss_legendre(mu1_integ4 * L0, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 1, 0] = gauss_legendre(mu1_integ0 * L2, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 1, 1] = gauss_legendre(mu1_integ2 * L2, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 1, 2] = gauss_legendre(mu1_integ4 * L2, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 2, 0] = gauss_legendre(mu1_integ0 * L4, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 2, 1] = gauss_legendre(mu1_integ2 * L4, mu, -1, 1)
+            pseudo_Cov[ik1, ik2, 2, 2] = gauss_legendre(mu1_integ4 * L4, mu, -1, 1)
+
+            # use symetries k1 <-> k2
+            pseudo_Cov[ik2, ik1, 0, 0] = pseudo_Cov[ik1, ik2, 0, 0]
+            pseudo_Cov[ik2, ik1, 1, 0] = pseudo_Cov[ik1, ik2, 0, 1]
+            pseudo_Cov[ik2, ik1, 2, 0] = pseudo_Cov[ik1, ik2, 0, 2]
+            pseudo_Cov[ik2, ik1, 0, 1] = pseudo_Cov[ik1, ik2, 1, 0]
+            pseudo_Cov[ik2, ik1, 1, 1] = pseudo_Cov[ik1, ik2, 1, 1]
+            pseudo_Cov[ik2, ik1, 2, 1] = pseudo_Cov[ik1, ik2, 1, 2]
+            pseudo_Cov[ik2, ik1, 0, 2] = pseudo_Cov[ik1, ik2, 2, 0]
+            pseudo_Cov[ik2, ik1, 1, 2] = pseudo_Cov[ik1, ik2, 2, 1]
+            pseudo_Cov[ik2, ik1, 2, 2] = pseudo_Cov[ik1, ik2, 2, 2]            
+    
+    return pseudo_Cov

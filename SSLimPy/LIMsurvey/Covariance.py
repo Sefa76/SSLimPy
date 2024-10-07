@@ -10,7 +10,7 @@ from scipy.special import legendre
 import SSLimPy.cosmology.cosmology as cosmo
 import SSLimPy.LIMsurvey.PowerSpectra as powspe
 from SSLimPy.interface import config as cfg
-from SSLimPy.LIMsurvey.higherorder import TrispectrumL0
+from SSLimPy.LIMsurvey.higherorder import integrate_Trispectrum
 from SSLimPy.utils.utils import construct_gaussian_cov
 
 
@@ -91,44 +91,33 @@ class nonGuassianCov:
         self.astro = powerSpectrum.astro
         self.powerSpectrum = powerSpectrum
         self.k = powerSpectrum.k
+        self.mu = powerSpectrum.mu
         self.z = powerSpectrum.z
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
     def _integrate_4h(self,k1,k2):
         k = self.k
+        mu = self.mu
         z = self.z
         Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
 
-        # fill starting arguments
-        partialTS = partial(TrispectrumL0,
-                            k1=k1.to(u.Mpc**-1).value,
-                            k2=k1.to(u.Mpc**-1).value,
-                            k3=k2.to(u.Mpc**-1).value,
-                            k4=k2.to(u.Mpc**-1).value,
-                            kgrid=k.to(u.Mpc**-1).value,
-                            Pgrid=Pk.to(u.Mpc**3).value,
-                            )
+        # Downsample q, muq, and phiq
+        nq = np.uint8(len(k) / cfg.settings["downsample_conv_q"])
+        if "log" in cfg.settings["k_kind"]:
+            q = np.geomspace(k[0], k[-1], nq)
+        else:
+            q = np.linspace(k[0], k[-1], nq)
 
-        # We only consider squeezed quadrilaterals
-        def squeezedTS(x):
-            """Returns the 4point halo correlator for a squeezed quadrilateral configuration"""
-            mu1 = x[0]
-            phi1 = x[1]
-            mu2 = x[2]
-            phi2 = x[3]
-            partialTS(mu1=mu1, ph1=phi1, mu2=-mu1, ph2=phi1 + np.pi,
-                      mu3=mu2, ph3=phi2, mu4=-mu2, ph4=phi2 + np.pi)
+        nmuq = np.uint8((len(mu)) / cfg.settings["downsample_conv_muq"])
+        nmuq = nmuq + 1 - nmuq % 2
+        muq = np.linspace(-1, 1, nmuq)
+        muq = (muq[1:] + muq[:-1]) / 2.0
+        phiq = np.linspace(-np.pi, np.pi, 2 * len(muq))
 
-        muv, phiv =[-1,1] , [-np.pi, np.pi]
-        integ = vegas.Integrator([muv, phiv, muv, phiv])
-        result = integ(squeezedTS, nitn=10, neval=1000)
+        result = integrate_Trispectrum(q, muq, phiq, k, Pk)
 
-        if cfg.settings["verbose"]>2:
-            print(result.summary())
-            print('result = %s    Q = %.2f' % (result, result.Q))
-
-        I1 = self.powerSpectrum.halomoments(k1, z, bias_order=1, moment=1)
-        I2 = self.powerSpectrum.halomoments(k2, z, bias_order=1, moment=1)
+        I1 = self.powerSpectrum.halomoments(k1, z, bias_order=1, moment=1)[:, None, None]
+        I2 = self.powerSpectrum.halomoments(k2, z, bias_order=1, moment=1)[:, None, None]
 
         return result * I1**2 * I2**2
 
