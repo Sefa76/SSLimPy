@@ -133,6 +133,34 @@ def _trapezoid(y, x):
     return s * 0.5
 
 
+@njit("(float64[::1], float64[::1], float64, float64)", fastmath=True)
+def _gauss_legendre(y,x,a,b):
+    """Compute the 5-point Gauss legendre quadrature
+    integrates the function from a to b
+    """
+    assert b > a ,"b should be larger than a"
+
+    xii = np.array([-1 / 3 * np.sqrt(5 + 2 * np.sqrt(10/7)),
+                    -1 / 3 * np.sqrt(5 - 2 * np.sqrt(10/7)),
+                    0,
+                    1 / 3 * np.sqrt(5 - 2 * np.sqrt(10/7)),
+                    1 / 3 * np.sqrt(5 + 2 * np.sqrt(10/7))])
+
+    # perform the change of interval
+    jac = (b - a) / 2
+    xi = (b - a) / 2 * xii + (b + a) / 2
+    fi = _linear_interpolate(x, y, xi)
+
+    wi = np.array([(322 - 13 * np.sqrt(70)) / 900,
+                   (322 + 13 * np.sqrt(70)) / 900,
+                   128 / 225,
+                   (322 + 13 * np.sqrt(70)) / 900,
+                   (322 - 13 * np.sqrt(70)) / 900,
+                   ])
+
+    # compute the integral
+    return jac * np.sum(fi * wi)
+
 #########################
 # Specialized Functions #
 #########################

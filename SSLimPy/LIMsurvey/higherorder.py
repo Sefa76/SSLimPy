@@ -27,28 +27,6 @@ def vF2(k1, mu1, k2, mu2, Dphi):
     F2 *= 1 / 2
     return F2
 
-
-def _G2(k1, mu1, k2, mu2, Dphi):
-    """Unsymetrised G2 kernel"""
-    k1pk2 = _scalarProduct(k1, mu1, Dphi, k2, mu2, 0.0)
-    G2 = (
-        3 / 7
-        + 1 / 7 * (5 / k1**2 + 2 / k2**2) * k1pk2
-        + 4 / 7 * k1pk2**2 / (k1 * k2) ** 2
-    )
-    return G2
-
-
-def vG2(k1, mu1, k2, mu2, Dphi):
-    """Computes the G2 mode coupling kernel
-    All computations are done on a vector grid
-    """
-    G2 = _G2(k1, mu1, k2, mu2, Dphi)
-    G2 += _G2(k2, mu2, k1, mu1, -Dphi)
-    G2 *= 1 / 2
-    return G2
-
-
 def _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """in this combination the ir divergence can be resummed
     symetrsed in the first and second argument
@@ -195,6 +173,7 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
 
     T1 = 0
     # Compute over all permutations of F2 F2 diagrams
+    print(k12,k13, k14)
     if not np.isclose(k12, 0):
         T1 += (
             vP[0] * vP[3] * vP[4]
@@ -267,5 +246,10 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
     T2 += vP[2] * vP[3] * vP[0] * vF3(k3, mu3, ph3, k4, mu4, ph4, k1, mu1, ph1)
     T2 += vP[3] * vP[0] * vP[1] * vF3(k4, mu4, ph4, k1, mu1, ph1, k2, mu2, ph2)
     T2 *= 6
+
+    # print(T1, T2)
+    if np.isnan(T1) or np.isnan(T2):
+        print(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid, Pgrid)
+        raise RuntimeError("NaN encounterd")
 
     return T1 + T2
