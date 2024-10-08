@@ -72,6 +72,7 @@ def init(
     settings.setdefault("nmu", 128)
     settings.setdefault("downsample_conv_q",1)
     settings.setdefault("downsample_conv_muq",8)
+    settings.setdefault("nnodes_legendre", 9)
 
     # Pk specifications
     settings.setdefault("sigma_scatter",0)

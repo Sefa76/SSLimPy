@@ -314,10 +314,13 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
     "(float64[::1], float64[::1], float64[::1], float64[::1], float64[::1])",
     parallel=True,
 )
-def integrate_Trispectrum(k, mu, phi, kgrid, Pgrid):
+def integrate_Trispectrum(k, xi, w, kgrid, Pgrid):
+    assert len(xi) == len(w) , "Number of integration points must match number of weights"
+    nnodes = len(xi)
     kl = len(k)
-    mul = len(mu)
-    phil = len(phi)
+
+    mu = xi
+    phi = np.pi * xi
 
     # obtain neccessary legendre functions
     L0 = legendre_0(mu) * (2 * 0 + 1) / 2
@@ -328,16 +331,16 @@ def integrate_Trispectrum(k, mu, phi, kgrid, Pgrid):
     for ik1 in prange(kl):
         for ik2 in prange(ik1, kl):
 
-            mu1_integ0 = np.empty(mul)
-            mu1_integ2 = np.empty(mul)
-            mu1_integ4 = np.empty(mul)
-            for imu1 in range(mul):
-                mu2_integ = np.empty(mul)
-                for imu2 in range(mul):
-                    phi1_integ = np.empty(phil)
-                    for iphi1 in range(phil):
-                        phi2_integ = np.empty(phil)
-                        for iphi2 in range(phil):
+            mu1_integ0 = np.empty(nnodes)
+            mu1_integ2 = np.empty(nnodes)
+            mu1_integ4 = np.empty(nnodes)
+            for imu1 in range(nnodes):
+                mu2_integ = np.empty(nnodes)
+                for imu2 in range(nnodes):
+                    phi1_integ = np.empty(nnodes)
+                    for iphi1 in range(nnodes):
+                        phi2_integ = np.empty(nnodes)
+                        for iphi2 in range(nnodes):
                             phi2_integ[iphi2] = TrispectrumL0(
                                 k[ik1],
                                 mu[imu1],
@@ -353,24 +356,22 @@ def integrate_Trispectrum(k, mu, phi, kgrid, Pgrid):
                                 phi[iphi2] + np.pi,
                                 kgrid,
                                 Pgrid,
-                            )
-                        phi1_integ[iphi1] = gauss_legendre(
-                            phi2_integ, phi, -np.pi, np.pi
-                        )
-                    mu2_integ[imu2] = gauss_legendre(phi1_integ, phi, -np.pi, np.pi)
+                            ) / (4 * np.pi)**2
+                        phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
+                    mu2_integ[imu2] = np.sum(phi1_integ * w * np.pi)
                 # integrate over mu2 first
-                mu1_integ0[imu1] = gauss_legendre(mu2_integ * L0, mu, -1, 1)
-                mu1_integ2[imu1] = gauss_legendre(mu2_integ * L2, mu, -1, 1)
-                mu1_integ4[imu1] = gauss_legendre(mu2_integ * L4, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 0, 0] = gauss_legendre(mu1_integ0 * L0, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 0, 1] = gauss_legendre(mu1_integ2 * L0, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 0, 2] = gauss_legendre(mu1_integ4 * L0, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 1, 0] = gauss_legendre(mu1_integ0 * L2, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 1, 1] = gauss_legendre(mu1_integ2 * L2, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 1, 2] = gauss_legendre(mu1_integ4 * L2, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 2, 0] = gauss_legendre(mu1_integ0 * L4, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 2, 1] = gauss_legendre(mu1_integ2 * L4, mu, -1, 1)
-            pseudo_Cov[ik1, ik2, 2, 2] = gauss_legendre(mu1_integ4 * L4, mu, -1, 1)
+                mu1_integ0[imu1] = np.sum(mu2_integ * L0 * w)
+                mu1_integ2[imu1] = np.sum(mu2_integ * L2 * w)
+                mu1_integ4[imu1] = np.sum(mu2_integ * L4 * w)
+            pseudo_Cov[ik1, ik2, 0, 0] = np.sum(mu1_integ0 * L0 * w)
+            pseudo_Cov[ik1, ik2, 0, 1] = np.sum(mu1_integ2 * L0 * w)
+            pseudo_Cov[ik1, ik2, 0, 2] = np.sum(mu1_integ4 * L0 * w)
+            pseudo_Cov[ik1, ik2, 1, 0] = np.sum(mu1_integ0 * L2 * w)
+            pseudo_Cov[ik1, ik2, 1, 1] = np.sum(mu1_integ2 * L2 * w)
+            pseudo_Cov[ik1, ik2, 1, 2] = np.sum(mu1_integ4 * L2 * w)
+            pseudo_Cov[ik1, ik2, 2, 0] = np.sum(mu1_integ0 * L4 * w)
+            pseudo_Cov[ik1, ik2, 2, 1] = np.sum(mu1_integ2 * L4 * w)
+            pseudo_Cov[ik1, ik2, 2, 2] = np.sum(mu1_integ4 * L4 * w)
 
             # use symetries k1 <-> k2
             pseudo_Cov[ik2, ik1, 0, 0] = pseudo_Cov[ik1, ik2, 0, 0]

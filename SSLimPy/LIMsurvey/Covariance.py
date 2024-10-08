@@ -5,7 +5,7 @@ import vegas
 from astropy import constants as c
 from astropy import units as u
 from scipy.integrate import trapezoid
-from scipy.special import legendre
+from scipy.special import legendre, roots_legendre
 
 import SSLimPy.cosmology.cosmology as cosmo
 import SSLimPy.LIMsurvey.PowerSpectra as powspe
@@ -95,9 +95,8 @@ class nonGuassianCov:
         self.z = powerSpectrum.z
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
-    def _integrate_4h(self,k1,k2):
+    def _integrate_4h(self):
         k = self.k
-        mu = self.mu
         z = self.z
         Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
 
@@ -108,18 +107,13 @@ class nonGuassianCov:
         else:
             q = np.linspace(k[0], k[-1], nq)
 
-        nmuq = np.uint8((len(mu)) / cfg.settings["downsample_conv_muq"])
-        nmuq = nmuq + 1 - nmuq % 2
-        muq = np.linspace(-1, 1, nmuq)
-        muq = (muq[1:] + muq[:-1]) / 2.0
-        phiq = np.linspace(-np.pi, np.pi, 2 * len(muq))
+        xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
+        result = integrate_Trispectrum(q, xi, w, k, Pk) * Pk.unit**2
+        
+        Il = [self.powerSpectrum.halomoments(ki, z, bias_order=1, moment=1) for ki in k]
+        I = np.array([Ii.value for Ii in Il]) * Il[0].unit
 
-        result = integrate_Trispectrum(q, muq, phiq, k, Pk)
-
-        I1 = self.powerSpectrum.halomoments(k1, z, bias_order=1, moment=1)[:, None, None]
-        I2 = self.powerSpectrum.halomoments(k2, z, bias_order=1, moment=1)[:, None, None]
-
-        return result * I1**2 * I2**2
+        return result * I[:, None, None, None] * I[None, :, None, None]
 
     def _integrate_3h(self,k1,k2):
         k = self.k
