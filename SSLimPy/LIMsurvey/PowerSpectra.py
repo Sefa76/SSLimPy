@@ -167,13 +167,14 @@ class PowerSpectra:
                   np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
         return np.squeeze(u_km/gc)
 
-    def higher_halomoments(self, z, moment = 1, bias_order = 0, kbias=None, *args):
+    def higher_halomoments(self, z, *args, moment=1, bias_order=0, kbias=None):
         """Computes higher order of the halo bias taking into account
         Line broadening and skale dependent bias
 
         pass every k and then every mu in the same order in args
         """
         M = self.M
+        kbias = np.atleast_1d(kbias)
         z = np.atleast_1d(z)
 
         if len(args) % moment != 0:
@@ -181,13 +182,13 @@ class PowerSpectra:
         else:
             kd = [args[ik] for ik in range(moment)]
 
-        # Independent of k 
+        # Independent of k
         dn_dM = np.reshape(self.astro.halomassfunction(M,z),(*M.shape,*z.shape))
         L_of_M = np.reshape(self.astro.massluminosityfunction(M,z),(*M.shape,*z.shape))
 
         # Dependent only on the external momenta
         if bias_order == 0:
-            bias = np.ones((*k.shape, *M.shape, *z.shape))
+            bias = np.ones((*kbias.shape, *M.shape, *z.shape))
         elif bias_order == 1:
             bias = self.astro.restore_shape(self.astro.halobias(M , z, k=kbias), kbias, M, z)
         else:
@@ -198,30 +199,42 @@ class PowerSpectra:
         for ik in range(moment):
             k = kd[ik]
             U = np.reshape(self.ft_NFW(k, M, z),(*k.shape, *M.shape, *z.shape))
-            U = np.expand_dims(U, (*range(i), *range(i+1,moment))
+            U = np.expand_dims(U,(*range(ik), *range(ik + 1, moment)))
+            U = np.expand_dims(U,(*range(moment,2*moment+1),))
             normhaloprofile.append(U)
 
         # Dependent on k and mu
-        Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
+        Fv = np.ones((moment,))
         if self.astro.astroparams["v_of_M"]:
-            Fv = np.reshape(self.astro.broadening_FT(k, mu, M, z),
-                            (*k.shape, *mu.shape, *M.shape, *z.shape))
+            Fv = []
+            for ik in range(moment):
+                k = kd[ik]
+                mu = args[moment + ik]
+                F = np.reshape(self.astro.broadening_FT(k, mu, M, z),
+                               (*k.shape, *mu.shape, *M.shape, *z.shape))
+                F = np.expand_dim(F,(*range(ik),
+                                     *range(ik + 1, moment)),
+                                     )
+                F = np.expand_dim(F,(*range(moment, moment + ik),
+                                     *range(moment + ik + 1, 2 * moment)),
+                                     )
+                F = np.expand_dims(F, 2* moment)
+                Fv.append(F)
 
-
+        # indicies : k1, ..., kn, mu1, ..., mun, kext, M, z
         integrnd = (
-            dn_dM[None, None,:,:]
-            * np.power(
-                L_of_M[None, None,:,:]
-                * normhaloprofile[:, None,:,:]
-                * Fv,
-                moment,
-            )
-            * bias[:,None,:,:]
+            np.expand_dims(dn_dM, (*range(2*moment+1),))
+            * np.power(np.expand_dims(L_of_M, (*range(2 * moment + 1),)), moment)
+            * np.expand_dims(bias, (*range(2*moment),))
         )
-        hm_corr = np.trapz(integrnd,M,axis=2)
+        for i in range(moment):
+            integrnd = integrnd * Fv[i] * normhaloprofile[i]
+
+        hm_corr = np.trapz(integrnd,M,axis=-2)
         return np.squeeze(hm_corr)
 
-def simple_halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, bias_order:int = 0):
+    # TODO: Needs to be removed/ fully replaced by the `higher_halomoments`
+    def halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, bias_order:int = 0):
         """
         Computes the Luminosity weight halo profile
         In ML models this is equivalent to the n-halo-self-correlation terms
@@ -281,7 +294,7 @@ def simple_halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, b
             # scale independent f
             f_scaleindependent = np.atleast_1d(cosmo.growth_rate(1e-4/u.Mpc,z))
             sv2 = np.power(sigmav[None,:],2) * (
-                1 
+                1
                 - np.power(mu,2)[:,None]
                 + np.power(mu,2)[:,None]
                 * (1 + f_scaleindependent[None,:])**2
@@ -556,7 +569,7 @@ def simple_halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, b
         Vsurvey = simpson(
             q[:,None]**3
             * simpson(
-                np.abs(Wsurvey)**2 / (2 * np.pi)**2, 
+                np.abs(Wsurvey)**2 / (2 * np.pi)**2,
                 muq,
                 axis=1
             ),
@@ -604,7 +617,7 @@ def simple_halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, b
                 Pobs[:, :, iz].value,
                 Wsurvey[:, :, iz].value,
             )
-        
+
         self.Pk_true = copy(Pobs)
         self.Pk_Obs = Pconv *Pobs.unit / Vsurvey.value
         return self.Pk_Obs
