@@ -167,7 +167,61 @@ class PowerSpectra:
                   np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
         return np.squeeze(u_km/gc)
 
-    def halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, bias_order:int = 0):
+    def higher_halomoments(self, z, moment = 1, bias_order = 0, kbias=None, *args):
+        """Computes higher order of the halo bias taking into account
+        Line broadening and skale dependent bias
+
+        pass every k and then every mu in the same order in args
+        """
+        M = self.M
+        z = np.atleast_1d(z)
+
+        if len(args) % moment != 0:
+            raise ValueError("You have to pass wave-vectors for every moment")
+        else:
+            kd = [args[ik] for ik in range(moment)]
+
+        # Independent of k 
+        dn_dM = np.reshape(self.astro.halomassfunction(M,z),(*M.shape,*z.shape))
+        L_of_M = np.reshape(self.astro.massluminosityfunction(M,z),(*M.shape,*z.shape))
+
+        # Dependent only on the external momenta
+        if bias_order == 0:
+            bias = np.ones((*k.shape, *M.shape, *z.shape))
+        elif bias_order == 1:
+            bias = self.astro.restore_shape(self.astro.halobias(M , z, k=kbias), kbias, M, z)
+        else:
+            raise ValueError("Order of bias asked for does is not implemented: {}".format(bias_order))
+
+        # Dependent on k
+        normhaloprofile = []
+        for ik in range(moment):
+            k = kd[ik]
+            U = np.reshape(self.ft_NFW(k, M, z),(*k.shape, *M.shape, *z.shape))
+            U = np.expand_dims(U, (*range(i), *range(i+1,moment))
+            normhaloprofile.append(U)
+
+        # Dependent on k and mu
+        Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
+        if self.astro.astroparams["v_of_M"]:
+            Fv = np.reshape(self.astro.broadening_FT(k, mu, M, z),
+                            (*k.shape, *mu.shape, *M.shape, *z.shape))
+
+
+        integrnd = (
+            dn_dM[None, None,:,:]
+            * np.power(
+                L_of_M[None, None,:,:]
+                * normhaloprofile[:, None,:,:]
+                * Fv,
+                moment,
+            )
+            * bias[:,None,:,:]
+        )
+        hm_corr = np.trapz(integrnd,M,axis=2)
+        return np.squeeze(hm_corr)
+
+def simple_halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, bias_order:int = 0):
         """
         Computes the Luminosity weight halo profile
         In ML models this is equivalent to the n-halo-self-correlation terms
