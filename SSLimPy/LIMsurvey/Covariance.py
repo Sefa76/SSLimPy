@@ -10,7 +10,7 @@ from scipy.special import legendre, roots_legendre
 import SSLimPy.cosmology.cosmology as cosmo
 import SSLimPy.LIMsurvey.PowerSpectra as powspe
 from SSLimPy.interface import config as cfg
-from SSLimPy.LIMsurvey.higherorder import integrate_Trispectrum
+from SSLimPy.LIMsurvey.higherorder import _integrate_4h
 from SSLimPy.utils.utils import construct_gaussian_cov
 
 
@@ -95,25 +95,19 @@ class nonGuassianCov:
         self.z = powerSpectrum.z
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
-    def _integrate_4h(self):
+    def integrate_4h(self):
         k = self.k
         z = self.z
         Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
 
-        # Downsample q, muq, and phiq
-        nq = np.uint8(len(k) / cfg.settings["downsample_conv_q"])
-        if "log" in cfg.settings["k_kind"]:
-            q = np.geomspace(k[0], k[-1], nq)
-        else:
-            q = np.linspace(k[0], k[-1], nq)
-
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
-        result = integrate_Trispectrum(q, xi, w, k, Pk) * Pk.unit**2
-        
-        Il = [self.powerSpectrum.halomoments(ki, z, bias_order=1, moment=1) for ki in k]
-        I = np.array([Ii.value for Ii in Il]) * Il[0].unit
 
-        return result * I[:, None, None, None] * I[None, :, None, None]
+        Il = [self.powerSpectrum.halomoments(ki, z, bias_order=1, moment=1) for ki in k]
+        I1 = np.array([Ii.value for Ii in Il])
+
+        result = _integrate_4h(k, xi, w, Pk, I1)
+
+        return result
 
     def _integrate_3h(self,k1,k2):
         k = self.k

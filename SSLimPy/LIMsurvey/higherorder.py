@@ -7,9 +7,7 @@ from numba import njit, prange
 ######################################
 
 
-@njit(
-    "(float64,float64,float64,float64,float64)", fastmath=True
-)
+@njit("(float64,float64,float64,float64,float64)", fastmath=True)
 def _F2(k1, mu1, k2, mu2, Dphi):
     """Unsymetrised F2 kernel"""
     k1pk2 = scalarProduct(k1, mu1, Dphi, k2, mu2, 0.0)
@@ -21,9 +19,7 @@ def _F2(k1, mu1, k2, mu2, Dphi):
     return F2
 
 
-@njit(
-    "(float64,float64,float64,float64,float64)", fastmath=True
-)
+@njit("(float64,float64,float64,float64,float64)", fastmath=True)
 def vF2(k1, mu1, k2, mu2, Dphi):
     """Computes the F2 mode coupling kernel
     All computations are done on a vector grid
@@ -53,7 +49,8 @@ def _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
         F1 = 1 / 3 * 1 / k3**2
         F2T1 = 1 / 21 * scalarProduct(k1, mu1, ph1, k2, mu2, ph2) / (k1**2 * k2**2)
         F2T2 = (
-            1 / 28
+            1
+            / 28
             * (
                 scalarProduct(k1, mu1, ph1, k12, mu12, ph12) / (k1**2 * k12**2)
                 + scalarProduct(k2, mu2, ph2, k12, mu12, ph12) / (k2**2 * k12**2)
@@ -99,7 +96,8 @@ def _F3_T2_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
         F1 = 1 / 3 * 1 / k1**2 * (k**2 * scalarProduct(k1, mu1, ph1, k23, mu23, ph23))
         F2T1 = 1 / 21 * scalarProduct(k2, mu2, ph2, k3, mu3, ph3) / (k2**2 * k3**2)
         F2T2 = (
-            1 / 28
+            1
+            / 28
             * (
                 scalarProduct(k2, mu2, ph2, k23, mu23, ph23) / (k2**2 * k23**2)
                 + scalarProduct(k3, mu3, ph3, k23, mu23, ph23) / (k3**2 * k23**2)
@@ -142,7 +140,8 @@ def _F3_T3_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
         F1 = scalarProduct(k1, mu1, ph1, k, mu, ph) / (18 * k1**2)
         F2T1 = scalarProduct(k2, mu2, ph2, k3, mu3, ph3) * k23**2 / (k2**2 * k3**2)
         F2T2 = (
-            5 / 2
+            5
+            / 2
             * (
                 scalarProduct(k2, mu2, ph2, k23, mu23, ph23) / k2**2
                 + scalarProduct(k3, mu3, ph3, k23, mu23, ph23) / k3**2
@@ -203,6 +202,7 @@ def BispectrumLO(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, kgrid, Pgrid):
 
     return 2 * (Tp1 + Tp2 + Tp3)
 
+
 @njit(
     "(float64,float64,float64,"
     + "float64,float64,float64,"
@@ -231,64 +231,88 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
     # Compute over all permutations of F2 F2 diagrams
     if not np.isclose(k12, 0):
         T1 += (
-            vP[0] * vP[3] * vP[4]
+            vP[0]
+            * vP[3]
+            * vP[4]
             * vF2(k12, mu12, k1, -mu1, ph12 - ph1 - np.pi)
             * vF2(k34, mu34, k4, -mu4, ph34 - ph4 - np.pi)
         )
         T1 += (
-            vP[1] * vP[3] * vP[4]
+            vP[1]
+            * vP[3]
+            * vP[4]
             * vF2(k12, mu12, k2, -mu2, ph12 - ph2 - np.pi)
             * vF2(k34, mu34, k4, -mu4, ph34 - ph4 - np.pi)
         )
         T1 += (
-            vP[2] * vP[1] * vP[9]
+            vP[2]
+            * vP[1]
+            * vP[9]
             * vF2(k34, mu34, k3, -mu3, ph34 - ph3 - np.pi)
             * vF2(k12, mu12, k2, -mu2, ph12 - ph2 - np.pi)
         )
         T1 += (
-            vP[3] * vP[1] * vP[9]
+            vP[3]
+            * vP[1]
+            * vP[9]
             * vF2(k34, mu34, k4, -mu4, ph34 - ph4 - np.pi)
             * vF2(k12, mu12, k2, -mu2, ph12 - ph2 - np.pi)
         )
     if not np.isclose(k13, 0):
         T1 += (
-            vP[0] * vP[1] * vP[5]
+            vP[0]
+            * vP[1]
+            * vP[5]
             * vF2(k13, mu13, k1, -mu1, ph13 - ph1 - np.pi)
             * vF2(k24, mu24, k2, -mu2, ph24 - ph2 - np.pi)
         )
         T1 += (
-            vP[2] * vP[3] * vP[5]
+            vP[2]
+            * vP[3]
+            * vP[5]
             * vF2(k13, mu13, k3, -mu3, ph13 - ph3 - np.pi)
             * vF2(k24, mu24, k4, -mu4, ph24 - ph4 - np.pi)
         )
         T1 += (
-            vP[1] * vP[2] * vP[8]
+            vP[1]
+            * vP[2]
+            * vP[8]
             * vF2(k24, mu24, k2, -mu2, ph24 - ph2 - np.pi)
             * vF2(k13, mu13, k3, -mu3, ph13 - ph3 - np.pi)
         )
         T1 += (
-            vP[3] * vP[0] * vP[8]
+            vP[3]
+            * vP[0]
+            * vP[8]
             * vF2(k24, mu24, k4, -mu4, ph24 - ph4 - np.pi)
             * vF2(k13, mu13, k1, -mu1, ph13 - ph1 - np.pi)
         )
     if not np.isclose(k14, 0):
         T1 += (
-            vP[0] * vP[2] * vP[6]
+            vP[0]
+            * vP[2]
+            * vP[6]
             * vF2(k14, mu14, k1, -mu1, ph14 - ph1 - np.pi)
             * vF2(k23, mu23, k3, -mu3, ph23 - ph3 - np.pi)
         )
         T1 += (
-            vP[3] * vP[2] * vP[6]
+            vP[3]
+            * vP[2]
+            * vP[6]
             * vF2(k14, mu14, k4, -mu4, ph14 - ph4 - np.pi)
             * vF2(k23, mu23, k3, -mu3, ph23 - ph3 - np.pi)
         )
         T1 += (
-            vP[1] * vP[0] * vP[7]
+            vP[1]
+            * vP[0]
+            * vP[7]
             * vF2(k23, mu23, k2, -mu2, ph23 - ph2 - np.pi)
             * vF2(k14, mu14, k1, -mu1, ph14 - ph1 - np.pi)
         )
         T1 += (
-            vP[2] * vP[0] * vP[7]
+            vP[2]
+            * vP[0]
+            * vP[7]
             * vF2(k23, mu23, k3, -mu3, ph23 - ph3 - np.pi)
             * vF2(k14, mu14, k1, -mu1, ph14 - ph1 - np.pi)
         )
@@ -314,8 +338,8 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
     "(float64[::1], float64[::1], float64[::1], float64[::1], float64[::1])",
     parallel=True,
 )
-def integrate_Trispectrum(k, xi, w, kgrid, Pgrid):
-    assert len(xi) == len(w) , "Number of integration points must match number of weights"
+def _integrate_4h(k, xi, w, Pgrid, I1grid):
+    assert len(xi) == len(w), "Number of integration points must match number of weights"
     nnodes = len(xi)
     kl = len(k)
 
@@ -341,22 +365,27 @@ def integrate_Trispectrum(k, xi, w, kgrid, Pgrid):
                     for iphi1 in range(nnodes):
                         phi2_integ = np.empty(nnodes)
                         for iphi2 in range(nnodes):
-                            phi2_integ[iphi2] = TrispectrumL0(
-                                k[ik1],
-                                mu[imu1],
-                                phi[iphi1],
-                                k[ik1],
-                                -mu[imu1],
-                                phi[iphi1] + np.pi,
-                                k[ik2],
-                                mu[imu2],
-                                phi[iphi2],
-                                k[ik2],
-                                -mu[imu2],
-                                phi[iphi2] + np.pi,
-                                kgrid,
-                                Pgrid,
-                            ) / (4 * np.pi)**2
+                            phi2_integ[iphi2] = (
+                                TrispectrumL0(
+                                    k[ik1],
+                                    mu[imu1],
+                                    phi[iphi1],
+                                    k[ik1],
+                                    -mu[imu1],
+                                    phi[iphi1] + np.pi,
+                                    k[ik2],
+                                    mu[imu2],
+                                    phi[iphi2],
+                                    k[ik2],
+                                    -mu[imu2],
+                                    phi[iphi2] + np.pi,
+                                    k,
+                                    Pgrid,
+                                )
+                                / (4 * np.pi) ** 2
+                                * I1grid[ik1] ** 2
+                                * I1grid[ik2] ** 2
+                            )
                         phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
                     mu2_integ[imu2] = np.sum(phi1_integ * w * np.pi)
                 # integrate over mu2 first
@@ -382,6 +411,6 @@ def integrate_Trispectrum(k, xi, w, kgrid, Pgrid):
             pseudo_Cov[ik2, ik1, 2, 1] = pseudo_Cov[ik1, ik2, 1, 2]
             pseudo_Cov[ik2, ik1, 0, 2] = pseudo_Cov[ik1, ik2, 2, 0]
             pseudo_Cov[ik2, ik1, 1, 2] = pseudo_Cov[ik1, ik2, 2, 1]
-            pseudo_Cov[ik2, ik1, 2, 2] = pseudo_Cov[ik1, ik2, 2, 2]            
-    
+            pseudo_Cov[ik2, ik1, 2, 2] = pseudo_Cov[ik1, ik2, 2, 2]
+
     return pseudo_Cov
