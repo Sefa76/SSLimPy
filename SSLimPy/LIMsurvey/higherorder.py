@@ -202,11 +202,15 @@ def BispectrumLO(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, kgrid, Pgrid):
     vP = np.exp(vlogP)
 
     # Compute over all permutations of F2 diagrams
-    Tp1 = vP[0] * vP[1] * vF2(k1, mu1, k2, mu2, ph1 - ph2)
-    Tp2 = vP[0] * vP[2] * vF2(k1, mu1, k3, mu3, ph1 - ph3)
-    Tp3 = vP[1] * vP[3] * vF2(k2, mu2, k3, mu3, ph2 - ph3)
+    T = 0
+    if not np.isclose(k1, 0) and not np.isclose(k2, 0):
+        T += vP[0] * vP[1] * vF2(k1, mu1, k2, mu2, ph1 - ph2)
+    if not np.isclose(k1, 0) and not np.isclose(k3, 0):
+        T += vP[0] * vP[2] * vF2(k1, mu1, k3, mu3, ph1 - ph3)
+    if not np.isclose(k2, 0) and not np.isclose(k3, 0):
+        T += vP[1] * vP[2] * vF2(k2, mu2, k3, mu3, ph2 - ph3)
 
-    return 2 * (Tp1 + Tp2 + Tp3)
+    return 2 * T
 
 
 @njit(
