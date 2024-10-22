@@ -180,7 +180,7 @@ class PowerSpectra:
         if len(args) % moment != 0:
             raise ValueError("You have to pass wave-vectors for every moment")
         else:
-            kd = [args[ik] for ik in range(moment)]
+            kd = [np.atleast_1d(args[ik]) for ik in range(moment)]
 
         # Independent of k
         dn_dM = np.reshape(self.astro.halomassfunction(M,z),(*M.shape,*z.shape))
@@ -209,7 +209,7 @@ class PowerSpectra:
             Fv = []
             for ik in range(moment):
                 k = kd[ik]
-                mu = args[moment + ik]
+                mu = np.atleast_1d(args[moment + ik])
                 F = np.reshape(self.astro.broadening_FT(k, mu, M, z),
                                (*k.shape, *mu.shape, *M.shape, *z.shape))
                 F = np.expand_dim(F,(*range(ik),
