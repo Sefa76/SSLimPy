@@ -1,6 +1,7 @@
 import numpy as np
-from SSLimPy.utils.utils import *
 from numba import njit, prange
+
+from SSLimPy.utils.utils import *
 
 ######################################
 # (symetrised) mode coupling kernels #
@@ -350,7 +351,7 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
 
 
 @njit(
-    "(float64[::1], float64[::1], float64[::1], float64[::1], float64[::1], float64[::1])",
+        "(float64[::1], float64[::1], float64[::1], float64[::1], float64[:,:], float64[:,:,:,:])",
     parallel=True,
 )
 def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
@@ -380,27 +381,63 @@ def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
                     for iphi1 in range(nnodes):
                         phi2_integ = np.empty(nnodes)
                         for iphi2 in range(nnodes):
-                            phi2_integ[iphi2] = (
-                                TrispectrumL0(
-                                    k[ik1],
-                                    mu[imu1],
-                                    phi[iphi1],
-                                    k[ik1],
-                                    -mu[imu1],
-                                    phi[iphi1] + np.pi,
-                                    k[ik2],
-                                    mu[imu2],
-                                    phi[iphi2],
-                                    k[ik2],
-                                    -mu[imu2],
-                                    phi[iphi2] + np.pi,
-                                    k,
-                                    Pgrid,
-                                )
-                                / (4 * np.pi) ** 2
-                                * I1grid[ik1] ** 2
-                                * I1grid[ik2] ** 2
-                            )
+                            # 1 2
+                            # All terms vanish
+
+                            # 1 3
+                            kex, muex, phex = addVectors(
+                                    k[ik1], mu[imu1], phi[iphi1],
+                                    k[ik2], mu[imu2], phi[iphi2]
+                                    )
+                            B = BispectrumLO(
+                                    kex, muex, phex,
+                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
+                                    k[ik2], -mu[imu2], phi[iphi2] + np.pi,
+                                    k, Pgrid)
+                            I1_1 = I1grid[ik1, imu1] # Symetric in mu -> -mu
+                            I1_2 = I1grid[ik2, imu2]
+                            I2_3 = I2grid[ik1, ik2, imu1, imu2]
+                            phi2_integ[iphi2] = B * I1_1 * I1_2 * I2_3
+
+                            # 1 4
+                            kex, muex, phex = addVectors(
+                                    k[ik1], mu[imu1], phi[iphi1],
+                                    k[ik2], -mu[imu2], phi[iphi2] + np.pi
+                                    )
+                            B = BispectrumLO(
+                                    kex, muex, phex,
+                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
+                                    k[ik2], mu[imu2], phi[iphi2],
+                                    k, Pgrid)
+                            phi2_integ[iphi2] += B * I1_1 * I1_2 * I2_3
+
+                            # 2 3
+                            kex, muex, phex = addVectors(
+                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
+                                    k[ik2], mu[imu2], phi[iphi2] 
+                                    )
+                            B = BispectrumLO(
+                                    kex, muex, phex,
+                                    k[ik1], mu[imu1], phi[iphi1],
+                                    k[ik2], -mu[imu2], phi[iphi2] + np.pi,
+                                    k, Pgrid)
+                            phi2_integ[iphi2] += B * I1_1 * I1_2 * I2_3
+
+                            # 2 4
+                            kex, muex, phex = addVectors(
+                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
+                                    k[ik2], -mu[imu2], phi[iphi2] + np.pi
+                                    )
+                            B = BispectrumLO(
+                                    kex, muex, phex,
+                                    k[ik1], mu[imu1], phi[iphi1],
+                                    k[ik2], mu[imu2], phi[iphi2],
+                                    k, Pgrid)
+                            phi2_integ[iphi2] += B * I1_1 * I1_2 * I2_3
+
+                            # 3 4
+                            # All terms vanish
+
                         phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
                     mu2_integ[imu2] = np.sum(phi1_integ * w * np.pi)
                 # integrate over mu2 first
@@ -432,7 +469,7 @@ def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
 
 
 @njit(
-    "(float64[::1], float64[::1], float64[::1], float64[::1], float64[::1])",
+    "(float64[::1], float64[::1], float64[::1], float64[::1], float64[:,:])",
     parallel=True,
 )
 def _integrate_4h(k, xi, w, Pgrid, I1grid):
@@ -480,8 +517,8 @@ def _integrate_4h(k, xi, w, Pgrid, I1grid):
                                     Pgrid,
                                 )
                                 / (4 * np.pi) ** 2
-                                * I1grid[ik1] ** 2
-                                * I1grid[ik2] ** 2
+                                * I1grid[ik1, imu1] ** 2 # Symetric in mu -> -mu
+                                * I1grid[ik2, imu2] ** 2
                             )
                         phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
                     mu2_integ[imu2] = np.sum(phi1_integ * w * np.pi)

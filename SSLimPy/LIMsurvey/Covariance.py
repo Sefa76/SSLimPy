@@ -1,3 +1,4 @@
+import itertools
 from functools import partial
 
 import numpy as np
@@ -10,7 +11,7 @@ from scipy.special import legendre, roots_legendre
 import SSLimPy.cosmology.cosmology as cosmo
 import SSLimPy.LIMsurvey.PowerSpectra as powspe
 from SSLimPy.interface import config as cfg
-from SSLimPy.LIMsurvey.higherorder import _integrate_4h
+from SSLimPy.LIMsurvey.higherorder import _integrate_3h, _integrate_4h
 from SSLimPy.utils.utils import construct_gaussian_cov
 
 
@@ -96,24 +97,64 @@ class nonGuassianCov:
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
     def integrate_4h(self):
-        k = self.k
+        k  = self.k
         z = self.z
         Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
 
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
+        mu = np.pi * xi
 
-        Il = [self.powerSpectrum.halomoments(ki, z, bias_order=1, moment=1) for ki in k]
-        I1 = np.array([Ii.value for Ii in Il])
+        #########################
+        # Precompute Halo terms #
+        #########################
+        kl = len(k)
+        wl = len(w)
+
+        # compute I1 for v_of_M models ( We cant compute fNL models)
+        indexmenge = range(wl)
+        I1 = np.empty((kl, wl))
+        for imu1 in indexmenge:
+            Ii = self.powerSpectrum.higher_halomoments(z, k, mu[imu1], bias_order=1, moment=1)
+            I1[:,imu1] = Ii.value
+
+        k, Pk = k.value, Pk.value
 
         result = _integrate_4h(k, xi, w, Pk, I1)
 
         return result
 
-    def _integrate_3h(self,k1,k2):
+    def integrate_3h(self):
         k = self.k
         z = self.z
         Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
-        pass
+
+        xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
+        mu = xi * np.pi
+
+        #########################
+        # Precompute Halo terms #
+        #########################
+        kl = len(k)
+        wl = len(w)
+
+        # compute I1 for v_of_M models (We cant compute fNL models)
+        indexmenge = range(wl)
+        I1 = np.empty((kl, wl))
+        for imu1 in indexmenge:
+            Ii = self.powerSpectrum.higher_halomoments(z, k, mu[imu1], bias_order=1, moment=1)
+            I1[:,imu1] = Ii.value
+
+        indexmenge = itertools.product(range(cfg.settings["nnodes_legendre"]), repeat=2)
+        I2 = np.empty((kl, kl, wl, wl))
+        for imu1, imu2, in indexmenge:
+            Iij = self.powerSpectrum.higher_halomoments(z, k, k, mu[imu1], mu[imu2], bias_order=1)
+            I2[:, :, imu1, imu2] = Iij.value
+
+        k, Pk = k.value, Pk.value
+
+        result = _integrate_3h(k, xi, w, Pk, I1, I2)
+
+        return result
 
     def _integrate_PPT(self,k1,k2):
         k = self.k
