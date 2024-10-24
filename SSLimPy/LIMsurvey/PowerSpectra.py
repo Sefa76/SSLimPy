@@ -233,6 +233,15 @@ class PowerSpectra:
         hm_corr = np.trapz(integrnd,M,axis=-2)
         return np.squeeze(hm_corr)
 
+    def halo_temperature_moments(self, z, *args, moment=1, bias_order=0, kbias=None):
+        """Computes higher order of the halo bias taking into account
+        Line broadening and skale dependent bias
+
+        pass every k and then every mu in the same order in args
+        """
+        hm = self.higher_halomoments(z, *args, moment=moment, bias_order=bias_order, kbias=kbias)
+        return hm * self.astro.CLT(z)**moment
+
     # TODO: Needs to be removed/ fully replaced by the `higher_halomoments`
     def halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, bias_order:int = 0):
         """

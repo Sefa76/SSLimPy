@@ -190,7 +190,6 @@ def BispectrumLO(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, kgrid, Pgrid):
     # powerlaw extrapoltion
     vlogP = linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk))
     vP = np.exp(vlogP)
-
     # Compute over all permutations of F2 diagrams
     T = 0
     if not np.isclose(k1, 0) and not np.isclose(k2, 0):
@@ -406,7 +405,7 @@ def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
                             # 2 3
                             kex, muex, phex = addVectors(
                                     k[ik1], -mu[imu1], phi[iphi1] + np.pi,
-                                    k[ik2], mu[imu2], phi[iphi2] 
+                                    k[ik2], mu[imu2], phi[iphi2]
                                     )
                             B = BispectrumLO(
                                     kex, muex, phex,

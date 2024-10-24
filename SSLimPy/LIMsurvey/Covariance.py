@@ -114,7 +114,7 @@ class nonGuassianCov:
         indexmenge = range(wl)
         I1 = np.empty((kl, wl))
         for imu1 in indexmenge:
-            Ii = self.powerSpectrum.higher_halomoments(z, k, mu[imu1], bias_order=1, moment=1)
+            Ii = self.powerSpectrum.halo_temperature_moments(z, k, mu[imu1], bias_order=1, moment=1)
             I1[:,imu1] = Ii.value
 
         k, Pk = k.value, Pk.value
@@ -141,13 +141,13 @@ class nonGuassianCov:
         indexmenge = range(wl)
         I1 = np.empty((kl, wl))
         for imu1 in indexmenge:
-            Ii = self.powerSpectrum.higher_halomoments(z, k, mu[imu1], bias_order=1, moment=1)
+            Ii = self.powerSpectrum.halo_temperature_moments(z, k, mu[imu1], bias_order=1, moment=1)
             I1[:,imu1] = Ii.value
 
         indexmenge = itertools.product(range(cfg.settings["nnodes_legendre"]), repeat=2)
         I2 = np.empty((kl, kl, wl, wl))
         for imu1, imu2, in indexmenge:
-            Iij = self.powerSpectrum.higher_halomoments(z, k, k, mu[imu1], mu[imu2], bias_order=1)
+            Iij = self.powerSpectrum.halo_temperature_moments(z, k, k, mu[imu1], mu[imu2], bias_order=1)
             I2[:, :, imu1, imu2] = Iij.value
 
         k, Pk = k.value, Pk.value

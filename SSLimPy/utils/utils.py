@@ -31,10 +31,18 @@ def legendre_4(mu):
     fastmath=True,
 )
 def scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
-    radicant = (1 - mu1**2) * (1 - mu2**2)
-    if radicant < 0:
-        radicant = 0
-    return k1 * k2 * (np.sqrt(radicant) * np.cos(ph1 - ph2) + mu1 * mu2)
+
+    s1s = (1 - mu1**2)
+    if np.isclose(s1s,0):
+        s1s = 0
+        mu1 = 1 * np.sign(mu1)
+
+    s2s = (1 - mu2**2)
+    if np.isclose(s2s,0):
+        s2s = 0
+        mu2 = 1 * np.sign(mu2)
+
+    return k1 * k2 * (np.sqrt(s2s*s1s) * np.cos(ph1 - ph2) + mu1 * mu2)
 
 
 @njit(
@@ -67,11 +75,11 @@ def addVectors(
                 s1s = 0
             s2s = 1-mu2**2
             if np.isclose(s2s,0):
-                s2s = 0            
- 
+                s2s = 0
+
             x = k1 * np.sqrt(s1s) * np.cos(ph1) + k2 * np.sqrt(s2s) * np.cos(ph2)
             y = k1 * np.sqrt(s1s) * np.sin(ph1) + k2 * np.sqrt(s2s) * np.sin(ph2)
-            
+
             phi12 = np.arctan2(y, x)
 
     return k12, mu12, phi12
