@@ -61,17 +61,19 @@ def addVectors(
         if np.isclose(np.abs(mu12), 1):
             phi12 = 0
         else:
-            if np.isclose(ph1, 0):
-                phi12 = ph2
-            elif np.isclose(ph2, 0):
-                phi12 = ph1
-            else:
-                phi12 = np.arctan2(
-                    k1 * np.sqrt(1 - mu1**2) * np.sin(ph1)
-                    + k2 * np.sqrt(1 - mu2**2) * np.sin(ph2),
-                    k1 * np.sqrt(1 - mu1**2) * np.cos(ph1)
-                    + k2 * np.sqrt(1 - mu2**2) * np.cos(ph2),
-                )
+            # Yes this sometimes fails
+            s1s = 1-mu1**2
+            if np.isclose(s1s,0):
+                s1s = 0
+            s2s = 1-mu2**2
+            if np.isclose(s2s,0):
+                s2s = 0            
+ 
+            x = k1 * np.sqrt(s1s) * np.cos(ph1) + k2 * np.sqrt(s2s) * np.cos(ph2)
+            y = k1 * np.sqrt(s1s) * np.sin(ph1) + k2 * np.sqrt(s2s) * np.sin(ph2)
+            
+            phi12 = np.arctan2(y, x)
+
     return k12, mu12, phi12
 
 

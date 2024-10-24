@@ -8,26 +8,15 @@ from SSLimPy.utils.utils import *
 ######################################
 
 
-@njit("(float64,float64,float64,float64,float64)", fastmath=True)
-def _F2(k1, mu1, k2, mu2, Dphi):
+@njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
+def vF2(k1, mu1, ph1, k2, mu2, ph2):
     """Unsymetrised F2 kernel"""
-    k1pk2 = scalarProduct(k1, mu1, Dphi, k2, mu2, 0.0)
+    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
     F2 = (
         5 / 7
-        + 1 / 7 * (6 / k1**2 + 1 / k2**2) * k1pk2
+        + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
         + 2 / 7 * k1pk2**2 / (k1 * k2) ** 2
     )
-    return F2
-
-
-@njit("(float64,float64,float64,float64,float64)", fastmath=True)
-def vF2(k1, mu1, k2, mu2, Dphi):
-    """Computes the F2 mode coupling kernel
-    All computations are done on a vector grid
-    """
-    F2 = _F2(k1, mu1, k2, mu2, Dphi)
-    F2 += _F2(k2, mu2, k1, mu1, -Dphi)
-    F2 *= 1 / 2
     return F2
 
 
@@ -205,11 +194,14 @@ def BispectrumLO(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, kgrid, Pgrid):
     # Compute over all permutations of F2 diagrams
     T = 0
     if not np.isclose(k1, 0) and not np.isclose(k2, 0):
-        T += vP[0] * vP[1] * vF2(k1, mu1, k2, mu2, ph1 - ph2)
+        v1 = vF2(k1, mu1, ph1, k2, mu2, ph2)
+        T += vP[0] * vP[1] * v1
     if not np.isclose(k1, 0) and not np.isclose(k3, 0):
-        T += vP[0] * vP[2] * vF2(k1, mu1, k3, mu3, ph1 - ph3)
+        v2 = vF2(k1, mu1,  ph1, k3, mu3, ph3)
+        T += vP[0] * vP[2] * v2
     if not np.isclose(k2, 0) and not np.isclose(k3, 0):
-        T += vP[1] * vP[2] * vF2(k2, mu2, k3, mu3, ph2 - ph3)
+        v3 = vF2(k2, mu2, ph2, k3, mu3, ph3)
+        T += vP[1] * vP[2] * v3
 
     return 2 * T
 
@@ -245,87 +237,87 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
             vP[0]
             * vP[3]
             * vP[4]
-            * vF2(k12, mu12, k1, -mu1, ph12 - ph1 - np.pi)
-            * vF2(k34, mu34, k4, -mu4, ph34 - ph4 - np.pi)
+            * vF2(k12, mu12, ph12 , k1, -mu1, ph1 + np.pi)
+            * vF2(k34, mu34, ph34 , k4, -mu4, ph4 + np.pi)
         )
         T1 += (
             vP[1]
             * vP[3]
             * vP[4]
-            * vF2(k12, mu12, k2, -mu2, ph12 - ph2 - np.pi)
-            * vF2(k34, mu34, k4, -mu4, ph34 - ph4 - np.pi)
+            * vF2(k12, mu12, ph12, k2, -mu2, ph2 + np.pi)
+            * vF2(k34, mu34, ph34, k4, -mu4, ph4 + np.pi)
         )
         T1 += (
             vP[2]
             * vP[1]
             * vP[9]
-            * vF2(k34, mu34, k3, -mu3, ph34 - ph3 - np.pi)
-            * vF2(k12, mu12, k2, -mu2, ph12 - ph2 - np.pi)
+            * vF2(k34, mu34, ph34, k3, -mu3, ph3 + np.pi)
+            * vF2(k12, mu12, ph12, k2, -mu2, ph2 + np.pi)
         )
         T1 += (
             vP[3]
             * vP[1]
             * vP[9]
-            * vF2(k34, mu34, k4, -mu4, ph34 - ph4 - np.pi)
-            * vF2(k12, mu12, k2, -mu2, ph12 - ph2 - np.pi)
+            * vF2(k34, mu34, ph34, k4, -mu4, ph4 + np.pi)
+            * vF2(k12, mu12, ph12, k2, -mu2, ph2 + np.pi)
         )
     if not np.isclose(k13, 0):
         T1 += (
             vP[0]
             * vP[1]
             * vP[5]
-            * vF2(k13, mu13, k1, -mu1, ph13 - ph1 - np.pi)
-            * vF2(k24, mu24, k2, -mu2, ph24 - ph2 - np.pi)
+            * vF2(k13, mu13, ph13, k1, -mu1, ph1 + np.pi)
+            * vF2(k24, mu24, ph24, k2, -mu2, ph2 + np.pi)
         )
         T1 += (
             vP[2]
             * vP[3]
             * vP[5]
-            * vF2(k13, mu13, k3, -mu3, ph13 - ph3 - np.pi)
-            * vF2(k24, mu24, k4, -mu4, ph24 - ph4 - np.pi)
+            * vF2(k13, mu13, ph13, k3, -mu3, ph3 + np.pi)
+            * vF2(k24, mu24, ph24, k4, -mu4, ph4 + np.pi)
         )
         T1 += (
             vP[1]
             * vP[2]
             * vP[8]
-            * vF2(k24, mu24, k2, -mu2, ph24 - ph2 - np.pi)
-            * vF2(k13, mu13, k3, -mu3, ph13 - ph3 - np.pi)
+            * vF2(k24, mu24, ph24, k2, -mu2, ph2 + np.pi)
+            * vF2(k13, mu13, ph13, k3, -mu3, ph3 + np.pi)
         )
         T1 += (
             vP[3]
             * vP[0]
             * vP[8]
-            * vF2(k24, mu24, k4, -mu4, ph24 - ph4 - np.pi)
-            * vF2(k13, mu13, k1, -mu1, ph13 - ph1 - np.pi)
+            * vF2(k24, mu24, ph24, k4, -mu4, ph4 + np.pi)
+            * vF2(k13, mu13, ph13, k1, -mu1, ph1 + np.pi)
         )
     if not np.isclose(k14, 0):
         T1 += (
             vP[0]
             * vP[2]
             * vP[6]
-            * vF2(k14, mu14, k1, -mu1, ph14 - ph1 - np.pi)
-            * vF2(k23, mu23, k3, -mu3, ph23 - ph3 - np.pi)
+            * vF2(k14, mu14, ph14, k1, -mu1, ph1 + np.pi)
+            * vF2(k23, mu23, ph23, k3, -mu3, ph3 + np.pi)
         )
         T1 += (
             vP[3]
             * vP[2]
             * vP[6]
-            * vF2(k14, mu14, k4, -mu4, ph14 - ph4 - np.pi)
-            * vF2(k23, mu23, k3, -mu3, ph23 - ph3 - np.pi)
+            * vF2(k14, mu14, ph14, k4, -mu4, ph4 + np.pi)
+            * vF2(k23, mu23, ph23, k3, -mu3, ph3 + np.pi)
         )
         T1 += (
             vP[1]
             * vP[0]
             * vP[7]
-            * vF2(k23, mu23, k2, -mu2, ph23 - ph2 - np.pi)
-            * vF2(k14, mu14, k1, -mu1, ph14 - ph1 - np.pi)
+            * vF2(k23, mu23, ph23, k2, -mu2, ph2 + np.pi)
+            * vF2(k14, mu14, ph14, k1, -mu1, ph1 + np.pi)
         )
         T1 += (
             vP[2]
             * vP[0]
             * vP[7]
-            * vF2(k23, mu23, k3, -mu3, ph23 - ph3 - np.pi)
-            * vF2(k14, mu14, k1, -mu1, ph14 - ph1 - np.pi)
+            * vF2(k23, mu23, ph23, k3, -mu3,  ph3 + np.pi)
+            * vF2(k14, mu14, ph14, k1, -mu1,  ph1 + np.pi)
         )
     T1 *= 4
     # That should be all of them ...
