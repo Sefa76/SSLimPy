@@ -379,6 +379,12 @@ def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
                             # powerlaw extrapoltion
                             vlogP = linear_interpolate(np.log(k), np.log(Pgrid), np.log(vk))
                             vP = np.exp(vlogP)
+
+                            if np.isclose(k13,0):
+                                vP[0] = 0
+                            if np.isclose(k14,0):
+                                vP[1] = 0
+
                             hT1 = I2grid[ik1,ik2,imu1,imu2] * I2grid[ik1,ik2,imu1,imu2] * (vP[0] + vP[1])
 
                             # 31 halos
@@ -415,6 +421,7 @@ def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
             pseudo_Cov[ik2, ik1, 2, 2] = pseudo_Cov[ik1, ik2, 2, 2]
 
     return pseudo_Cov
+
 
 @njit(
         "(float64[::1], float64[::1], float64[::1], float64[::1], float64[:,:], float64[:,:,:,:])",

@@ -144,10 +144,10 @@ class nonGuassianCov:
             Ii = self.powerSpectrum.halo_temperature_moments(z, k, mu[imu1], bias_order=1, moment=1)
             I1[:,imu1] = Ii.value
 
-        indexmenge = itertools.product(range(cfg.settings["nnodes_legendre"]), repeat=2)
+        indexmenge = itertools.product(range(wl), repeat=2)
         I2 = np.empty((kl, kl, wl, wl))
         for imu1, imu2, in indexmenge:
-            Iij = self.powerSpectrum.halo_temperature_moments(z, k, k, mu[imu1], mu[imu2], bias_order=1)
+            Iij = self.powerSpectrum.halo_temperature_moments(z, k, k, mu[imu1], mu[imu2], bias_order=1, moment=2)
             I2[:, :, imu1, imu2] = Iij.value
 
         k, Pk = k.value, Pk.value
@@ -177,22 +177,51 @@ class nonGuassianCov:
             Ii = self.powerSpectrum.halo_temperature_moments(z, k, mu[imu1], bias_order=1, moment=1)
             I1[:,imu1] = Ii.value
 
-        indexmenge = itertools.product(range(cfg.settings["nnodes_legendre"]), repeat=2)
+        indexmenge = itertools.product(range(wl), repeat=2)
         I2 = np.empty((kl, kl, wl, wl))
         for imu1, imu2, in indexmenge:
-            Iij = self.powerSpectrum.halo_temperature_moments(z, k, k, mu[imu1], mu[imu2], bias_order=1)
+            Iij = self.powerSpectrum.halo_temperature_moments(z, k, k, mu[imu1], mu[imu2], bias_order=1, moment=2)
             I2[:, :, imu1, imu2] = Iij.value
 
-        indexmenge = itertools.product(range(cfg.settings["nnodes_legendre"]), repeat=2)
+        indexmenge = itertools.product(range(wl), repeat=2)
         I3 = np.empty((kl, kl, wl, wl))
         for imu1, imu2, in indexmenge:
             # the third argument is allways the negative of the first
             for ik,ki in enumerate(k):
-                Iijk = self.powerSpectrum.halo_temperature_moments(z, ki, k, ki, mu[imu1], mu[imu2], -mu[imu1], bias_order=1)
-            I3[ik, :, imu1, imu2] = Iijk.value
+                Iijk = self.powerSpectrum.halo_temperature_moments(z, ki, k, ki, mu[imu1], mu[imu2], -mu[imu1], bias_order=1, moment=3)
+                I3[ik, :, imu1, imu2] = Iijk.value
 
         k, Pk = k.value, Pk.value
         
         result = _integrate_2h(k, xi, w, Pk, I1, I2, I3)
 
+        return result
+
+    def integrate_1h(self):
+        k = self.k
+        z = self.z
+        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
+
+        xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
+        mu = xi * np.pi
+
+        #########################
+        # Precompute Halo terms #
+        #########################
+        kl = len(k)
+        wl = len(w)
+
+        indexmengemu = itertools.product(range(wl), repeat=2)
+        indexmengek = itertools.product(range(kl), repeat=2) 
+        I4 = np.empty((kl, kl, wl, wl))
+        for imu1, imu2, in indexmengemu:
+            for ik1, ik2 in indexmengek:
+                Iij = self.powerSpectrum.halo_temperature_moments(z,
+                                                                  k[ik1], k[ik2],k[ik1], k[ik2],
+                                                                  mu[imu1], mu[imu2], -mu[imu1], -mu[imu2],
+                                                                  bias_order=1, moment=4
+                                                                  )
+                I4[ik1, ik2, imu1, imu2] = Iij.value
+
+        result = np.sum(np.sum(I4/4 * w , axis=-1) * w, axis=-1)
         return result
