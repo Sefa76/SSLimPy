@@ -340,6 +340,81 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
 # Integration routines #
 ########################
 
+@njit(
+        "(float64[::1], float64[::1], float64[::1], float64[::1], float64[:,:], float64[:,:,:,:], float64[:,:,:,:])"
+)
+def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
+    assert len(xi) == len(w), "Number of integration points must match number of weights"
+    nnodes = len(xi)
+    kl = len(k)
+
+    mu = xi
+    phi = np.pi * xi
+
+    # obtain neccessary legendre functions
+    L0 = legendre_0(mu) * (2 * 0 + 1) / 2
+    L2 = legendre_2(mu) * (2 * 2 + 1) / 2
+    L4 = legendre_4(mu) * (2 * 4 + 1) / 2
+
+    pseudo_Cov = np.zeros((kl, kl, 3, 3))
+    for ik1 in prange(kl):
+        for ik2 in prange(ik1, kl):
+
+            mu1_integ0 = np.empty(nnodes)
+            mu1_integ2 = np.empty(nnodes)
+            mu1_integ4 = np.empty(nnodes)
+            for imu1 in range(nnodes):
+                mu2_integ = np.empty(nnodes)
+                for imu2 in range(nnodes):
+                    phi1_integ = np.empty(nnodes)
+                    for iphi1 in range(nnodes):
+                        phi2_integ = np.empty(nnodes)
+                        for iphi2 in range(nnodes):
+                            # 22 halos
+
+                            # Obtain the Power Spectra
+                            k13, _, _ = addVectors(k[ik1], mu[imu1], phi[iphi1], k[ik2], mu[imu2], phi[iphi2])
+                            k14, _, _ = addVectors(k[ik1], mu[imu1], phi[iphi1], k[ik2], -mu[imu2], phi[iphi2]+np.pi)
+                            vk = np.array([k13,k14])
+                            # powerlaw extrapoltion
+                            vlogP = linear_interpolate(np.log(k), np.log(Pgrid), np.log(vk))
+                            vP = np.exp(vlogP)
+                            hT1 = I2grid[ik1,ik2,imu1,imu2] * I2grid[ik1,ik2,imu1,imu2] * (vP[0] + vP[1])
+
+                            # 31 halos
+                            hT2 = (
+                                2 * I3grid[ik1, ik2, imu1, imu2] * I1grid[ik2, imu2] * Pgrid[ik2]
+                                + 2* I3grid[ik2, ik1, imu2, imu1] * I1grid[ik1, imu1] * Pgrid[ik1]
+                            )
+                            phi2_integ[iphi2] = (hT1 + hT2)/(4 * np.pi) ** 2
+                        phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
+                    mu2_integ[imu2] = np.sum(phi1_integ * w * np.pi)
+                # integrate over mu2 first
+                mu1_integ0[imu1] = np.sum(mu2_integ * L0 * w)
+                mu1_integ2[imu1] = np.sum(mu2_integ * L2 * w)
+                mu1_integ4[imu1] = np.sum(mu2_integ * L4 * w)
+            pseudo_Cov[ik1, ik2, 0, 0] = np.sum(mu1_integ0 * L0 * w)
+            pseudo_Cov[ik1, ik2, 0, 1] = np.sum(mu1_integ2 * L0 * w)
+            pseudo_Cov[ik1, ik2, 0, 2] = np.sum(mu1_integ4 * L0 * w)
+            pseudo_Cov[ik1, ik2, 1, 0] = np.sum(mu1_integ0 * L2 * w)
+            pseudo_Cov[ik1, ik2, 1, 1] = np.sum(mu1_integ2 * L2 * w)
+            pseudo_Cov[ik1, ik2, 1, 2] = np.sum(mu1_integ4 * L2 * w)
+            pseudo_Cov[ik1, ik2, 2, 0] = np.sum(mu1_integ0 * L4 * w)
+            pseudo_Cov[ik1, ik2, 2, 1] = np.sum(mu1_integ2 * L4 * w)
+            pseudo_Cov[ik1, ik2, 2, 2] = np.sum(mu1_integ4 * L4 * w)
+
+            # use symetries k1 <-> k2
+            pseudo_Cov[ik2, ik1, 0, 0] = pseudo_Cov[ik1, ik2, 0, 0]
+            pseudo_Cov[ik2, ik1, 1, 0] = pseudo_Cov[ik1, ik2, 0, 1]
+            pseudo_Cov[ik2, ik1, 2, 0] = pseudo_Cov[ik1, ik2, 0, 2]
+            pseudo_Cov[ik2, ik1, 0, 1] = pseudo_Cov[ik1, ik2, 1, 0]
+            pseudo_Cov[ik2, ik1, 1, 1] = pseudo_Cov[ik1, ik2, 1, 1]
+            pseudo_Cov[ik2, ik1, 2, 1] = pseudo_Cov[ik1, ik2, 1, 2]
+            pseudo_Cov[ik2, ik1, 0, 2] = pseudo_Cov[ik1, ik2, 2, 0]
+            pseudo_Cov[ik2, ik1, 1, 2] = pseudo_Cov[ik1, ik2, 2, 1]
+            pseudo_Cov[ik2, ik1, 2, 2] = pseudo_Cov[ik1, ik2, 2, 2]
+
+    return pseudo_Cov
 
 @njit(
         "(float64[::1], float64[::1], float64[::1], float64[::1], float64[:,:], float64[:,:,:,:])",

@@ -11,7 +11,7 @@ from scipy.special import legendre, roots_legendre
 import SSLimPy.cosmology.cosmology as cosmo
 import SSLimPy.LIMsurvey.PowerSpectra as powspe
 from SSLimPy.interface import config as cfg
-from SSLimPy.LIMsurvey.higherorder import _integrate_3h, _integrate_4h
+from SSLimPy.LIMsurvey.higherorder import _integrate_2h, _integrate_3h, _integrate_4h
 from SSLimPy.utils.utils import construct_gaussian_cov
 
 
@@ -156,8 +156,43 @@ class nonGuassianCov:
 
         return result
 
-    def _integrate_PPT(self,k1,k2):
+    def integrate_2h(self):
         k = self.k
         z = self.z
         Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
-        pass
+
+        xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
+        mu = xi * np.pi
+
+        #########################
+        # Precompute Halo terms #
+        #########################
+        kl = len(k)
+        wl = len(w)
+
+        # compute I1 for v_of_M models (We cant compute fNL models)
+        indexmenge = range(wl)
+        I1 = np.empty((kl, wl))
+        for imu1 in indexmenge:
+            Ii = self.powerSpectrum.halo_temperature_moments(z, k, mu[imu1], bias_order=1, moment=1)
+            I1[:,imu1] = Ii.value
+
+        indexmenge = itertools.product(range(cfg.settings["nnodes_legendre"]), repeat=2)
+        I2 = np.empty((kl, kl, wl, wl))
+        for imu1, imu2, in indexmenge:
+            Iij = self.powerSpectrum.halo_temperature_moments(z, k, k, mu[imu1], mu[imu2], bias_order=1)
+            I2[:, :, imu1, imu2] = Iij.value
+
+        indexmenge = itertools.product(range(cfg.settings["nnodes_legendre"]), repeat=2)
+        I3 = np.empty((kl, kl, wl, wl))
+        for imu1, imu2, in indexmenge:
+            # the third argument is allways the negative of the first
+            for ik,ki in enumerate(k):
+                Iijk = self.powerSpectrum.halo_temperature_moments(z, ki, k, ki, mu[imu1], mu[imu2], -mu[imu1], bias_order=1)
+            I3[ik, :, imu1, imu2] = Iijk.value
+
+        k, Pk = k.value, Pk.value
+        
+        result = _integrate_2h(k, xi, w, Pk, I1, I2, I3)
+
+        return result
