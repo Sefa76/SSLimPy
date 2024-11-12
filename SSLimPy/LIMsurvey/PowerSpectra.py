@@ -349,37 +349,51 @@ class PowerSpectra:
     ################
     # BAO Features #
     ################
-    def qparallel(self, z, BAOpars = dict()):
+    def alpha_parallel(self, z, BAOpars = dict()):
         """
-        Function implementing q parallel of the Alcock-Paczynski effect
-        If BAOpars is passed checks for alpha_par
+        Function implementing alpha_parallel of the Alcock-Paczynski effect
+        If BAOpars is passed checks for alpha_iso and alpha_AP
         """
         z = np.atleast_1d(z)
-        if "alpha_par" in BAOpars:
-            q_par = np.atleast_1d(BAOpars["alpha_par"])
-            if len(z) != len(q_par):
-                raise ValueError("did not pass alpha_par parameters for every z asked for")
+        if "alpha_iso" in BAOpars:
+            alpha_iso = np.atleast_1d(BAOpars["alpha_iso"])
+            if len(z) != len(alpha_iso):
+                raise ValueError("did not pass alpha_iso parameters for every z asked for")
+            if "alpha_AP" in BAOpars:
+                alpha_AP = np.atleast_1d(BAOpars["alpha_AP"])
+                if len(z) != len(alpha_AP):
+                    raise ValueError("did not pass alpha_AP parameters for every z asked for")
+            else:
+                alpha_AP = 1.
+            alpha_par = alpha_iso * np.power(alpha_AP,2/3)
         else:
             fidTerm = self.fiducialcosmo.Hubble(z)
             cosmoTerm = self.cosmology.Hubble(z)
-            q_par = fidTerm/cosmoTerm
-        return q_par
+            alpha_par = fidTerm/cosmoTerm * self.dragscale()
+        return alpha_par
 
-    def qperpendicular(self, z, BAOpars = dict()):
+    def alpha_perpendicular(self, z, BAOpars = dict()):
         """
-        Function implementing q perpendicular of the Alcock-Paczynski effect
-        If BAOpars is passed checks for alpha_perp
+        Function implementing alpha_perpendicular of the Alcock-Paczynski effect
+        If BAOpars is passed checks for alpha_iso and alpha_AP
         """
         z = np.atleast_1d(z)
-        if "alpha_perp" in BAOpars:
-            q_perp = np.atleast_1d(BAOpars["alpha_perp"])
-            if len(z) != len(q_perp):
-                raise ValueError("did not pass alpha_perp parameters for every z asked for")
+        if "alpha_iso" in BAOpars:
+            alpha_iso = np.atleast_1d(BAOpars["alpha_iso"])
+            if len(z) != len(alpha_iso):
+                raise ValueError("did not pass alpha_iso parameters for every z asked for")
+            if "alpha_AP" in BAOpars:
+                alpha_AP = np.atleast_1d(BAOpars["alpha_AP"])
+                if len(z) != len(alpha_AP):
+                    raise ValueError("did not pass alpha_AP parameters for every z asked for")
+            else:
+                alpha_AP = 1.
+            alpha_perp = alpha_iso / np.power(alpha_AP,1/3)
         else:
-            fidTerm = self.fiducialcosmo.angdist(z)
-            cosmoTerm = self.cosmology.angdist(z)
-            q_perp = cosmoTerm / fidTerm
-        return q_perp
+            fidTerm = self.fiducialcosmo.angdist(z) 
+            cosmoTerm = self.cosmology.angdist(z) 
+            alpha_perp = cosmoTerm / fidTerm * self.dragscale()
+        return alpha_perp
 
     def dragscale(self):
         """
@@ -682,14 +696,13 @@ class PowerSpectra:
             Fnu = F_parr*F_perp
 
         #fix units
-        k *= self.dragscale()
         logkMpc = np.log(k.to(u.Mpc**-1).value)
 
         # Apply AP effect
-        qparr = np.atleast_1d(self.qparallel(z, self.BAOpars))
-        kparr_ap = k[:,None,None] * mu[None,:,None] * qparr[None,None,:]
-        qperp = np.atleast_1d(self.qperpendicular(z, self.BAOpars))
-        kperp_ap = k[:,None,None] *np.sqrt(1- np.power(mu[None,:,None],2)) * qperp[None,None,:]
+        alpha_par = np.atleast_1d(self.alpha_parallel(z, self.BAOpars))
+        kparr_ap = k[:,None,None] * mu[None,:,None] * alpha_par[None,None,:]
+        alpha_perp = np.atleast_1d(self.alpha_perpendicular(z, self.BAOpars))
+        kperp_ap = k[:,None,None] *np.sqrt(1- np.power(mu[None,:,None],2)) * alpha_perp[None,None,:]
 
         # Compute related quantities
         k_ap = np.sqrt(np.power(kparr_ap,2)+np.power(kperp_ap,2))
@@ -793,7 +806,7 @@ class PowerSpectra:
             print("Shot-noise obtained in {} seconds".format(tps-trsd))
 
         self.Pk_Obs = (
-            (qparr * np.power(qperp,2))[None,None,:]
+            (alpha_par * np.power(alpha_perp,2))[None,None,:]
             * (rsd_ap * Pk_ap + Ps_ap)
             * Fnu
         )
