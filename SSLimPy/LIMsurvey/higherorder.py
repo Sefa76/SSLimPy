@@ -3,9 +3,9 @@ from numba import njit, prange
 
 from SSLimPy.utils.utils import *
 
-#######################################
-# Fundamental mode coupling functions #
-#######################################
+#########################
+# Fundamental functions #
+#########################
 
 
 @njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
@@ -17,8 +17,33 @@ def alpha(k1, mu1, ph1, k2, mu2, ph2):
 @njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
 def beta(k1, mu1, ph1, k2, mu2, ph2):
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
-    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2) 
+    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
     return k12**2 * k1pk2 / (2 * k1**2 * k2**2)
+
+@njit(
+        "(float64, float64, float64"+
+        "float64, float64, float64)",
+        fastmath=True,
+        )
+def Galileon2(k1, mu1, ph1, k2, mu2, ph2):
+    """Second Galileon in Fourier space
+    """
+    muC12 = scalarProduct(k1,mu1, ph1, k2, mu2, ph2) / (k1 * k2)
+    return muC12**2 - 1
+
+@njit(
+        "(float64, float64, float64,"+
+        "float64, float64, float64,",
+        "float64, float64, float64)",
+        fastmath=True,
+        )
+def Galileon3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    """Third Galileon in Fourier space
+    """
+    muC12 = scalarProduct(k1,mu1, ph1, k2, mu2, ph2) / (k1 * k2)
+    muC23 = scalarProduct(k2,mu2, ph2, k3, mu3, ph3) / (k2 * k3)
+    muC13 = scalarProduct(k1,mu1, ph1, k3, mu3, ph3) / (k1 * k3)
+    return 1 + - muC12**2 - muC23**2 - muC13**2 + 2 * muC12 * muC23 * muC13
 
 ######################################
 # (symetrised) mode coupling kernels #
@@ -179,6 +204,38 @@ def vG3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     G3 += _G3_T2_symetrised_12(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
     return G3 / 3
 
+
+###############
+# RSD Kernals #
+###############
+
+@njit("(float64, float64,"
+      +"float64, float64, float64)",
+      fastmath=True,
+      )
+def Z1(mb1, f, k1, mu1, ph1):
+    """Kaiser term RSD function
+    """
+    return mb1 + f * mu1**2
+
+
+@njit("(float64, float64, float64, float64,"
+      +"float64, float64, float64,"
+      +"float64, float64, float64)"
+      fastmath=True,
+      )
+def Z2(mb1, mb2, mbG2, f, k1, mu1, ph1, k2, mu2, ph2):
+    """Second order RSD mode coupling kernal
+    """
+    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    z2 = mb1 * vF2(k1, mu1, ph1, k2, mu2, ph2)
+    z2 += mb2 / 2
+    z2 += mbG2 * Galileon2(k1, mu1, ph1, k2, mu2, ph2)
+    z2 += f * mu12**2 * vG2(k1, mu1, ph1, k2, mu2, ph2)
+    z2 += f * mu12 * k12 / 2 * mb1 * (mu1 / k1 + mu2 / k2)
+    z2 += (f * mu12 * k12)**2 / 2 * mu1 / k1 * mu2 / k2
+
+    return z2
 
 #######################
 # N-point correlators #
@@ -342,6 +399,7 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
         raise RuntimeError("NaN encounterd")
 
     return T1 + T2
+
 
 
 ########################
