@@ -3,6 +3,23 @@ from numba import njit, prange
 
 from SSLimPy.utils.utils import *
 
+#######################################
+# Fundamental mode coupling functions #
+#######################################
+
+
+@njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
+def alpha(k1, mu1, ph1, k2, mu2, ph2):
+    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    return scalarProduct(k12, mu12, ph12, k1, mu1, ph1) / k1**2
+
+
+@njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
+def beta(k1, mu1, ph1, k2, mu2, ph2):
+    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2) 
+    return k12**2 * k1pk2 / (2 * k1**2 * k2**2)
+
 ######################################
 # (symetrised) mode coupling kernels #
 ######################################
@@ -10,12 +27,24 @@ from SSLimPy.utils.utils import *
 
 @njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
 def vF2(k1, mu1, ph1, k2, mu2, ph2):
-    """Unsymetrised F2 kernel"""
+    """Symetrised F2 kernel"""
     k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
     F2 = (
         5 / 7
         + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
         + 2 / 7 * k1pk2**2 / (k1 * k2) ** 2
+    )
+    return F2
+
+
+@njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
+def vG2(k1, mu1, ph1, k2, mu2, ph2):
+    """Symetrised G2 kernel"""
+    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
+    F2 = (
+        3 / 7
+        + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
+        + 4 / 7 * k1pk2**2 / (k1 * k2) ** 2
     )
     return F2
 
@@ -26,7 +55,34 @@ def vF2(k1, mu1, ph1, k2, mu2, ph2):
     + "float64,float64,float64)",
     fastmath=True,
 )
-def _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+def _F3_T1_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    """in this combination the ir divergence can be resummed
+    symetrsed in the second and third argument
+    """
+    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    if np.isclose(k23, 0):
+        return 0
+    else:
+        F2_23 = vF2(k2, mu2, ph2, k3, mu3, ph3)
+        G2_23 = vG2(k2, mu2, ph2, k3, mu3, ph3)
+        a23 = alpha(k1, mu1, ph1, k23, mu23, ph23)
+        b23 = beta(k1, mu1, ph1, k23, mu23, ph23)
+
+        result = (
+                1 / 18 * (
+                    7 * a23 * F2_23 + 2 * b23 * G2_23
+                    )
+                )
+        return result
+
+
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
+def _F3_T2_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """in this combination the ir divergence can be resummed
     symetrsed in the first and second argument
     """
@@ -34,125 +90,11 @@ def _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     if np.isclose(k12, 0):
         return 0
     else:
-        k, mu, ph = addVectors(k3, mu3, ph3, k12, mu12, ph12)
+        G2_12 = vG2(k1, mu1, ph1, k2, mu2, ph2)
+        a12 = alpha(k12, mu12, ph12, k3, mu3, ph3)
+        b12 = beta(k12, mu12, ph12, k3, mu3, ph3)
 
-        F1 = 1 / 3 * 1 / k3**2
-        F2T1 = 1 / 21 * scalarProduct(k1, mu1, ph1, k2, mu2, ph2) / (k1**2 * k2**2)
-        F2T2 = (
-            1
-            / 28
-            * (
-                scalarProduct(k1, mu1, ph1, k12, mu12, ph12) / (k1**2 * k12**2)
-                + scalarProduct(k2, mu2, ph2, k12, mu12, ph12) / (k2**2 * k12**2)
-            )
-        )
-        F3 = 7 * k3**2 * scalarProduct(
-            k12, mu12, ph12, k, mu, ph
-        ) + k**2 * scalarProduct(k3, mu3, ph3, k12, mu12, ph12)
-        return F1 * (F2T1 + F2T2) * F3
-
-
-@njit(
-    "(float64,float64,float64,"
-    + "float64,float64,float64,"
-    + "float64,float64,float64)",
-    fastmath=True,
-)
-def _F3_T1_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """Fully symetrized first term in the F3"""
-    F3_T1 = _F3_T1_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
-    F3_T1 += _F3_T1_symetrised_12(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
-    F3_T1 += _F3_T1_symetrised_12(k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
-    F3_T1 *= 1 / 3
-    return F3_T1
-
-
-@njit(
-    "(float64,float64,float64,"
-    + "float64,float64,float64,"
-    + "float64,float64,float64)",
-    fastmath=True,
-)
-def _F3_T2_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """in this combination the ir divergence can be resummed
-    symetrsed in the second and third argument
-    """
-    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
-    if np.isclose(k23, 0):
-        return 0
-    else:
-        k, mu, ph = addVectors(k1, mu1, ph1, k23, mu23, ph23)
-
-        F1 = 1 / 3 * 1 / k1**2 * (k**2 * scalarProduct(k1, mu1, ph1, k23, mu23, ph23))
-        F2T1 = 1 / 21 * scalarProduct(k2, mu2, ph2, k3, mu3, ph3) / (k2**2 * k3**2)
-        F2T2 = (
-            1
-            / 28
-            * (
-                scalarProduct(k2, mu2, ph2, k23, mu23, ph23) / (k2**2 * k23**2)
-                + scalarProduct(k3, mu3, ph3, k23, mu23, ph23) / (k3**2 * k23**2)
-            )
-        )
-        return F1 * (F2T1 + F2T2)
-
-
-@njit(
-    "(float64,float64,float64,"
-    + "float64,float64,float64,"
-    + "float64,float64,float64)",
-    fastmath=True,
-)
-def _F3_T2_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """Fully symetrized second term in the F3"""
-    F3_T2 = _F3_T2_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
-    F3_T2 += _F3_T2_symetrised_23(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
-    F3_T2 += _F3_T2_symetrised_23(k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
-    F3_T2 *= 1 / 3
-    return F3_T2
-
-
-@njit(
-    "(float64,float64,float64,"
-    + "float64,float64,float64,"
-    + "float64,float64,float64)",
-    fastmath=True,
-)
-def _F3_T3_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """Thrid term of the F3 mode coupling kernel
-    symetrsed in the second and third argument
-    """
-    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
-    if np.isclose(k23, 0):
-        return 0
-    else:
-        k, mu, ph = addVectors(k1, mu1, ph1, k23, mu23, ph23)
-
-        F1 = scalarProduct(k1, mu1, ph1, k, mu, ph) / (18 * k1**2)
-        F2T1 = scalarProduct(k2, mu2, ph2, k3, mu3, ph3) * k23**2 / (k2**2 * k3**2)
-        F2T2 = (
-            5
-            / 2
-            * (
-                scalarProduct(k2, mu2, ph2, k23, mu23, ph23) / k2**2
-                + scalarProduct(k3, mu3, ph3, k23, mu23, ph23) / k3**2
-            )
-        )
-        return F1 * (F2T1 + F2T2)
-
-
-@njit(
-    "(float64,float64,float64,"
-    + "float64,float64,float64,"
-    + "float64,float64,float64)",
-    fastmath=True,
-)
-def _F3_T3_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """Fully symetrized third term in the F3"""
-    F3_T3 = _F3_T3_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
-    F3_T3 += _F3_T3_symetrised_23(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
-    F3_T3 += _F3_T3_symetrised_23(k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
-    F3_T3 *= 1 / 3
-    return F3_T3
+        return G2_12 / 18 * (7 * a12 + 2 * b12)
 
 
 @njit(
@@ -163,13 +105,79 @@ def _F3_T3_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
 )
 def vF3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     """Computes the F3 mode coupling kernel
-    All computations are done on a vector grid
     """
-    F3 = _F3_T1_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
-    F3 += _F3_T2_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
-    F3 += _F3_T3_symetrised(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    F3 = _F3_T1_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    F3 += _F3_T1_symetrised_23(k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
+    F3 += _F3_T1_symetrised_23(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
+    F3 += _F3_T2_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    F3 += _F3_T2_symetrised_12(k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
+    F3 += _F3_T2_symetrised_12(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
+    return F3 / 3
 
-    return F3
+
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
+def _G3_T1_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    """in this combination the ir divergence can be resummed
+    symetrsed in the second and third argument
+    """
+    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    if np.isclose(k23, 0):
+        return 0
+    else:
+        F2_23 = vF2(k2, mu2, ph2, k3, mu3, ph3)
+        G2_23 = vG2(k2, mu2, ph2, k3, mu3, ph3)
+        a23 = alpha(k1, mu1, ph1, k23, mu23, ph23)
+        b23 = beta(k1, mu1, ph1, k23, mu23, ph23)
+
+        result = (
+                1 / 18 * (
+                    3 * a23 * F2_23 + 6 * b23 * G2_23
+                    )
+                )
+        return result
+
+
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
+def _G3_T2_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    """in this combination the ir divergence can be resummed
+    symetrsed in the first and second argument
+    """
+    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    if np.isclose(k12, 0):
+        return 0
+    else:
+        G2_12 = vG2(k1, mu1, ph1, k2, mu2, ph2)
+        a12 = alpha(k12, mu12, ph12, k3, mu3, ph3)
+        b12 = beta(k12, mu12, ph12, k3, mu3, ph3)
+
+        return G2_12 / 18 * (3 * a12 + 6 * b12)
+
+@njit(
+    "(float64,float64,float64,"
+    + "float64,float64,float64,"
+    + "float64,float64,float64)",
+    fastmath=True,
+)
+def vG3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    """Computes the G3 mode coupling kernel
+    """
+    G3 = _G3_T1_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    G3 += _G3_T1_symetrised_23(k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
+    G3 += _G3_T1_symetrised_23(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
+    G3 += _G3_T2_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    G3 += _G3_T2_symetrised_12(k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
+    G3 += _G3_T2_symetrised_12(k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
+    return G3 / 3
 
 
 #######################
