@@ -88,7 +88,7 @@ class sslimpy:
             else:
                 warn("Output {} asked for not recognised \n Skiped".format(obs))
 
-        print("Done!")
+        #print("Done!")
         return outputdict
 
     def _compute_ps(self, cosmopars, astropars, BAOpars, obspars, outputdict):

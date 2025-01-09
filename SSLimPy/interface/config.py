@@ -145,7 +145,7 @@ def init(
 
     #Set global defaults and inputs for the survey specifications
     global obspars
-    obspars = obspars_dict
+    obspars = copy(obspars_dict)
 
     obspars.setdefault("Tsys_NEFD", 40*u.uK)
     obspars.setdefault("Nfeeds", 19)
