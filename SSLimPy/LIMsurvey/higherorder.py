@@ -21,7 +21,7 @@ def beta(k1, mu1, ph1, k2, mu2, ph2):
     return k12**2 * k1pk2 / (2 * k1**2 * k2**2)
 
 @njit(
-        "(float64, float64, float64"+
+        "(float64, float64, float64,"+
         "float64, float64, float64)",
         fastmath=True,
         )
