@@ -208,12 +208,14 @@ def vG3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
 ###############
 # RSD Kernals #
 ###############
+# These functions are for the appoximation that the mean bias is roughly independent
+# from the k-depedent shape inside these integrals
 
 @njit("(float64, float64,"
       +"float64, float64, float64)",
       fastmath=True,
       )
-def Z1(mb1, f, k1, mu1, ph1):
+def vZ1(mb1, f, k1, mu1, ph1):
     """Kaiser term RSD function
     """
     return mb1 + f * mu1**2
@@ -221,10 +223,10 @@ def Z1(mb1, f, k1, mu1, ph1):
 
 @njit("(float64, float64, float64, float64,"
       +"float64, float64, float64,"
-      +"float64, float64, float64)"
+      +"float64, float64, float64)",
       fastmath=True,
       )
-def Z2(mb1, mb2, mbG2, f, k1, mu1, ph1, k2, mu2, ph2):
+def vZ2(mb1, mb2, mbG2, f, k1, mu1, ph1, k2, mu2, ph2):
     """Second order RSD mode coupling kernal
     """
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
@@ -236,6 +238,60 @@ def Z2(mb1, mb2, mbG2, f, k1, mu1, ph1, k2, mu2, ph2):
     z2 += (f * mu12 * k12)**2 / 2 * mu1 / k1 * mu2 / k2
 
     return z2
+
+
+@njit("(float64, float64, float64,"
+      +"float64, float64, float64, float64,"
+      +"float64,"
+      +"float64, float64, float64,"
+      +"float64, float64, float64,"
+      +"float64, float64, float64)",
+      fastmath=True,
+      )
+def _Z3_symetrised_23(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    """ Thrid order RSD mode coupling kernel symetrized in the second and third argument
+    possible divergences in k23 are captured by the mode coupling kernels in this way
+    """
+    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
+    k, mu, ph = addVectors(k1, mu1, ph1, k23, mu23, ph23)
+
+    z3 = mb1 * vF3(k1, mu1, ph1, k2, mu2, ph2)
+    z3 += mb2 * vF2(k2, mu2, ph2, k3, mu3, ph3)
+    z3 += mb3 / 6
+    z3 += mbdG2 * Galileon2(k2, mu2, ph2, k3, mu3, ph3)
+    z3 += mbG3 * Galileon3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    z3 += f * mu**2 * vG3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    z3 += f * k * mu * mu1 / k1 * (
+            mb1 * vF2(k2, mu2, ph2, k3, mu3, ph3) 
+            + mb2 / 2 
+            + mbG2 * Galileon2(k2, mu2, ph2, k3, mu3, ph3)
+            )
+    z3 += (f * k * mu)**2 / 2 * mb1 * mu2 / k2 * mu3 / k3
+    z3 += (f * k * mu)**6 / 6 * mu1 / k1 * mu2 / k2 * mu3 / k3
+    if not np.isclose(k23,0):
+        z3 += 2 * mbG2 * Galileon2(k1, mu1, ph1, k23, mu23, ph23) * vF2(k2, mu2, ph2, k3, mu3, ph3)
+        z3 += f * k * mu * mb1 * mu23 / k23 * vG2(k2, mu2, ph2, k3, mu3, ph3)
+        z3 += mbDG2 * Galileon2(k1, mu1, ph1, k23, mu23, ph23) * (
+                vF2(k2, mu2, ph2, k3, mu3, ph3) - vG2(k2, mu2, ph2, k3, mu3, ph3)
+                )
+        z3 += (f * k * mu)**2 * mu1 / k1 * mu23/ k23 * vG2(k2, mu2, ph2, k3, mu3, ph3)
+    return z3
+
+@njit("(float64, float64, float64,"
+      +"float64, float64, float64, float64,"
+      +"float64,"
+      +"float64, float64, float64,"
+      +"float64, float64, float64,"
+      +"float64, float64, float64)",
+      fastmath=True,
+      )
+def vZ3(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    Z3  = _Z3_symetrised_23(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    Z3 += _Z3_symetrised_23(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k2, mu2, ph2, k3, mu3, ph3, k1, mu1, ph1)
+    Z3 += _Z3_symetrised_23(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k3, mu3, ph3, k1, mu1, ph1, k2, mu2, ph2)
+    Z3 *= 1 / 3
+    return Z3
 
 #######################
 # N-point correlators #
