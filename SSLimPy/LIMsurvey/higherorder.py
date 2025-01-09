@@ -33,7 +33,7 @@ def Galileon2(k1, mu1, ph1, k2, mu2, ph2):
 
 @njit(
         "(float64, float64, float64,"+
-        "float64, float64, float64,",
+        "float64, float64, float64,"+
         "float64, float64, float64)",
         fastmath=True,
         )
