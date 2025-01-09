@@ -256,7 +256,7 @@ def _Z3_symetrised_23(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, 
     k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
     k, mu, ph = addVectors(k1, mu1, ph1, k23, mu23, ph23)
 
-    z3 = mb1 * vF3(k1, mu1, ph1, k2, mu2, ph2)
+    z3 = mb1 * vF3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
     z3 += mb2 * vF2(k2, mu2, ph2, k3, mu3, ph3)
     z3 += mb3 / 6
     z3 += mbdG2 * Galileon2(k2, mu2, ph2, k3, mu3, ph3)
