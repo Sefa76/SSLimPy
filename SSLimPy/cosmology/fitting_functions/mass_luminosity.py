@@ -14,12 +14,13 @@ TODO:
 Add in models from Matlab code
 """
 
-import numpy as np
-from copy import deepcopy
-import astropy.units as u
-import astropy.constants as cu
-from scipy.interpolate import RegularGridInterpolator, interp1d
 import os
+from copy import deepcopy
+
+import astropy.constants as cu
+import astropy.units as u
+import numpy as np
+from scipy.interpolate import RegularGridInterpolator, interp1d
 
 
 class mass_luminosity:
@@ -37,6 +38,10 @@ class mass_luminosity:
             "".join(os.path.dirname(os.path.realpath(__file__)).split("SSLimPy")[:-2])
             + "SSLimPy/SFR_tables/"
         )
+
+        # Units and Redshifts
+        self.Mpch = astro.Mpch
+        self.Msunh = astro.Msunh
 
     def MassPow(self, Mvec, z):
         """
@@ -649,7 +654,7 @@ class mass_luminosity:
         ).to(u.Msun)
 
         M_HI = M0 * (M_grid / Mmin) ** alpha * np.exp(-((Mmin / M_grid) ** 0.35))
-        M_HI[Mvec >= Mmax, :] = 0
+        M_HI[Mvec[:,None] >= Mmax] = 1e-44*M_HI.unit
 
         CLM = 6.25e-9 * u.Lsun / u.Msun  # Conversion factor btw MHI and LHI
         L = CLM * M_HI

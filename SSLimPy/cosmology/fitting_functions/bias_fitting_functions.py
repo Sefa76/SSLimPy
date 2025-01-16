@@ -7,8 +7,9 @@ Bias model parameter values are given by a dictionary called bias_par.
 Each function should have the same signature (M, z, dc) -> scalar or array like
 """
 
-import numpy as np
 from copy import deepcopy
+
+import numpy as np
 
 
 class bias_fittinig_functions:

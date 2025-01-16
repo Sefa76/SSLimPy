@@ -6,9 +6,10 @@ All functions take a vector of luminosities in L_sun and return dn/dL in
 
 """
 
-import numpy as np
-import astropy.units as u
 from copy import deepcopy
+
+import astropy.units as u
+import numpy as np
 
 
 class luminosity_functions:

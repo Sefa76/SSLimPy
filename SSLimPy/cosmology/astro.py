@@ -1,18 +1,18 @@
 import sys
 import types
-import numpy as np
-from scipy.interpolate import interp1d, RectBivariateSpline
-import astropy.units as u
-import astropy.constants as c
-
 from copy import deepcopy
 
+import astropy.constants as c
+import astropy.units as u
+import numpy as np
+from scipy.interpolate import RectBivariateSpline, interp1d
+
 sys.path.append("../")
-from SSLimPy.interface import config as cfg
 from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
+from SSLimPy.interface import config as cfg
 
 
 class astro_functions:
@@ -50,11 +50,8 @@ class astro_functions:
             self.astroparams["Lmin"], self.astroparams["Lmax"], self.astroparams["nL"]
         )
         # find the redshifts for fequencies asked for:
-        self.nu = np.atleast_1d(self.astroparams["nu"])
-        self.nuObs = np.atleast_1d(self.astroparams["nuObs"])
-
-        self.z = np.atleast_1d((self.nu / self.nuObs).to(1).value - 1)
-        self.z = np.sort(self.z)
+        self.nu = cfg.obspars["nu"]
+        self.nuObs = cfg.obspars["nuObs"]
 
         self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
 
@@ -405,6 +402,7 @@ class astro_functions:
                 np.log(L_of_M.value)[:, None, :] - 0.5 * sigma_base_e**2.0,
                 sigma_base_e,
             )
+
             CFL = flognorm * dn_dM_of_M_and_z[:, None, :]
             dn_dL_of_L = np.trapz(CFL, self.M, axis=0)
 
@@ -416,6 +414,7 @@ class astro_functions:
             dn_dL_of_L = dn_dL_of_L_func(L)[:,None] * np.ones_like(z)[None, :]
 
         logL = np.log(L.to(u.Lsun).value)
+        dn_dL_of_L[dn_dL_of_L.value == 0] = 1e-99*dn_dL_of_L.unit
         logLF = np.log(dn_dL_of_L.to(u.Mpc ** (-3) * u.Lsun ** (-1)).value)
         logLF_inter = RectBivariateSpline(logL, z, logLF)
 
@@ -705,8 +704,6 @@ class astro_functions:
         self.astroparams.setdefault("hmf_model", "ST")
         self.astroparams.setdefault("bias_model", "ST99")
         self.astroparams.setdefault("bias_par", {})
-        self.astroparams.setdefault("nu", 115 * u.GHz)
-        self.astroparams.setdefault("nuObs", 30 * u.GHz)
         self.astroparams.setdefault("Mmin", 1e9 * u.Msun)
         self.astroparams.setdefault("Mmax", 1e15 * u.Msun)
         self.astroparams.setdefault("nM", 500)

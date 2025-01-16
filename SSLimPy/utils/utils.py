@@ -1,15 +1,122 @@
 from numba import njit, prange
 import numpy as np
 
+#####################
+# Special Functions #
+#####################
+
+
+@njit
+def legendre_0(mu):
+    return np.ones_like(mu)
+
+
+@njit
+def legendre_2(mu):
+    return 1 / 2 * (3 * np.power(mu, 2) - 1)
+
+
+@njit
+def legendre_4(mu):
+    return 1 / 8 * (35 * np.power(mu, 4) - 30 * np.power(mu, 2) + 3)
+
+
 ##################
 # Base Functions #
 ##################
+
+
+@njit(
+    "(float64, float64, float64, float64, float64, float64)",
+    fastmath=True,
+)
+def scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
+
+    s1s = (1 - mu1**2)
+    if np.isclose(s1s,0):
+        s1s = 0
+        mu1 = 1 * np.sign(mu1)
+
+    s2s = (1 - mu2**2)
+    if np.isclose(s2s,0):
+        s2s = 0
+        mu2 = 1 * np.sign(mu2)
+
+    return k1 * k2 * (np.sqrt(s2s*s1s) * np.cos(ph1 - ph2) + mu1 * mu2)
+
+
+@njit(
+    "(float64, float64, float64, float64, float64, float64)",
+    fastmath=True,
+)
+def addVectors(
+    k1,
+    mu1,
+    ph1,
+    k2,
+    mu2,
+    ph2,
+):
+    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
+    radicant = k1**2 + 2 * k1pk2 + k2**2
+    if np.isclose(radicant, 0):
+        k12 = 0
+        mu12 = 0
+        phi12 = 0
+    else:
+        k12 = np.sqrt(radicant)
+        mu12 = (k1 * mu1 + k2 * mu2) / k12
+        if np.isclose(np.abs(mu12), 1):
+            phi12 = 0
+        else:
+            # Yes this sometimes fails
+            s1s = 1-mu1**2
+            if np.isclose(s1s,0):
+                s1s = 0
+            s2s = 1-mu2**2
+            if np.isclose(s2s,0):
+                s2s = 0
+
+            x = k1 * np.sqrt(s1s) * np.cos(ph1) + k2 * np.sqrt(s2s) * np.cos(ph2)
+            y = k1 * np.sqrt(s1s) * np.sin(ph1) + k2 * np.sqrt(s2s) * np.sin(ph2)
+
+            phi12 = np.arctan2(y, x)
+
+    return k12, mu12, phi12
+
+
+@njit(
+    "(float64[::1], float64[::1], float64[::1])",
+    fastmath=True,
+)
+def linear_interpolate(xi, yi, x):
+    xl = yi.size
+    rxl = x.size
+    assert xl == xi.size, "xi should be the same size as yi"
+
+    # Find the indices of the grid points surrounding xi
+    # Handle linear extrapolation for larger x
+    x1_idx = np.searchsorted(xi, x)
+    x1_idx[np.where(x1_idx == 0)] = 1
+    x1_idx[np.where(x1_idx == xl)] = xl - 1
+    x2_idx = x1_idx - 1
+
+    x1, x2 = xi[x1_idx], xi[x2_idx]
+
+    results = np.empty(rxl)
+    for i in range(rxl):
+        y1 = yi[x1_idx[i]]
+        y2 = yi[x2_idx[i]]
+
+        results[i] = (y2 * (x1[i] - x[i]) + y1 * (x[i] - x2[i])) / (x1[i] - x2[i])
+    return results
+
 
 @njit(
     "(float64[::1], float64[::1], float64[:,:], float64[::1], float64[::1])",
     fastmath=True,
 )
-def _bilinear_interpolate(xi, yj, zij, x, y):
+def bilinear_interpolate(xi, yj, zij, x, y):
     # Check input sizes
     xl, yl = zij.shape
     rxl = x.size
@@ -53,7 +160,7 @@ def _bilinear_interpolate(xi, yj, zij, x, y):
 
 # The numba trapezoid for phi, muq, and q
 @njit("(float64[::1], float64[::1])", fastmath=True)
-def _trapezoid(y, x):
+def trapezoid(y, x):
     s = 0.0
     for i in range(x.size - 1):
         dx = x[i + 1] - x[i]
@@ -61,9 +168,11 @@ def _trapezoid(y, x):
         s += dx * dy
     return s * 0.5
 
+
 #########################
 # Specialized Functions #
 #########################
+
 
 @njit(
     "(float64[::1], float64[::1], "
@@ -91,28 +200,17 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
             for iq in range(ql):
                 for imuq in range(muql):
                     for ideltaphi in range(deltaphil):
-                        abskminusq[iq, imuq, ideltaphi] = np.sqrt(
-                            np.power(k[ik], 2)
-                            + np.power(q[iq], 2)
-                            - 2
-                            * q[iq]
-                            * k[ik]
-                            * (
-                                muq[imuq] * mu[imu]
-                                + np.sqrt(1 - np.power(muq[imuq], 2))
-                                * np.sqrt(1 - np.power(mu[imu], 2))
-                                * np.cos(deltaphi[ideltaphi])
-                            )
+                        kmq, mukmq, _ = addVectors(
+                            k[ik], mu[imu], deltaphi[ideltaphi], q[iq], -mu[imuq], np.pi
                         )
-                        mukminusq[iq, imuq, ideltaphi] = (
-                            k[ik] * mu[imu] - q[iq] * muq[imuq]
-                        ) / abskminusq[iq, imuq, ideltaphi]
+                        abskminusq[iq, imuq, ideltaphi] = kmq
+                        mukminusq[iq, imuq, ideltaphi] = mukmq
 
             # flatten the axis last axis first
             abskminusq = abskminusq.flatten()
             mukminusq = mukminusq.flatten()
             # interpolate the logP on mu logk and fill with new values
-            logPkminusq = _bilinear_interpolate(
+            logPkminusq = bilinear_interpolate(
                 np.log(k), mu, np.log(P), np.log(abskminusq), mukminusq
             )
             logPkminusq = np.reshape(logPkminusq, (ql, muql, deltaphil))
@@ -129,7 +227,30 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
                         * (np.abs(W[iq, imuq]) ** 2)
                         * np.exp(logPkminusq[iq, imuq, :])
                     )
-                    muq_integrand[imuq] = _trapezoid(phi_integrand, deltaphi)
-                q_integrand[iq] = _trapezoid(muq_integrand, muq)
-            Pconv[ik, imu] = _trapezoid(q_integrand * q, np.log(q))
+                    muq_integrand[imuq] = trapezoid(phi_integrand, deltaphi)
+                q_integrand[iq] = trapezoid(muq_integrand, muq)
+            Pconv[ik, imu] = trapezoid(q_integrand * q, np.log(q))
     return Pconv
+
+
+@njit(
+    "(uint16, uint16, "
+    + "float64[:,:], float64[:,:], float64[:,:], "
+    + "float64[:,:], float64[:,:], "
+    + "float64[:,:])",
+    parallel=True,
+)
+def construct_gaussian_cov(nk, nz, C00, C20, C40, C22, C42, C44):
+    cov = np.empty((nk, 3, 3, nz))
+    for ki in prange(nk):
+        for zi in range(nz):
+            cov[ki, 0, 0, zi] = C00[ki, zi]
+            cov[ki, 1, 0, zi] = C20[ki, zi]
+            cov[ki, 2, 0, zi] = C40[ki, zi]
+            cov[ki, 0, 1, zi] = C20[ki, zi]
+            cov[ki, 0, 2, zi] = C40[ki, zi]
+            cov[ki, 1, 1, zi] = C22[ki, zi]
+            cov[ki, 1, 2, zi] = C42[ki, zi]
+            cov[ki, 2, 1, zi] = C42[ki, zi]
+            cov[ki, 2, 2, zi] = C44[ki, zi]
+    return cov

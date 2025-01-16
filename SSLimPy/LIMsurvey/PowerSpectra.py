@@ -39,9 +39,10 @@ class PowerSpectra:
         #################################
         # Properties of target redshift #
         #################################
-        self.nu = self.astro.nu
-        self.nuObs = self.astro.nuObs
-        self.z = self.astro.z
+        self.nu = cfg.obspars["nu"]
+        self.nuObs = cfg.obspars["nuObs"]
+        self.Delta_nu = cfg.obspars["Delta_nu"]
+        self.z = cfg.z
         self.H = self.cosmology.Hubble(self.z, physical=True)
 
         #########################################
@@ -51,15 +52,15 @@ class PowerSpectra:
         self.L = astro.L
         if "log" in cfg.settings["k_kind"]:
             self.k_edge = np.geomspace(
-                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]
+                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]+1
             )
         else:
             self.k_edge = np.linspace(
-                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]
+                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]+1
             )
         self.k = (self.k_edge[:-1] + self.k_edge[1:]) / 2.0
         self.dk = np.diff(self.k)
-        self.mu_edge = np.linspace(-1, 1, cfg.settings["nmu"])
+        self.mu_edge = np.linspace(-1, 1, cfg.settings["nmu"]+1)
         self.mu = (self.mu_edge[:-1] + self.mu_edge[1:]) / 2.0
         self.dmu = np.diff(self.mu)
         self.k_par = self.k[:, None] * self.mu[None, :]
@@ -72,11 +73,11 @@ class PowerSpectra:
         # Compute the power spectrum on the internal grid
         self.c_NFW = self.prepare_c_NFW()
 
-        self.compute_power_spectra()
-        self.compute_power_spectra_moments()
+        # self.compute_power_spectra()
+        # self.compute_power_spectra_moments()
 
         # Create interpolationg fucuntion
-        self.Pk_obs_func = self.create_pk_interp()
+        # self.Pk_obs_func = self.create_pk_interp()
 
     ###################
     # Halo Properties #
@@ -166,6 +167,82 @@ class PowerSpectra:
                   np.sin(x)*(si_cx - si_x) - np.sin(c*x)/((1.+c)*x))
         return np.squeeze(u_km/gc)
 
+    def higher_halomoments(self, z, *args, moment=1, bias_order=0, kbias=None):
+        """Computes higher order of the halo bias taking into account
+        Line broadening and skale dependent bias
+
+        pass every k and then every mu in the same order in args
+        """
+        M = self.M
+        kbias = np.atleast_1d(kbias)
+        z = np.atleast_1d(z)
+
+        if len(args) % moment != 0:
+            raise ValueError("You have to pass wave-vectors for every moment")
+        else:
+            kd = [np.atleast_1d(args[ik]) for ik in range(moment)]
+
+        # Independent of k
+        dn_dM = np.reshape(self.astro.halomassfunction(M,z),(*M.shape,*z.shape))
+        L_of_M = np.reshape(self.astro.massluminosityfunction(M,z),(*M.shape,*z.shape))
+
+        # Dependent only on the external momenta
+        if bias_order == 0:
+            bias = np.ones((*kbias.shape, *M.shape, *z.shape))
+        elif bias_order == 1:
+            bias = self.astro.restore_shape(self.astro.halobias(M , z, k=kbias), kbias, M, z)
+        else:
+            raise ValueError("Order of bias asked for does is not implemented: {}".format(bias_order))
+
+        # Dependent on k
+        normhaloprofile = []
+        for ik in range(moment):
+            k = kd[ik]
+            U = np.reshape(self.ft_NFW(k, M, z),(*k.shape, *M.shape, *z.shape))
+            U = np.expand_dims(U,(*range(ik), *range(ik + 1, moment)))
+            U = np.expand_dims(U,(*range(moment,2*moment+1),))
+            normhaloprofile.append(U)
+
+        # Dependent on k and mu
+        Fv = np.ones((moment,))
+        if self.astro.astroparams["v_of_M"]:
+            Fv = []
+            for ik in range(moment):
+                k = kd[ik]
+                mu = np.atleast_1d(args[moment + ik])
+                F = np.reshape(self.astro.broadening_FT(k, mu, M, z),
+                               (*k.shape, *mu.shape, *M.shape, *z.shape))
+                F = np.expand_dim(F,(*range(ik),
+                                     *range(ik + 1, moment)),
+                                     )
+                F = np.expand_dim(F,(*range(moment, moment + ik),
+                                     *range(moment + ik + 1, 2 * moment)),
+                                     )
+                F = np.expand_dims(F, 2* moment)
+                Fv.append(F)
+
+        # indicies : k1, ..., kn, mu1, ..., mun, kext, M, z
+        integrnd = (
+            np.expand_dims(dn_dM, (*range(2*moment+1),))
+            * np.power(np.expand_dims(L_of_M, (*range(2 * moment + 1),)), moment)
+            * np.expand_dims(bias, (*range(2*moment),))
+        )
+        for i in range(moment):
+            integrnd = integrnd * Fv[i] * normhaloprofile[i]
+
+        hm_corr = np.trapz(integrnd,M,axis=-2)
+        return np.squeeze(hm_corr)
+
+    def halo_temperature_moments(self, z, *args, moment=1, bias_order=0, kbias=None):
+        """Computes higher order of the halo bias taking into account
+        Line broadening and skale dependent bias
+
+        pass every k and then every mu in the same order in args
+        """
+        hm = self.higher_halomoments(z, *args, moment=moment, bias_order=bias_order, kbias=kbias)
+        return hm * self.astro.CLT(z)**moment
+
+    # TODO: Needs to be removed/ fully replaced by the `higher_halomoments`
     def halomoments(self,k: k_types ,z, mu: mu_types=None, moment: int = 1, bias_order:int = 0):
         """
         Computes the Luminosity weight halo profile
@@ -220,12 +297,17 @@ class PowerSpectra:
             cosmo = self.cosmology
 
         if "sigmav" in BAOpars:
-            sigmav = BAOpars["sigmaV"]
+            sigmav = np.atleast_1d(BAOpars["sigmav"])
             if len(sigmav) != len(z):
                 raise ValueError("did not pass velocity dispertion for every z asked for")
             # scale independent f
-            f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
-            sv2 = sigmav[None,:]*(1-np.power(mu,2)[:,None]+np.power(mu,2)[:,None]*(1+f_scaleindependent[None,:]))
+            f_scaleindependent = np.atleast_1d(cosmo.growth_rate(1e-4/u.Mpc,z))
+            sv2 = np.power(sigmav[None,:],2) * (
+                1
+                - np.power(mu,2)[:,None]
+                + np.power(mu,2)[:,None]
+                * (1 + f_scaleindependent[None,:])**2
+                )
         else:
             f0 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 0), 2))[:,None]
             f1 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 1), 2))[:,None]
@@ -267,37 +349,51 @@ class PowerSpectra:
     ################
     # BAO Features #
     ################
-    def qparallel(self, z, BAOpars = dict()):
+    def alpha_parallel(self, z, BAOpars = dict()):
         """
-        Function implementing q parallel of the Alcock-Paczynski effect
-        If BAOpars is passed checks for alpha_par
+        Function implementing alpha_parallel of the Alcock-Paczynski effect
+        If BAOpars is passed checks for alpha_iso and alpha_AP
         """
         z = np.atleast_1d(z)
-        if "alpha_par" in BAOpars:
-            q_par = np.atleast_1d(BAOpars["alpha_par"])
-            if len(z) != len(q_par):
-                raise ValueError("did not pass alpha_par parameters for every z asked for")
+        if "alpha_iso" in BAOpars:
+            alpha_iso = np.atleast_1d(BAOpars["alpha_iso"])
+            if len(z) != len(alpha_iso):
+                raise ValueError("did not pass alpha_iso parameters for every z asked for")
+            if "alpha_AP" in BAOpars:
+                alpha_AP = np.atleast_1d(BAOpars["alpha_AP"])
+                if len(z) != len(alpha_AP):
+                    raise ValueError("did not pass alpha_AP parameters for every z asked for")
+            else:
+                alpha_AP = 1.
+            alpha_par = alpha_iso * np.power(alpha_AP,2/3)
         else:
             fidTerm = self.fiducialcosmo.Hubble(z)
             cosmoTerm = self.cosmology.Hubble(z)
-            q_par = fidTerm/cosmoTerm
-        return q_par
+            alpha_par = fidTerm/cosmoTerm * self.dragscale()
+        return alpha_par
 
-    def qperpendicular(self, z, BAOpars = dict()):
+    def alpha_perpendicular(self, z, BAOpars = dict()):
         """
-        Function implementing q perpendicular of the Alcock-Paczynski effect
-        If BAOpars is passed checks for alpha_perp
+        Function implementing alpha_perpendicular of the Alcock-Paczynski effect
+        If BAOpars is passed checks for alpha_iso and alpha_AP
         """
         z = np.atleast_1d(z)
-        if "alpha_perp" in BAOpars:
-            q_perp = np.atleast_1d(BAOpars["alpha_perp"])
-            if len(z) != len(q_perp):
-                raise ValueError("did not pass alpha_perp parameters for every z asked for")
+        if "alpha_iso" in BAOpars:
+            alpha_iso = np.atleast_1d(BAOpars["alpha_iso"])
+            if len(z) != len(alpha_iso):
+                raise ValueError("did not pass alpha_iso parameters for every z asked for")
+            if "alpha_AP" in BAOpars:
+                alpha_AP = np.atleast_1d(BAOpars["alpha_AP"])
+                if len(z) != len(alpha_AP):
+                    raise ValueError("did not pass alpha_AP parameters for every z asked for")
+            else:
+                alpha_AP = 1.
+            alpha_perp = alpha_iso / np.power(alpha_AP,1/3)
         else:
-            fidTerm = self.fiducialcosmo.angdist(z)
-            cosmoTerm = self.cosmology.angdist(z)
-            q_perp = cosmoTerm / fidTerm
-        return q_perp
+            fidTerm = self.fiducialcosmo.angdist(z) 
+            cosmoTerm = self.cosmology.angdist(z) 
+            alpha_perp = cosmoTerm / fidTerm * self.dragscale()
+        return alpha_perp
 
     def dragscale(self):
         """
@@ -342,7 +438,7 @@ class PowerSpectra:
             Biasterm = (
                 bmean[:, None, :]
                 * Tmean
-                * self.cosmology.sigma8_of_z(z,tracer=self.tracer)[None,:]
+                * np.atleast_1d(self.cosmology.sigma8_of_z(z,tracer=self.tracer))[None,:]
             )
         else:
             Biasterm = (self.astro.restore_shape(self.astro.bavg(z, k=k, mu=mu), k, mu, z)
@@ -375,8 +471,15 @@ class PowerSpectra:
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
         bterm = self.astro.restore_shape(self.bias_term(z, k=k, mu=mu, BAOpars=BAOpars),k, mu, z)
-        fterm = np.reshape(self.f_term(k,mu,z,BAOpars=BAOpars),(*k.shape,*mu.shape,*z.shape))
-        linear_Kaiser = np.power(bterm + fterm ,2)
+        if "beta" in BAOpars:
+            beta = np.atleast_1d(BAOpars["beta"])
+            if len(beta) != len(z):
+                raise ValueError("did not pass RSD amplitude for every z asked for")
+            fterm = np.ones(len(self.k))[:,None,None] * beta[None,None,:] * np.power(mu[None,:,None], 2)
+            linear_Kaiser = np.power(bterm * (1 + fterm), 2)
+        else:
+            fterm = np.reshape(self.f_term(k,mu,z,BAOpars=BAOpars),(*k.shape,*mu.shape,*z.shape))
+            linear_Kaiser = np.power(bterm + fterm ,2)
         return np.squeeze(linear_Kaiser)
 
     def fingers_of_god(self, k, mu, z, BAOpars = dict()):
@@ -389,14 +492,14 @@ class PowerSpectra:
         else:
             cosmo = self.cosmology
 
-        if "sigmav" in BAOpars:
+        if "sigmap" in BAOpars:
             # This quantitiy is different from the old lim one by a factor of f^2
-            sigmav = BAOpars["sigmaV"]
-            if len(sigmav) != len(z):
+            sigmap = np.atleast_1d(BAOpars["sigmap"])
+            if len(sigmap) != len(z):
                 raise ValueError("did not pass velocity dispertion for every z asked for")
             # scale independent f
             f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
-            sp = sigmav*f_scaleindependent
+            sp = sigmap*f_scaleindependent
         else:
             sp = np.atleast_1d(cosmo.P_ThetaTheta_Moments(z,moment=2))
         FoG_damp = cfg.settings["FoG_damp"]
@@ -413,8 +516,6 @@ class PowerSpectra:
     # Line Broadening and Resolution #
     ##################################
 
-    #TODO: #1 Add Functions for Line Broadening end Suppression because of Survey Resolution
-
     # Call these functions before applying the AP transformations, scale fixes, ect
     def sigma_parr(self, z, nu_obs):
         x = (cfg.obspars["dnu"] / nu_obs).to(1).value
@@ -423,7 +524,7 @@ class PowerSpectra:
 
     def sigma_perp(self, z):
         x = cfg.obspars["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
-        y = self.fiducialcosmo.angdist(z)
+        y = self.fiducialcosmo.angdist(z)*(1+z)
         return x * y
 
     def F_parr(self, k, mu, z, nu_obs):
@@ -475,7 +576,7 @@ class PowerSpectra:
         # Calculate dz from deltanu
         nu = self.nu
         nuObs = self.nuObs
-        Delta_nu = cfg.obspars["Delta_nu"]
+        Delta_nu = self.Delta_nu
         z = (nu / nuObs - 1).to(1).value
         z_min = (nu / (nuObs + Delta_nu / 2) - 1).to(1).value
         z_max = (nu / (nuObs - Delta_nu / 2) - 1).to(1).value
@@ -491,13 +592,13 @@ class PowerSpectra:
         Vsurvey = simpson(
             q[:,None]**3
             * simpson(
-                np.abs(Wsurvey)**2 / (2 * np.pi)**2, 
+                np.abs(Wsurvey)**2 / (2 * np.pi)**2,
                 muq,
                 axis=1
             ),
             np.log(q.value),
             axis=0,
-        )
+        ) * (Sfield * Lparr).unit
         return Wsurvey, Vsurvey
 
     def convolved_Pk(self):
@@ -539,9 +640,9 @@ class PowerSpectra:
                 Pobs[:, :, iz].value,
                 Wsurvey[:, :, iz].value,
             )
-        
+
         self.Pk_true = copy(Pobs)
-        self.Pk_Obs = Pconv *Pobs.unit / Vsurvey
+        self.Pk_Obs = Pconv *Pobs.unit / Vsurvey.value
         return self.Pk_Obs
 
     #######################
@@ -561,18 +662,17 @@ class PowerSpectra:
         z = np.atleast_1d(z)
 
         Ps = 0
-        if cfg.settings["halo_model_PS"]:
-            Ps = self.astro.restore_shape(self.halomoments(k, z, mu=mu, moment=2), k, mu, z)
-            Ps *= self.astro.CLT(z)[None,None,:]**2
-        else:
-            Ps = self.astro.restore_shape(self.astro.Tmoments(z, k=k, mu=mu, moment=2), k, mu, z)
-
         if "Pshot" in BAOpars:
             Pshot = np.atleast_1d(BAOpars["Pshot"])
             if len(Pshot) != len(z):
                 raise ValueError("did not pass the shotnoise for every z asked for")
-            Ps = Ps + Pshot[None, None,:]
-
+            Ps = Pshot[None, None,:]
+        else:
+            if cfg.settings["halo_model_PS"]:
+                Ps = self.astro.restore_shape(self.halomoments(k, z, mu=mu, moment=2), k, mu, z)
+                Ps *= self.astro.CLT(z)[None,None,:]**2
+            else:
+                Ps = self.astro.restore_shape(self.astro.Tmoments(z, k=k, mu=mu, moment=2), k, mu, z)
         return np.squeeze(Ps)
 
     def compute_power_spectra(self):
@@ -596,14 +696,13 @@ class PowerSpectra:
             Fnu = F_parr*F_perp
 
         #fix units
-        k *= self.dragscale()
         logkMpc = np.log(k.to(u.Mpc**-1).value)
 
         # Apply AP effect
-        qparr = np.atleast_1d(self.qparallel(z, self.BAOpars))
-        kparr_ap = k[:,None,None] * mu[None,:,None] * qparr[None,None,:]
-        qperp = np.atleast_1d(self.qperpendicular(z, self.BAOpars))
-        kperp_ap = k[:,None,None] *np.sqrt(1- np.power(mu[None,:,None],2)) * qperp[None,None,:]
+        alpha_par = np.atleast_1d(self.alpha_parallel(z, self.BAOpars))
+        kparr_ap = k[:,None,None] * mu[None,:,None] * alpha_par[None,None,:]
+        alpha_perp = np.atleast_1d(self.alpha_perpendicular(z, self.BAOpars))
+        kperp_ap = k[:,None,None] *np.sqrt(1- np.power(mu[None,:,None],2)) * alpha_perp[None,None,:]
 
         # Compute related quantities
         k_ap = np.sqrt(np.power(kparr_ap,2)+np.power(kperp_ap,2))
@@ -625,7 +724,7 @@ class PowerSpectra:
             uI = Pk_grid.unit
             logPk_grid = np.log(Pk_grid.value)
             for iz,zi in enumerate(z):
-                interp_per_z = UnivariateSpline(logkMpc,logPk_grid[:,iz])
+                interp_per_z = UnivariateSpline(logkMpc, logPk_grid[:,iz], s=0)
                 Pk_ap[:,:,iz] = np.exp(interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))) \
                                 / np.atleast_1d(np.power(self.cosmology.sigma8_of_z(zi,tracer=self.tracer),2))[None,None,:]
         Pk_ap *= uI
@@ -664,10 +763,10 @@ class PowerSpectra:
                 bterm_grid = np.reshape(self.bias_term(z, k=k, BAOpars=self.BAOpars),(*k.shape, *z.shape))
                 uI = bterm_grid.unit
                 for iz, zi in enumerate(z):
-                    interp_per_z = UnivariateSpline(logkMpc,bterm_grid[:,iz])
+                    interp_per_z = UnivariateSpline(logkMpc, bterm_grid[:,iz], s=0)
                     rsd_ap[:,:,iz] = interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value))**2
             else:
-                Ps_ap = np.atleast_1d(self.bias_term(z, BAOpars=self.BAOpars)**2)[None,None,:]
+                rsd_ap = np.atleast_1d(self.bias_term(z, BAOpars=self.BAOpars)**2)[None,None,:]
 
         if cfg.settings["verbosity"] >1:
             trsd = time()
@@ -695,7 +794,7 @@ class PowerSpectra:
             logPs_grid = np.log(Ps_grid.value)
             uI = Ps_grid.unit
             for iz, zi in enumerate(z):
-                interp_per_z = UnivariateSpline(logkMpc,logPs_grid[:,iz])
+                interp_per_z = UnivariateSpline(logkMpc, logPs_grid[:,iz], s=0)
                 Ps_ap[:,:,iz] = np.exp(interp_per_z(np.log(k_ap[:,:,iz].to(u.Mpc**-1).value)))
             Ps_ap *= uI
 
@@ -707,7 +806,7 @@ class PowerSpectra:
             print("Shot-noise obtained in {} seconds".format(tps-trsd))
 
         self.Pk_Obs = (
-            (qparr * np.power(qperp,2))[None,None,:]
+            (alpha_par * np.power(alpha_perp,2))[None,None,:]
             * (rsd_ap * Pk_ap + Ps_ap)
             * Fnu
         )
@@ -731,7 +830,7 @@ class PowerSpectra:
         def Pk_ell_moments(ell):
             norm = (2*ell+1)/2
             L_ell = legendre(ell)
-            return simpson(y=Pobs * norm * L_ell(mu)[None,:,None],x=mu,axis=1)
+            return simpson(y=Pobs * norm * L_ell(mu)[None,:,None],x=mu,axis=1) * Pobs.unit
 
         self.Pk_0bs = Pk_ell_moments(0)
         self.Pk_2bs = Pk_ell_moments(2)

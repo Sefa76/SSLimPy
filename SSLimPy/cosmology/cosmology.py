@@ -7,17 +7,12 @@ import types
 from copy import deepcopy
 from warnings import warn
 
-import numpy as np
-
-import astropy.units as u
 import astropy.constants as c
-
-from scipy.interpolate import (
-    InterpolatedUnivariateSpline,
-    RectBivariateSpline,
-    UnivariateSpline,
-    make_interp_spline,
-)
+import astropy.units as u
+import numpy as np
+from scipy.interpolate import (InterpolatedUnivariateSpline,
+                               RectBivariateSpline, UnivariateSpline,
+                               make_interp_spline)
 from scipy.signal import savgol_filter
 
 # Import SSLimPy functions
@@ -804,9 +799,9 @@ class cosmo_functions:
         Returns:
             float: The value of the MM power spectrum at the given redshift and wavenumber.
         """
-        if nonlinear is True:
+        if nonlinear:
             power = self.results.Pk_nl(z, k, grid=False)
-        elif nonlinear is False:
+        else:
             power = self.results.Pk_l(z, k, grid=False)
         return power
 
@@ -822,9 +817,9 @@ class cosmo_functions:
         Returns:
             The value of the CB power spectrum at the given redshift and wavenumber.
         """
-        if nonlinear is True:
+        if nonlinear:
             power = self.results.Pk_cb_nl(z, k, grid=False)
-        elif nonlinear is False:
+        else:
             power = self.results.Pk_cb_l(z, k, grid=False)
         return power
 

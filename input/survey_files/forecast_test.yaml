@@ -19,14 +19,14 @@ VID:
 OBS:
   'Tsys_NEFD' : 40
   'Nfeeds' : 19
-  'beam_FWHM' : 4.1
+  'beam_FWHM' : 1
   'nu': 115
   'nuObs': 30
-  'Delta_nu' : 8
-  'dnu' : 15.6
-  'tobs' : [1300, "hr"]
-  'nD' : 1
-  'Omega_field' : 2.25
+  'Delta_nu' : 7.7
+  'dnu' : 31.25
+  'tobs' : [6000, "hr"]
+  'nD' : 60
+  'Omega_field' : 200.0
   'Nfield' : 1
   'N_FG_par' : 1
   'N_FG_perp' : 1
