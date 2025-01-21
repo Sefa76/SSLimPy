@@ -12,6 +12,7 @@ from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
+from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb 
 from SSLimPy.interface import config as cfg
 
 
@@ -49,7 +50,7 @@ class astro_functions:
         self.L = np.geomspace(
             self.astroparams["Lmin"], self.astroparams["Lmax"], self.astroparams["nL"]
         )
-        # find the redshifts for fequencies asked for:
+        # find the redshifts for frequencies asked for:
         self.nu = cfg.obspars["nu"]
         self.nuObs = cfg.obspars["nuObs"]
 
@@ -61,23 +62,26 @@ class astro_functions:
         self.init_bias_function()
 
         # bias function
-        # !Without Corrections for nongaussianity!
+        # !Without Corrections for non-Gaussianity!
         self.delta_crit = 1.686
         self._b_of_M = getattr(self._bias_function, self.astroparams["bias_model"])
-        # use halobias to compute the bias with all corrections
+        # use halo-bias to compute the bias with all corrections
 
         # halo mass function
-        # !Without Corrections for nongaussianity!
+        # !Without Corrections for non-Gaussianity!
         self._dn_dM_of_M = getattr(
             self._halo_mass_function, self.astroparams["hmf_model"]
         )
         # use halomassfunction to compute the bias with all corrections
 
-        # mass luminosty function
+        # mass luminosity function
         self.massluminosityfunction = self.create_mass_luminosity()
 
-        # halo luminostiy function
+        # halo luminosity function
         self.haloluminosityfunction = self.create_luminosty_function()
+
+        # higher order bias computations
+        self.bias_coevolution = cb.coevolution_bias(self)
 
     ###################
     # Astro Functions #
@@ -159,7 +163,7 @@ class astro_functions:
     def bavg(self, z, k=None, mu=None):
         '''
         Average luminosity-weighted bias for the given cosmology and line
-        model.  ASSUMED TO BE WEIGHED LINEARLY BY MASS FOR 'LF' MODELS
+        model. Assumed to be linearly weight 
 
         Includes the effects of f_NL though the wrapping functions in astro
         '''
@@ -185,6 +189,31 @@ class astro_functions:
         I2 = np.trapz(itgrnd2,M,axis=2)
         b_line =  I1/I2
         return np.squeeze(b_line.to(1).value)
+
+
+    def bavghalo(self, bstring, z, power, dc=1.6865):
+        '''
+        Average luminosity-weighted bias for higher order bias functions 
+
+        Pass which bias you want as a string present in bias_coevolution
+        Will default back to use ST fitting function as halo mass function! 
+        '''
+        # Integrands for mass-averaging
+        M = self.M.to(self.Msunh)
+        z = np.atleast_1d(z)
+
+        LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
+        dndM = self.bias_coevolution.sc_hmf(M, z, dc=dc)
+        b = getattr(self.bias_coevolution, bstring)(M[:,None], z[None,:], dc=dc)
+
+        itgrnd1 = M * LofM**power * dndM * b
+        itgrnd2 = M * LofM**power * dndM
+
+        I1 = np.trapz(itgrnd1, np.log(M.value), axis=0)
+        I2 = np.trapz(itgrnd2, np.log(M.value), axis=0)
+        avgbL =  I1/I2
+        return avgbL.to(1).value
+
 
     def nbar(self, z):
         '''
@@ -212,7 +241,7 @@ class astro_functions:
     def Lmoments(self, z, k=None, mu=None, moment=1):
         '''
         Sky-averaged luminosity density moments at nuObs from target line.
-        Has two cases for 'LF' and 'ML' models that where handeld in create_luminosty_function
+        Has two cases for 'LF' and 'ML' models that where handled in create_luminosty_function
         '''
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
@@ -297,7 +326,7 @@ class astro_functions:
 
     def _sigmaM_of_z(self, M, z):
         """
-        Mass (or cdm+b) variance at target redshift. Used to create interpolated versions
+        Mass (or CDM+baryon) variance at target redshift. Used to create interpolated versions
         """
         tracer = self.astrotracer
 
@@ -374,7 +403,7 @@ class astro_functions:
             off_mass_luminosity = ml.mass_luminosity(self, LF_par)
             L_of_M = getattr(off_mass_luminosity, "MassPow")
 
-        # The Mass Luminosity functions L(M,z) are allready vectorized properly inside of the File
+        # The Mass Luminosity functions L(M,z) are already vectorized properly inside of the File
         return L_of_M
 
     def create_luminosty_function(self):
