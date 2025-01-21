@@ -52,26 +52,35 @@ def Galileon3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
 
 @njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
 def vF2(k1, mu1, ph1, k2, mu2, ph2):
-    """Symetrised F2 kernel"""
-    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
-    F2 = (
-        5 / 7
-        + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
-        + 2 / 7 * k1pk2**2 / (k1 * k2) ** 2
-    )
-    return F2
+    """Symetrised F2 kernel
+    """
+    k, _, _ = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    if np.isclose(k,0):
+        return 0
+    else:
+        k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
+        F2 = (
+            5 / 7
+            + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
+            + 2 / 7 * k1pk2**2 / (k1 * k2) ** 2
+        )
+        return F2
 
 
 @njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
 def vG2(k1, mu1, ph1, k2, mu2, ph2):
     """Symetrised G2 kernel"""
-    k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
-    F2 = (
-        3 / 7
-        + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
-        + 4 / 7 * k1pk2**2 / (k1 * k2) ** 2
-    )
-    return F2
+    k, _, _ = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    if np.isclose(k,0):
+        return 0
+    else:
+        k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
+        F2 = (
+            3 / 7
+            + 1 / 2 * (1 / k1**2 + 1 / k2**2) * k1pk2
+            + 4 / 7 * k1pk2**2 / (k1 * k2) ** 2
+        )
+        return F2
 
 
 @njit(
@@ -218,7 +227,7 @@ def vG3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
 def vZ1(mb1, f, k1, mu1, ph1):
     """Kaiser term RSD function
     """
-    return mb1 + f * mu1**2
+    return mb1 + f * mu1**2 # for now no b k^2 term
 
 
 @njit("(float64, float64, float64, float64,"
@@ -230,13 +239,12 @@ def vZ2(mb1, mb2, mbG2, f, k1, mu1, ph1, k2, mu2, ph2):
     """Second order RSD mode coupling kernal
     """
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
-    z2 = mb1 * vF2(k1, mu1, ph1, k2, mu2, ph2)
-    z2 += mb2 / 2
+    z2 = mb2 / 2
+    z2 += mb1 * vF2(k1, mu1, ph1, k2, mu2, ph2)
     z2 += mbG2 * Galileon2(k1, mu1, ph1, k2, mu2, ph2)
-    z2 += f * mu12**2 * vG2(k1, mu1, ph1, k2, mu2, ph2)
     z2 += f * mu12 * k12 / 2 * mb1 * (mu1 / k1 + mu2 / k2)
     z2 += (f * mu12 * k12)**2 / 2 * mu1 / k1 * mu2 / k2
-
+    z2 += f * mu12**2 * vG2(k1, mu1, ph1, k2, mu2, ph2)
     return z2
 
 
@@ -249,10 +257,9 @@ def vZ2(mb1, mb2, mbG2, f, k1, mu1, ph1, k2, mu2, ph2):
       fastmath=True,
       )
 def _Z3_symetrised_23(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """ Thrid order RSD mode coupling kernel symetrized in the second and third argument
+    """ Third order RSD mode coupling kernel symetrized in the second and third argument
     possible divergences in k23 are captured by the mode coupling kernels in this way
     """
-    k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
     k, mu, ph = addVectors(k1, mu1, ph1, k23, mu23, ph23)
 
@@ -260,22 +267,21 @@ def _Z3_symetrised_23(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, 
     z3 += mb2 * vF2(k2, mu2, ph2, k3, mu3, ph3)
     z3 += mb3 / 6
     z3 += mbdG2 * Galileon2(k2, mu2, ph2, k3, mu3, ph3)
+    z3 += 2 * mbG2 * Galileon2(k1, mu1, ph1, k23, mu23, ph23) * vF2(k2, mu2, ph2, k3, mu3, ph3)
     z3 += mbG3 * Galileon3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+    z3 += mbDG2 * Galileon2(k1, mu1, ph1, k23, mu23, ph23) * (
+            vF2(k2, mu2, ph2, k3, mu3, ph3) - vG2(k2, mu2, ph2, k3, mu3, ph3)
+            )
     z3 += f * mu**2 * vG3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
     z3 += f * k * mu * mu1 / k1 * (
-            mb1 * vF2(k2, mu2, ph2, k3, mu3, ph3) 
-            + mb2 / 2 
+            mb1 * vF2(k2, mu2, ph2, k3, mu3, ph3)
+            + mb2 / 2
             + mbG2 * Galileon2(k2, mu2, ph2, k3, mu3, ph3)
             )
     z3 += (f * k * mu)**2 / 2 * mb1 * mu2 / k2 * mu3 / k3
-    z3 += (f * k * mu)**6 / 6 * mu1 / k1 * mu2 / k2 * mu3 / k3
-    if not np.isclose(k23,0):
-        z3 += 2 * mbG2 * Galileon2(k1, mu1, ph1, k23, mu23, ph23) * vF2(k2, mu2, ph2, k3, mu3, ph3)
-        z3 += f * k * mu * mb1 * mu23 / k23 * vG2(k2, mu2, ph2, k3, mu3, ph3)
-        z3 += mbDG2 * Galileon2(k1, mu1, ph1, k23, mu23, ph23) * (
-                vF2(k2, mu2, ph2, k3, mu3, ph3) - vG2(k2, mu2, ph2, k3, mu3, ph3)
-                )
-        z3 += (f * k * mu)**2 * mu1 / k1 * mu23/ k23 * vG2(k2, mu2, ph2, k3, mu3, ph3)
+    z3 += (f * k * mu)**3 / 6 * mu1 / k1 * mu2 / k2 * mu3 / k3
+    z3 += f * k * mu * mb1 * mu23 / k23 * vG2(k2, mu2, ph2, k3, mu3, ph3)
+    z3 += (f * k * mu)**2 * mu1 / k1 * mu23/ k23 * vG2(k2, mu2, ph2, k3, mu3, ph3)
     return z3
 
 @njit("(float64, float64, float64,"
@@ -297,33 +303,74 @@ def vZ3(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, 
 # N-point correlators #
 #######################
 
+
+@njit("(float64,float64, float64, "
+      + "float64[::1], float64[::1], float64, "
+      + "float64[::1], float64[::1])",
+      fastmath=True,
+)
+def PowerSpectrumLO(1Lmb1, 2Lmb1, f, k1, mu1, ph1, kgrid, Pgrid):
+    """Redshift space halo power spectrum
+
+    Computes the clutering part of the redshift space halo auto power spectrum.
+    Computations are done on a (k, mu) grid. Phi does not do anything because of rotatinal invariances.
+    Can pass different mean biases if they are weighted by different luminosities (13 or 22)
+    """
+    P = np.exp(linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(k1)))
+    lk, lmu = len(k1), len(mu1)
+    Z11 = np.empty((lk, lmu))
+    Z12 = np.empty((lk, lmu))
+    for ik, ki in enumerate(k1):
+        for imu, mui in enumerate(mu1):
+            Z11[ik, imu] = vZ1(1Lmb1, f, ki, mui, ph1)
+            Z12[ik, imu] = vZ1(2Lmb1, f, ki, mui, ph1)
+    return Z11 * Z12 * P[:, None]
+
+
 @njit(
-    "(float64,float64,float64,"
-    + "float64,float64,float64,"
-    + "float64,float64,float64,"
+    "(float64, float64, float64, "
+    + "float64, float64, float64, "
+    + "float64, "
+    + "float64, float64, float64, "
+    + "float64, float64, float64, "
     + "float64[::1], float64[::1])",
     fastmath=True,
 )
-def BispectrumLO(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, kgrid, Pgrid):
-    """Computes the tree level Bispectrum"""
-    # Obtain the Power Spectra
+def BispectrumLO(1Lmb1, 1Lmb2, 1LmbG2,
+                 2Lmb1, 2Lmb2, 2LmbG2,
+                 f,
+                 k1, mu1, ph1,
+                 k2, mu2, ph2,
+                 kgrid, Pgrid):
+    """Redshift space halo trispectrum
+
+    Computes the 3 halo clustering contribution redshift space power spectrum.
+    All computations are done on a single point. The third vektor is computed from the first two.
+    Can pass different mean biases if they are weighted by different luminosities (112)."""
+    # compute missing wavevektor
+    k3, mu3, ph3 = addVectors(k1, -mu1, ph1 + np.pi, k2, -mu2, ph2 + np.pi)
+    # Obtain the Power Spectra w/ powerlaw extrapolation
     vk = np.array([k1, k2, k3])
-    # powerlaw extrapoltion
-    vlogP = linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk))
-    vP = np.exp(vlogP)
+    vP = np.exp(linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk)))
+
     # Compute over all permutations of F2 diagrams
     T = 0
     if not np.isclose(k1, 0) and not np.isclose(k2, 0):
-        v1 = vF2(k1, mu1, ph1, k2, mu2, ph2)
-        T += vP[0] * vP[1] * v1
+        Z11 = vZ1(1Lmb1, f, k1, mu1, ph1)
+        Z12 = vZ1(1Lmb1, f, k2, mu2, ph2)
+        Z21 = vZ2(2Lmb1, 2Lmb2, 2LmbG2, f, k1, -mu1, ph1 + np.pi, k2, -mu2, ph2 + np.pi)
+        T += 2 * vP[0] * vP[1] * Z11 * Z12 * Z21
     if not np.isclose(k1, 0) and not np.isclose(k3, 0):
-        v2 = vF2(k1, mu1,  ph1, k3, mu3, ph3)
-        T += vP[0] * vP[2] * v2
+        Z11 = vZ1(2Lmb1, f, k3, mu3, ph3)
+        Z12 = vZ1(1Lmb1, f, k1, mu1, ph1)
+        Z21 = vZ2(1Lmb1, 1Lmb2, 1LmbG2, f, k3, -mu3, ph3 + np.pi, k1, -mu1, ph1 + np.pi)
+        T += 2 * vP[2] * vP[0] * Z11 * Z12 * Z21
     if not np.isclose(k2, 0) and not np.isclose(k3, 0):
-        v3 = vF2(k2, mu2, ph2, k3, mu3, ph3)
-        T += vP[1] * vP[2] * v3
-
-    return 2 * T
+        Z11 = vZ1(1Lmb1, f, k2, mu2, ph2)
+        Z12 = vZ1(2Lmb1, f, k3, mu3, ph3)
+        Z21 = vZ2(1Lmb1, 1Lmb2, 1LmbG2, f, k2, -mu2, ph2 + np.pi, k3, -mu3, ph3 + np.pi)
+        T += 2 * vP[1] * vP[2] * Z11 * Z12 * Z21 
+    return T
 
 
 @njit(
@@ -455,8 +502,6 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
         raise RuntimeError("NaN encounterd")
 
     return T1 + T2
-
-
 
 ########################
 # Integration routines #
