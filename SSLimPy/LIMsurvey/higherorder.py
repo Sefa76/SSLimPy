@@ -46,13 +46,13 @@ def Galileon3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     return 1 + - muC12**2 - muC23**2 - muC13**2 + 2 * muC12 * muC23 * muC13
 
 ######################################
-# (symetrised) mode coupling kernels #
+# (Symmetrised) Mode-Coupling Kernels #
 ######################################
 
 
 @njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
 def vF2(k1, mu1, ph1, k2, mu2, ph2):
-    """Symetrised F2 kernel
+    """Symmetrised F2 kernel
     """
     k, _, _ = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     if np.isclose(k,0):
@@ -69,7 +69,7 @@ def vF2(k1, mu1, ph1, k2, mu2, ph2):
 
 @njit("(float64,float64,float64,float64,float64,float64)", fastmath=True)
 def vG2(k1, mu1, ph1, k2, mu2, ph2):
-    """Symetrised G2 kernel"""
+    """Symmetrised G2 kernel"""
     k, _, _ = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     if np.isclose(k,0):
         return 0
@@ -90,8 +90,8 @@ def vG2(k1, mu1, ph1, k2, mu2, ph2):
     fastmath=True,
 )
 def _F3_T1_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """in this combination the ir divergence can be resummed
-    symetrsed in the second and third argument
+    """in this combination the IR divergence can be resumed
+    symmetrised in the second and third argument
     """
     k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
     if np.isclose(k23, 0):
@@ -117,8 +117,8 @@ def _F3_T1_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     fastmath=True,
 )
 def _F3_T2_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """in this combination the ir divergence can be resummed
-    symetrsed in the first and second argument
+    """in this combination the IR divergence can be resumed
+    symmetrised in the first and second argument
     """
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     if np.isclose(k12, 0):
@@ -156,8 +156,8 @@ def vF3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     fastmath=True,
 )
 def _G3_T1_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """in this combination the ir divergence can be resummed
-    symetrsed in the second and third argument
+    """in this combination the IR divergence can be resumed
+    symmetrised in the second and third argument
     """
     k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
     if np.isclose(k23, 0):
@@ -183,8 +183,8 @@ def _G3_T1_symetrised_23(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     fastmath=True,
 )
 def _G3_T2_symetrised_12(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """in this combination the ir divergence can be resummed
-    symetrsed in the first and second argument
+    """in this combination the IR divergence can be resumed
+    symmetrised in the first and second argument
     """
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     if np.isclose(k12, 0):
@@ -215,10 +215,10 @@ def vG3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
 
 
 ###############
-# RSD Kernals #
+# RSD Kernels #
 ###############
-# These functions are for the appoximation that the mean bias is roughly independent
-# from the k-depedent shape inside these integrals
+# These functions are for the approximation that the mean bias is roughly independent
+# from the k-dependent shape inside these integrals
 
 @njit("(float64, float64,"
       +"float64, float64, float64)",
@@ -236,7 +236,7 @@ def vZ1(mb1, f, k1, mu1, ph1):
       fastmath=True,
       )
 def vZ2(mb1, mb2, mbG2, f, k1, mu1, ph1, k2, mu2, ph2):
-    """Second order RSD mode coupling kernal
+    """Second order RSD mode coupling kernel
     """
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     z2 = mb2 / 2
@@ -256,8 +256,8 @@ def vZ2(mb1, mb2, mbG2, f, k1, mu1, ph1, k2, mu2, ph2):
       +"float64, float64, float64)",
       fastmath=True,
       )
-def _Z3_symetrised_23(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
-    """ Third order RSD mode coupling kernel symetrized in the second and third argument
+def _Z3_symetrised_23(mb1, mb2, mbG2, mb3, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
+    """ Third order RSD mode coupling kernel symmetrized in the second and third argument
     possible divergences in k23 are captured by the mode coupling kernels in this way
     """
     k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
@@ -309,11 +309,11 @@ def vZ3(mb1, mb2, mb3, mbG2, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, 
       + "float64[::1], float64[::1])",
       fastmath=True,
 )
-def PowerSpectrumLO(1Lmb1, 2Lmb1, f, k1, mu1, ph1, kgrid, Pgrid):
+def PowerSpectrumLO(Lmb1_1, Lmb1_2, f, k1, mu1, ph1, kgrid, Pgrid):
     """Redshift space halo power spectrum
 
-    Computes the clutering part of the redshift space halo auto power spectrum.
-    Computations are done on a (k, mu) grid. Phi does not do anything because of rotatinal invariances.
+    Computes the clustering part of the redshift space halo auto power spectrum.
+    Computations are done on a (k, mu) grid. Phi does not do anything because of rotational invariances.
     Can pass different mean biases if they are weighted by different luminosities (13 or 22)
     """
     P = np.exp(linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(k1)))
@@ -322,8 +322,8 @@ def PowerSpectrumLO(1Lmb1, 2Lmb1, f, k1, mu1, ph1, kgrid, Pgrid):
     Z12 = np.empty((lk, lmu))
     for ik, ki in enumerate(k1):
         for imu, mui in enumerate(mu1):
-            Z11[ik, imu] = vZ1(1Lmb1, f, ki, mui, ph1)
-            Z12[ik, imu] = vZ1(2Lmb1, f, ki, mui, ph1)
+            Z11[ik, imu] = vZ1(Lmb1_1, f, ki, mui, ph1)
+            Z12[ik, imu] = vZ1(Lmb1_2, f, ki, mui, ph1)
     return Z11 * Z12 * P[:, None]
 
 
@@ -336,8 +336,8 @@ def PowerSpectrumLO(1Lmb1, 2Lmb1, f, k1, mu1, ph1, kgrid, Pgrid):
     + "float64[::1], float64[::1])",
     fastmath=True,
 )
-def BispectrumLO(1Lmb1, 1Lmb2, 1LmbG2,
-                 2Lmb1, 2Lmb2, 2LmbG2,
+def BispectrumLO(Lmb1_1, Lmb2_1, LmbG2_1,
+                 Lmb1_2, Lmb2_2, LmbG2_2,
                  f,
                  k1, mu1, ph1,
                  k2, mu2, ph2,
@@ -345,46 +345,63 @@ def BispectrumLO(1Lmb1, 1Lmb2, 1LmbG2,
     """Redshift space halo trispectrum
 
     Computes the 3 halo clustering contribution redshift space power spectrum.
-    All computations are done on a single point. The third vektor is computed from the first two.
+    All computations are done on a single point. The third vector is computed from the first two.
     Can pass different mean biases if they are weighted by different luminosities (112)."""
-    # compute missing wavevektor
+    # compute missing wave vector
     k3, mu3, ph3 = addVectors(k1, -mu1, ph1 + np.pi, k2, -mu2, ph2 + np.pi)
-    # Obtain the Power Spectra w/ powerlaw extrapolation
+    # Obtain the Power Spectra w/ power-law extrapolation
     vk = np.array([k1, k2, k3])
     vP = np.exp(linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk)))
 
     # Compute over all permutations of F2 diagrams
     T = 0
     if not np.isclose(k1, 0) and not np.isclose(k2, 0):
-        Z11 = vZ1(1Lmb1, f, k1, mu1, ph1)
-        Z12 = vZ1(1Lmb1, f, k2, mu2, ph2)
-        Z21 = vZ2(2Lmb1, 2Lmb2, 2LmbG2, f, k1, -mu1, ph1 + np.pi, k2, -mu2, ph2 + np.pi)
+        Z11 = vZ1(Lmb1_1, f, k1, mu1, ph1)
+        Z12 = vZ1(Lmb1_1, f, k2, mu2, ph2)
+        Z21 = vZ2(Lmb1_2, Lmb2_2, LmbG2_2, f, k1, -mu1, ph1 + np.pi, k2, -mu2, ph2 + np.pi)
         T += 2 * vP[0] * vP[1] * Z11 * Z12 * Z21
     if not np.isclose(k1, 0) and not np.isclose(k3, 0):
-        Z11 = vZ1(2Lmb1, f, k3, mu3, ph3)
-        Z12 = vZ1(1Lmb1, f, k1, mu1, ph1)
-        Z21 = vZ2(1Lmb1, 1Lmb2, 1LmbG2, f, k3, -mu3, ph3 + np.pi, k1, -mu1, ph1 + np.pi)
+        Z11 = vZ1(Lmb1_2, f, k3, mu3, ph3)
+        Z12 = vZ1(Lmb1_1, f, k1, mu1, ph1)
+        Z21 = vZ2(Lmb1_1, Lmb2_1, LmbG2_1, f, k3, -mu3, ph3 + np.pi, k1, -mu1, ph1 + np.pi)
         T += 2 * vP[2] * vP[0] * Z11 * Z12 * Z21
     if not np.isclose(k2, 0) and not np.isclose(k3, 0):
-        Z11 = vZ1(1Lmb1, f, k2, mu2, ph2)
-        Z12 = vZ1(2Lmb1, f, k3, mu3, ph3)
-        Z21 = vZ2(1Lmb1, 1Lmb2, 1LmbG2, f, k2, -mu2, ph2 + np.pi, k3, -mu3, ph3 + np.pi)
-        T += 2 * vP[1] * vP[2] * Z11 * Z12 * Z21 
+        Z11 = vZ1(Lmb1_1, f, k2, mu2, ph2)
+        Z12 = vZ1(Lmb1_2, f, k3, mu3, ph3)
+        Z21 = vZ2(Lmb1_1, Lmb2_1, LmbG2_1, f, k2, -mu2, ph2 + np.pi, k3, -mu3, ph3 + np.pi)
+        T += 2 * vP[1] * vP[2] * Z11 * Z12 * Z21
     return T
 
 
 @njit(
-    "(float64,float64,float64,"
-    + "float64,float64,float64,"
-    + "float64,float64,float64,"
-    + "float64,float64,float64,"
+    "(float64, "
+    + "float64, float64,"
+    + "float64, float64, float64, float64, "
+    + "float64, "
+    + "float64, float64, float64, "
+    + "float64, float64, float64, "
+    + "float64, float64, float64, "
     + "float64[::1], float64[::1])",
     fastmath=True,
 )
-def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid, Pgrid):
-    """Compute the tree level Trispectrum"""
-    # Compute coordinates of added wavevectors
+def TrispectrumL0(Lmb1,
+                  Lmb2, LmbG2,
+                  Lmb3, LmbdG2, LmbG3, LmbDG2,
+                  f,
+                  k1, mu1, ph1,
+                  k2, mu2, ph2,
+                  k3, mu3, ph3,
+                  kgrid, Pgrid):
+    """Redshift space halo Trispectrum
+
+    Computes the 4 halo clustering contribution redshift space power spectrum.
+    All computations are done on a single point. The forth vector is computed from the first three.
+    The different biases are assumed to be weighed by same powers of luminosity (1111).
+    """
+    # Compute missing vector
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
+    k4, mu4, ph4 = addVectors(k12, -mu12, ph12 + np.pi, k3, -mu3, ph3 + np.pi)
+    # Compute coordinates of added wave vectors
     k13, mu13, ph13 = addVectors(k1, mu1, ph1, k3, mu3, ph3)
     k14, mu14, ph14 = addVectors(k1, mu1, ph1, k4, mu4, ph4)
     k23, mu23, ph23 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
@@ -392,114 +409,75 @@ def TrispectrumL0(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid,
     k34, mu34, ph34 = addVectors(k3, mu3, ph3, k4, mu4, ph4)
 
     # Obtain the Power Spectra
-    vk = np.array([k1, k2, k3, k4, k12, k13, k14, k23, k24, k34])
-    # powerlaw extrapoltion
+    vk = np.array([k1, k2, k3, k4, k12, k13, k14])
+    # Power-law Extrapolation
     vlogP = linear_interpolate(np.log(kgrid), np.log(Pgrid), np.log(vk))
     vP = np.exp(vlogP)
 
     T1 = 0
-    # Compute over all permutations of F2 F2 diagrams
+    # Compute over all permutations of the 1122 diagrams
     if not np.isclose(k12, 0):
-        T1 += (
-            vP[0]
-            * vP[3]
-            * vP[4]
-            * vF2(k12, mu12, ph12 , k1, -mu1, ph1 + np.pi)
-            * vF2(k34, mu34, ph34 , k4, -mu4, ph4 + np.pi)
-        )
-        T1 += (
-            vP[1]
-            * vP[3]
-            * vP[4]
-            * vF2(k12, mu12, ph12, k2, -mu2, ph2 + np.pi)
-            * vF2(k34, mu34, ph34, k4, -mu4, ph4 + np.pi)
-        )
-        T1 += (
-            vP[2]
-            * vP[1]
-            * vP[9]
-            * vF2(k34, mu34, ph34, k3, -mu3, ph3 + np.pi)
-            * vF2(k12, mu12, ph12, k2, -mu2, ph2 + np.pi)
-        )
-        T1 += (
-            vP[3]
-            * vP[1]
-            * vP[9]
-            * vF2(k34, mu34, ph34, k4, -mu4, ph4 + np.pi)
-            * vF2(k12, mu12, ph12, k2, -mu2, ph2 + np.pi)
-        )
+        Z11 = vZ1(Lmb1, f, k1, mu1, ph1)
+        Z12 = vZ1(Lmb1, f, k2, mu2, ph2)
+        Z13 = vZ1(Lmb1, f, k3, mu3, ph3)
+        Z14 = vZ1(Lmb1, f, k4, mu4, ph4)
+
+        Z21 = vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k12, mu12, ph12)
+        Z22 = vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k12, mu12, ph12)
+        Z23 = vZ2(Lmb1, Lmb2, LmbG2, f, k3, -mu3, ph3 + np.pi, k34, mu34, ph34)
+        Z24 = vZ2(Lmb1, Lmb2, LmbG2, f, k4, -mu4, ph4 + np.pi, k34, mu34, ph34)
+
+        T1 += 4 * Z11 * Z13 * Z21 * Z23 * vP[0] * vP[2] * vP[4]
+        T1 += 4 * Z11 * Z14 * Z21 * Z24 * vP[0] * vP[3] * vP[4]
+        T1 += 4 * Z12 * Z13 * Z22 * Z23 * vP[1] * vP[2] * vP[4]
+        T1 += 4 * Z12 * Z14 * Z22 * Z24 * vP[1] * vP[3] * vP[4]
+
     if not np.isclose(k13, 0):
-        T1 += (
-            vP[0]
-            * vP[1]
-            * vP[5]
-            * vF2(k13, mu13, ph13, k1, -mu1, ph1 + np.pi)
-            * vF2(k24, mu24, ph24, k2, -mu2, ph2 + np.pi)
-        )
-        T1 += (
-            vP[2]
-            * vP[3]
-            * vP[5]
-            * vF2(k13, mu13, ph13, k3, -mu3, ph3 + np.pi)
-            * vF2(k24, mu24, ph24, k4, -mu4, ph4 + np.pi)
-        )
-        T1 += (
-            vP[1]
-            * vP[2]
-            * vP[8]
-            * vF2(k24, mu24, ph24, k2, -mu2, ph2 + np.pi)
-            * vF2(k13, mu13, ph13, k3, -mu3, ph3 + np.pi)
-        )
-        T1 += (
-            vP[3]
-            * vP[0]
-            * vP[8]
-            * vF2(k24, mu24, ph24, k4, -mu4, ph4 + np.pi)
-            * vF2(k13, mu13, ph13, k1, -mu1, ph1 + np.pi)
-        )
+        Z11 = vZ1(Lmb1, f, k1, mu1, ph1)
+        Z12 = vZ1(Lmb1, f, k2, mu2, ph2)
+        Z12 = vZ1(Lmb1, f, k3, mu3, ph3)
+        Z12 = vZ1(Lmb1, f, k4, mu4, ph4)
+
+        Z21 = vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k13, mu13, ph13)
+        Z22 = vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k24, mu24, ph24)
+        Z23 = vZ2(Lmb1, Lmb2, LmbG2, f, k3, -mu3, ph3 + np.pi, k13, mu13, ph13)
+        Z24 = vZ2(Lmb1, Lmb2, LmbG2, f, k4, -mu4, ph4 + np.pi, k24, mu24, ph24)
+
+        T1 += 4 * Z11 * Z12 * Z21 * Z22 * vP[0] * vP[1] * vP[5]
+        T1 += 4 * Z11 * Z14 * Z21 * Z24 * vP[0] * vP[3] * vP[5]
+        T1 += 4 * Z12 * Z13 * Z22 * Z23 * vP[1] * vP[2] * vP[5]
+        T1 += 4 * Z13 * Z14 * Z23 * Z24 * vP[2] * vP[3] * vP[5]
+
     if not np.isclose(k14, 0):
-        T1 += (
-            vP[0]
-            * vP[2]
-            * vP[6]
-            * vF2(k14, mu14, ph14, k1, -mu1, ph1 + np.pi)
-            * vF2(k23, mu23, ph23, k3, -mu3, ph3 + np.pi)
-        )
-        T1 += (
-            vP[3]
-            * vP[2]
-            * vP[6]
-            * vF2(k14, mu14, ph14, k4, -mu4, ph4 + np.pi)
-            * vF2(k23, mu23, ph23, k3, -mu3, ph3 + np.pi)
-        )
-        T1 += (
-            vP[1]
-            * vP[0]
-            * vP[7]
-            * vF2(k23, mu23, ph23, k2, -mu2, ph2 + np.pi)
-            * vF2(k14, mu14, ph14, k1, -mu1, ph1 + np.pi)
-        )
-        T1 += (
-            vP[2]
-            * vP[0]
-            * vP[7]
-            * vF2(k23, mu23, ph23, k3, -mu3,  ph3 + np.pi)
-            * vF2(k14, mu14, ph14, k1, -mu1,  ph1 + np.pi)
-        )
-    T1 *= 4
-    # That should be all of them ...
+        Z11 = vZ1(Lmb1, f, k1, mu1, ph1)
+        Z12 = vZ1(Lmb1, f, k2, mu2, ph2)
+        Z12 = vZ1(Lmb1, f, k3, mu3, ph3)
+        Z12 = vZ1(Lmb1, f, k4, mu4, ph4)
 
-    # Compute over all permutations of F3 diagrams
-    T2 = vP[0] * vP[1] * vP[2] * vF3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
-    T2 += vP[1] * vP[2] * vP[3] * vF3(k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4)
-    T2 += vP[2] * vP[3] * vP[0] * vF3(k3, mu3, ph3, k4, mu4, ph4, k1, mu1, ph1)
-    T2 += vP[3] * vP[0] * vP[1] * vF3(k4, mu4, ph4, k1, mu1, ph1, k2, mu2, ph2)
-    T2 *= 6
+        Z21 = vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k14, mu14, ph14)
+        Z22 = vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k23, mu23, ph23)
+        Z23 = vZ2(Lmb1, Lmb2, LmbG2, f, k3, -mu3, ph3 + np.pi, k23, mu23, ph23)
+        Z24 = vZ2(Lmb1, Lmb2, LmbG2, f, k4, -mu4, ph4 + np.pi, k14, mu14, ph14)
 
-    # print(T1, T2)
+        T1 += 4 * Z11 * Z12 * Z21 * Z22 * vP[0] * vP[1] * vP[6]
+        T1 += 4 * Z11 * Z13 * Z21 * Z23 * vP[0] * vP[2] * vP[6]
+        T1 += 4 * Z12 * Z14 * Z22 * Z24 * vP[1] * vP[3] * vP[6]
+        T1 += 4 * Z13 * Z14 * Z23 * Z24 * vP[2] * vP[3] * vP[6]
+
+    # Compute over all permutations of the 1113 diagrams
+    Z31 = vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4)
+    Z32 = vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k3, mu3, ph3, k4, mu4, ph4, k1, mu1, ph1)
+    Z33 = vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k4, mu4, ph4, k1, mu1, ph1, k2, mu2, ph2)
+    Z34 = vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3)
+
+    T2 = 6 * Z31 * vP[1] * vP[2] * vP[3]
+    T2 += 6 * Z32 * vP[0] * vP[2] * vP[3]
+    T2 += 6 * Z33 * vP[0] * vP[1] * vP[3]
+    T2 += 6 * Z34 * vP[0] * vP[1] * vP[2]
+
     if np.isnan(T1) or np.isnan(T2):
         print(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid, Pgrid)
-        raise RuntimeError("NaN encounterd")
+        raise RuntimeError("NaN encountered", T1, T2)
 
     return T1 + T2
 
@@ -518,7 +496,7 @@ def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
     mu = xi
     phi = np.pi * xi
 
-    # obtain neccessary legendre functions
+    # obtain necessary Legendre functions
     L0 = legendre_0(mu) * (2 * 0 + 1) / 2
     L2 = legendre_2(mu) * (2 * 2 + 1) / 2
     L4 = legendre_4(mu) * (2 * 4 + 1) / 2
@@ -543,7 +521,7 @@ def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
                             k13, _, _ = addVectors(k[ik1], mu[imu1], phi[iphi1], k[ik2], mu[imu2], phi[iphi2])
                             k14, _, _ = addVectors(k[ik1], mu[imu1], phi[iphi1], k[ik2], -mu[imu2], phi[iphi2]+np.pi)
                             vk = np.array([k13,k14])
-                            # powerlaw extrapoltion
+                            # Power-law extrapolation
                             vlogP = linear_interpolate(np.log(k), np.log(Pgrid), np.log(vk))
                             vP = np.exp(vlogP)
 
@@ -576,7 +554,7 @@ def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
             pseudo_Cov[ik1, ik2, 2, 1] = np.sum(mu1_integ2 * L4 * w)
             pseudo_Cov[ik1, ik2, 2, 2] = np.sum(mu1_integ4 * L4 * w)
 
-            # use symetries k1 <-> k2
+            # use symmetries k1 <-> k2
             pseudo_Cov[ik2, ik1, 0, 0] = pseudo_Cov[ik1, ik2, 0, 0]
             pseudo_Cov[ik2, ik1, 1, 0] = pseudo_Cov[ik1, ik2, 0, 1]
             pseudo_Cov[ik2, ik1, 2, 0] = pseudo_Cov[ik1, ik2, 0, 2]
@@ -602,7 +580,7 @@ def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
     mu = xi
     phi = np.pi * xi
 
-    # obtain neccessary legendre functions
+    # obtain necessary Legendre functions
     L0 = legendre_0(mu) * (2 * 0 + 1) / 2
     L2 = legendre_2(mu) * (2 * 2 + 1) / 2
     L4 = legendre_4(mu) * (2 * 4 + 1) / 2
@@ -634,7 +612,7 @@ def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
                                     k[ik1], -mu[imu1], phi[iphi1] + np.pi,
                                     k[ik2], -mu[imu2], phi[iphi2] + np.pi,
                                     k, Pgrid)
-                            I1_1 = I1grid[ik1, imu1] # Symetric in mu -> -mu
+                            I1_1 = I1grid[ik1, imu1] # Symmetric in mu -> -mu
                             I1_2 = I1grid[ik2, imu2]
                             I2_3 = I2grid[ik1, ik2, imu1, imu2]
                             phi2_integ[iphi2] = B * I1_1 * I1_2 * I2_3
@@ -694,7 +672,7 @@ def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
             pseudo_Cov[ik1, ik2, 2, 1] = np.sum(mu1_integ2 * L4 * w)
             pseudo_Cov[ik1, ik2, 2, 2] = np.sum(mu1_integ4 * L4 * w)
 
-            # use symetries k1 <-> k2
+            # use symmetries k1 <-> k2
             pseudo_Cov[ik2, ik1, 0, 0] = pseudo_Cov[ik1, ik2, 0, 0]
             pseudo_Cov[ik2, ik1, 1, 0] = pseudo_Cov[ik1, ik2, 0, 1]
             pseudo_Cov[ik2, ik1, 2, 0] = pseudo_Cov[ik1, ik2, 0, 2]
@@ -720,7 +698,7 @@ def _integrate_4h(k, xi, w, Pgrid, I1grid):
     mu = xi
     phi = np.pi * xi
 
-    # obtain neccessary legendre functions
+    # obtain necessary Legendre functions
     L0 = legendre_0(mu) * (2 * 0 + 1) / 2
     L2 = legendre_2(mu) * (2 * 2 + 1) / 2
     L4 = legendre_4(mu) * (2 * 4 + 1) / 2
@@ -757,7 +735,7 @@ def _integrate_4h(k, xi, w, Pgrid, I1grid):
                                     Pgrid,
                                 )
                                 / (4 * np.pi) ** 2
-                                * I1grid[ik1, imu1] ** 2 # Symetric in mu -> -mu
+                                * I1grid[ik1, imu1] ** 2 # Symmetric in mu -> -mu
                                 * I1grid[ik2, imu2] ** 2
                             )
                         phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
@@ -776,7 +754,7 @@ def _integrate_4h(k, xi, w, Pgrid, I1grid):
             pseudo_Cov[ik1, ik2, 2, 1] = np.sum(mu1_integ2 * L4 * w)
             pseudo_Cov[ik1, ik2, 2, 2] = np.sum(mu1_integ4 * L4 * w)
 
-            # use symetries k1 <-> k2
+            # use symmetry  k1 <-> k2
             pseudo_Cov[ik2, ik1, 0, 0] = pseudo_Cov[ik1, ik2, 0, 0]
             pseudo_Cov[ik2, ik1, 1, 0] = pseudo_Cov[ik1, ik2, 0, 1]
             pseudo_Cov[ik2, ik1, 2, 0] = pseudo_Cov[ik1, ik2, 0, 2]
