@@ -485,10 +485,10 @@ def TrispectrumL0(Lmb1,
 # Integration routines #
 ########################
 
-@njit(
-        "(float64[::1], float64[::1], float64[::1], float64[::1], float64[:,:], float64[:,:,:,:], float64[:,:,:,:])"
+@njit("(float64, float64, float64, float64, "
+      + "float64[::1], float64[::1], float64[::1], float64[::1])"
 )
-def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
+def _integrate_2h(Lmb1, L2mb1, L3mb1, f, xi, w, k, Pgrid):
     assert len(xi) == len(w), "Number of integration points must match number of weights"
     nnodes = len(xi)
     kl = len(k)
@@ -515,29 +515,34 @@ def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
                     for iphi1 in range(nnodes):
                         phi2_integ = np.empty(nnodes)
                         for iphi2 in range(nnodes):
+                            hTs = 0
                             # 22 halos
+                            k13, mu13, ph13 = addVectors(k[ik1], mu[imu1], phi[iphi1],
+                                                         k[ik2], mu[imu2], phi[iphi2])
+                            vk, vmu = np.array([k13]), np.array([mu13])
+                            P22 = PowerSpectrumLO(
+                                L2mb1, L2mb1, f, vk, vmu, ph13, k, Pgrid)
+                            hTs += P22[0, 0]
 
-                            # Obtain the Power Spectra
-                            k13, _, _ = addVectors(k[ik1], mu[imu1], phi[iphi1], k[ik2], mu[imu2], phi[iphi2])
-                            k14, _, _ = addVectors(k[ik1], mu[imu1], phi[iphi1], k[ik2], -mu[imu2], phi[iphi2]+np.pi)
-                            vk = np.array([k13,k14])
-                            # Power-law extrapolation
-                            vlogP = linear_interpolate(np.log(k), np.log(Pgrid), np.log(vk))
-                            vP = np.exp(vlogP)
-
-                            if np.isclose(k13,0):
-                                vP[0] = 0
-                            if np.isclose(k14,0):
-                                vP[1] = 0
-
-                            hT1 = I2grid[ik1,ik2,imu1,imu2] * I2grid[ik1,ik2,imu1,imu2] * (vP[0] + vP[1])
+                            k14, mu14, ph14 = addVectors(k[ik1], mu[imu1], phi[iphi1],
+                                                         k[ik2], -mu[imu2], phi[iphi2]+np.pi)
+                            vk, vmu = np.array([k14]), np.array([mu14])
+                            P22 = PowerSpectrumLO(
+                                L2mb1, L2mb1, f, vk, vmu, ph14, k, Pgrid)
+                            hTs += P22[0, 0]
 
                             # 31 halos
-                            hT2 = (
-                                2 * I3grid[ik1, ik2, imu1, imu2] * I1grid[ik2, imu2] * Pgrid[ik2]
-                                + 2* I3grid[ik2, ik1, imu2, imu1] * I1grid[ik1, imu1] * Pgrid[ik1]
-                            )
-                            phi2_integ[iphi2] = (hT1 + hT2)/(4 * np.pi) ** 2
+                            vk, vmu = np.array([k[ik1]]), np.array([mu[imu1]])
+                            P31 = PowerSpectrumLO(
+                                Lmb1, L3mb1, f, vk, vmu, 0, k, Pgrid)
+                            hTs += 2 * P31[0, 0]
+
+                            vk, vmu = np.array([k[ik2]]), np.array([mu[imu2]])
+                            P31 = PowerSpectrumLO(
+                                Lmb1, L3mb1, f, vk, vmu, 0, k, Pgrid)
+                            hTs += 2 * P31[0, 0]
+
+                            phi2_integ[iphi2] = hTs/(4 * np.pi) ** 2
                         phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
                     mu2_integ[imu2] = np.sum(phi1_integ * w * np.pi)
                 # integrate over mu2 first
@@ -569,10 +574,13 @@ def _integrate_2h(k, xi, w, Pgrid, I1grid, I2grid, I3grid):
 
 
 @njit(
-        "(float64[::1], float64[::1], float64[::1], float64[::1], float64[:,:], float64[:,:,:,:])",
+        "(float64, float64, float64, float64, float64, float64, float64, "
+        + "float64[::1], float64[::1], float64[::1], float64[::1])",
     parallel=True,
 )
-def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
+def _integrate_3h(Lmb1, Lmb2, LmbG2,
+                  L2mb1, L2mb2, L2mbG2, f,
+                  xi, w, k, Pgrid):
     assert len(xi) == len(w), "Number of integration points must match number of weights"
     nnodes = len(xi)
     kl = len(k)
@@ -599,63 +607,39 @@ def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
                     for iphi1 in range(nnodes):
                         phi2_integ = np.empty(nnodes)
                         for iphi2 in range(nnodes):
-                            # 1 2
-                            # All terms vanish
+                            phi2_integ[iphi2] = \
+                                BispectrumLO(
+                                Lmb1, Lmb2, LmbG2,
+                                L2mb1, L2mb2, L2mbG2, f,
+                                k[ik1], -mu[imu1], phi[iphi1] + np.pi,
+                                k[ik2], -mu[imu2], phi[iphi2] + np.pi,
+                                k, Pgrid)
 
-                            # 1 3
-                            kex, muex, phex = addVectors(
-                                    k[ik1], mu[imu1], phi[iphi1],
-                                    k[ik2], mu[imu2], phi[iphi2]
-                                    )
-                            B = BispectrumLO(
-                                    kex, muex, phex,
-                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
-                                    k[ik2], -mu[imu2], phi[iphi2] + np.pi,
-                                    k, Pgrid)
-                            I1_1 = I1grid[ik1, imu1] # Symmetric in mu -> -mu
-                            I1_2 = I1grid[ik2, imu2]
-                            I2_3 = I2grid[ik1, ik2, imu1, imu2]
-                            phi2_integ[iphi2] = B * I1_1 * I1_2 * I2_3
+                            phi2_integ[iphi2] += \
+                                BispectrumLO(
+                                Lmb1, Lmb2, LmbG2,
+                                L2mb1, L2mb2, L2mbG2, f,
+                                k[ik1], -mu[imu1], phi[iphi1] + np.pi,
+                                k[ik2], mu[imu2], phi[iphi2],
+                                k, Pgrid)
 
-                            # 1 4
-                            kex, muex, phex = addVectors(
-                                    k[ik1], mu[imu1], phi[iphi1],
-                                    k[ik2], -mu[imu2], phi[iphi2] + np.pi
-                                    )
-                            B = BispectrumLO(
-                                    kex, muex, phex,
-                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
-                                    k[ik2], mu[imu2], phi[iphi2],
-                                    k, Pgrid)
-                            phi2_integ[iphi2] += B * I1_1 * I1_2 * I2_3
+                            phi2_integ[iphi2] += \
+                                BispectrumLO(
+                                Lmb1, Lmb2, LmbG2,
+                                L2mb1, L2mb2, L2mbG2, f,
+                                k[ik1], mu[imu1], phi[iphi1],
+                                k[ik2], -mu[imu2], phi[iphi2] + np.pi,
+                                k, Pgrid)
 
-                            # 2 3
-                            kex, muex, phex = addVectors(
-                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
-                                    k[ik2], mu[imu2], phi[iphi2]
-                                    )
-                            B = BispectrumLO(
-                                    kex, muex, phex,
-                                    k[ik1], mu[imu1], phi[iphi1],
-                                    k[ik2], -mu[imu2], phi[iphi2] + np.pi,
-                                    k, Pgrid)
-                            phi2_integ[iphi2] += B * I1_1 * I1_2 * I2_3
+                            phi2_integ[iphi2] += \
+                                BispectrumLO(
+                                Lmb1, Lmb2, LmbG2,
+                                L2mb1, L2mb2, L2mbG2, f,
+                                k[ik1], mu[imu1], phi[iphi1],
+                                k[ik2], mu[imu2], phi[iphi2],
+                                k, Pgrid)
 
-                            # 2 4
-                            kex, muex, phex = addVectors(
-                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
-                                    k[ik2], -mu[imu2], phi[iphi2] + np.pi
-                                    )
-                            B = BispectrumLO(
-                                    kex, muex, phex,
-                                    k[ik1], mu[imu1], phi[iphi1],
-                                    k[ik2], mu[imu2], phi[iphi2],
-                                    k, Pgrid)
-                            phi2_integ[iphi2] += B * I1_1 * I1_2 * I2_3
-
-                            # 3 4
-                            # All terms vanish
-
+                        phi2_integ = phi2_integ / (4 * np.pi)**2
                         phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
                     mu2_integ[imu2] = np.sum(phi1_integ * w * np.pi)
                 # integrate over mu2 first
@@ -686,11 +670,12 @@ def _integrate_3h(k, xi, w, Pgrid, I1grid, I2grid):
     return pseudo_Cov
 
 
-@njit(
-    "(float64[::1], float64[::1], float64[::1], float64[::1], float64[:,:])",
+@njit("(float64, float64, float64, float64, float64, float64, float64, float64, "
+      + "float64[::1], float64[::1], float64[::1], float64[::1])",
     parallel=True,
 )
-def _integrate_4h(k, xi, w, Pgrid, I1grid):
+def _integrate_4h(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f,
+                  xi, w, k, Pgrid):
     assert len(xi) == len(w), "Number of integration points must match number of weights"
     nnodes = len(xi)
     kl = len(k)
@@ -717,27 +702,12 @@ def _integrate_4h(k, xi, w, Pgrid, I1grid):
                     for iphi1 in range(nnodes):
                         phi2_integ = np.empty(nnodes)
                         for iphi2 in range(nnodes):
-                            phi2_integ[iphi2] = (
-                                TrispectrumL0(
-                                    k[ik1],
-                                    mu[imu1],
-                                    phi[iphi1],
-                                    k[ik1],
-                                    -mu[imu1],
-                                    phi[iphi1] + np.pi,
-                                    k[ik2],
-                                    mu[imu2],
-                                    phi[iphi2],
-                                    k[ik2],
-                                    -mu[imu2],
-                                    phi[iphi2] + np.pi,
-                                    k,
-                                    Pgrid,
-                                )
-                                / (4 * np.pi) ** 2
-                                * I1grid[ik1, imu1] ** 2 # Symmetric in mu -> -mu
-                                * I1grid[ik2, imu2] ** 2
-                            )
+                            phi2_integ[iphi2] = TrispectrumL0(
+                                    Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbdG2, LmbG3, LmbDG2, f,
+                                    k[ik1], mu[imu1], phi[iphi1],
+                                    k[ik2], mu[imu2], phi[iphi2],
+                                    k[ik1], -mu[imu1], phi[iphi1] + np.pi,
+                                    k, Pgrid) / (4 * np.pi)**2
                         phi1_integ[iphi1] = np.sum(phi2_integ * w * np.pi)
                     mu2_integ[imu2] = np.sum(phi1_integ * w * np.pi)
                 # integrate over mu2 first
