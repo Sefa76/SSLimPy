@@ -16,9 +16,59 @@ class coevolution_bias(bias_fittinig_functions):
 
     def __init__(self, astro):
         super().__init__(astro)
-        self.A = self.bias_par.get("HO_A", 0.322)
-        self.p = self.bias_par.get("HO_p", 0.3)
-        self.alpha = self.bias_par.get("HO_alpha", 0.707)
+        p = self.bias_par.get("HO_p", 0.3)
+        alpha = self.bias_par.get("HO_alpha", 0.707)
+        self.set_model(p, alpha)
+
+
+    def set_model(self, p, alpha):
+        self.p = p
+        self.alpha = alpha
+
+        Xi = np.geomspace(1e-4, 100, num=200)
+        F = self.unnorm_collapsefunction(Xi)
+        self.A = 1 / np.trapz(F * Xi, np.log(Xi))
+
+    ###########################
+    # Base Halo Mass Function #
+    ###########################
+    # Underlying halo mass function to compute b1, b2, b3 from. Assumes spherical collapse
+
+
+    def unnorm_collapsefunction(self, Xi):
+        """Universal function for the collapsed matter appearing in spherical collapse models
+        This function should used to normalize the actual function (i.E find the value for A)
+        Xi is nu^2 from the rest of this function package.
+        """
+        F = ( 
+            (1 + 1 / (self.alpha * Xi)**self.p)
+            * np.sqrt(self.alpha * Xi / (2 * np.pi))
+            * np.exp(-self.alpha * Xi / 2)
+            ) 
+        return F
+
+
+    def sc_hmf(self, M, z, dc):
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+
+        nu = np.reshape(dc / self.astro.sigmaM(M, z), (*M.shape,*z.shape))
+
+        sigmaM = np.reshape(self.astro.sigmaM(M, z), (*M.shape,*z.shape))
+        dsigmaM_dM = np.reshape(self.astro.dsigmaM_dM(M, z).to(self.astro.Msunh**-1),(*M.shape,*z.shape))
+        dlogsigmaM_dM = dsigmaM_dM / sigmaM
+
+        rho_over_M = (
+            2.77536627e11
+            * self.astro.cosmology.Omega(0, self.astro.astrotracer)
+            * (self.astro.Msunh * self.astro.Mpch**-3)
+            ) / M[:, None]
+
+        dndM = (
+            -2 * self.A * rho_over_M * dlogsigmaM_dM
+            * self.unnorm_collapsefunction(nu**2)
+            )
+        return dndM
 
     ##############
     # Local Bias #
