@@ -104,22 +104,31 @@ class nonGuassianCov:
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
         mu = np.pi * xi
 
-        #########################
-        # Precompute Halo terms #
-        #########################
         kl = len(k)
         wl = len(w)
 
-        # compute I1 for v_of_M models ( We cant compute fNL models)
-        indexmenge = range(wl)
+        # compute I1 for v_of_M models
         I1 = np.empty((kl, wl))
+        indexmenge = range(wl)
         for imu1 in indexmenge:
-            Ii = self.powerSpectrum.halo_temperature_moments(z, k, mu[imu1], bias_order=1, moment=1)
+            Ii = self.powerSpectrum.reduced_halo_temperature_moments(z, k, mu[imu1], moment=1)
             I1[:,imu1] = Ii.value
+
+        Lmb1 = self.astro.bavghalo("b1", z, 1)
+        Lmb2 = self.astro.bavghalo("b2", z, 1)
+        LmbG2 = self.astro.bavghalo("bG2", z, 1)
+        Lmb3 = self.astro.bavghalo("b3", z, 1)
+        LmbdG2 = self.astro.bavghalo("bdG2", z, 1)
+        LmbG3 = self.astro.bavghalo("bG3", z, 1)
+        LmbDG2 = self.astro.bavghalo("bDG2", z, 1)
+        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer)
 
         k, Pk = k.value, Pk.value
 
-        result = _integrate_4h(k, xi, w, Pk, I1)
+        result = _integrate_4h(
+            Lmb1, Lmb2, LmbG2,
+            Lmb3, LmbdG2, LmbG3, LmbDG2, f,
+            xi, w, k, Pk, I1)
 
         return result
 
@@ -192,7 +201,7 @@ class nonGuassianCov:
                 I3[ik, :, imu1, imu2] = Iijk.value
 
         k, Pk = k.value, Pk.value
-        
+
         result = _integrate_2h(k, xi, w, Pk, I1, I2, I3)
 
         return result
@@ -212,7 +221,7 @@ class nonGuassianCov:
         wl = len(w)
 
         indexmengemu = itertools.product(range(wl), repeat=2)
-        indexmengek = itertools.product(range(kl), repeat=2) 
+        indexmengek = itertools.product(range(kl), repeat=2)
         I4 = np.empty((kl, kl, wl, wl))
         for imu1, imu2, in indexmengemu:
             for ik1, ik2 in indexmengek:

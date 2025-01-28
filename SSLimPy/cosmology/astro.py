@@ -204,10 +204,10 @@ class astro_functions:
 
         LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
         dndM = self.bias_coevolution.sc_hmf(M, z, dc=dc)
-        b = getattr(self.bias_coevolution, bstring)(M[:,None], z[None,:], dc=dc)
+        b = np.reshape(getattr(self.bias_coevolution, bstring)(M, z, dc=dc),(*M.shape,*z.shape))
 
-        itgrnd1 = M * LofM**power * dndM * b
-        itgrnd2 = M * LofM**power * dndM
+        itgrnd1 = M[:, None] * LofM**power * dndM * b
+        itgrnd2 = M[:, None] * LofM**power * dndM
 
         I1 = np.trapz(itgrnd1, np.log(M.value), axis=0)
         I2 = np.trapz(itgrnd2, np.log(M.value), axis=0)
