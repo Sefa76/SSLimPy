@@ -13,6 +13,8 @@ from scipy.special import j1, legendre, sici, spherical_jn
 
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import convolve
+from SSLimPy.cosmology.cosmology import cosmo_functions
+from SSLimPy.cosmology.astro import astro_functions
 
 k_types = Union[
     Quantity,
@@ -28,7 +30,7 @@ mu_types = Union[
 ]
 
 class PowerSpectra:
-    def __init__(self, cosmology, astro, BAOpars=dict()):
+    def __init__(self, cosmology: cosmo_functions, astro: astro_functions, BAOpars=dict()):
         self.cosmology = cosmology
         self.fiducialcosmo = cfg.fiducialcosmo
         self.astro = astro
@@ -237,7 +239,7 @@ class PowerSpectra:
         return np.squeeze(hm_corr)
 
 
-    def reduced_halo_moments(self, z, *args, moment=1):
+    def reduced_halo_moments(self, z, *args, moment=1, dc=1.6865):
         """Computes the mean halo profile weight with some power of the luminosity.
         This shows up when appoximating that the mean of higher order biases are
         independent from the scale dependence of the halo profile
@@ -252,7 +254,7 @@ class PowerSpectra:
 
         # Independent of k
         L_of_M = np.reshape(self.astro.massluminosityfunction(M,z),(*M.shape,*z.shape))
-        dndM = self.astro.bias_coevolution.sc_hmf(M, z)
+        dndM = self.astro.bias_coevolution.sc_hmf(M, z, dc=dc)
 
         # Dependent on k
         normhaloprofile = []
@@ -286,7 +288,7 @@ class PowerSpectra:
             weight_halo = weight_halo * Fv[ik] * normhaloprofile[ik] * L_of_M
         M = M.to(u.Msun)
         logM = np.log(M.value)
-        I0x = np.trapz(M[:,None] * dndM * weight_halo, logM)
+        I0x = np.trapz(M[:,None] * dndM * weight_halo, logM, axis=-2)
         return I0x
 
 
@@ -300,9 +302,9 @@ class PowerSpectra:
         return hm * self.astro.CLT(z)**moment
 
 
-    def reduced_halo_temperature_moments(self, z, *args, moment=1):
+    def reduced_halo_temperature_moments(self, z, *args, moment=1, dc=1.6865):
         """Extension to `reduced_halo_moments`"""
-        hm = self.reduced_halo_moments(z, *args, moment=moment)
+        hm = self.reduced_halo_moments(z, *args, moment=moment, dc=dc)
         return hm * self.astro.CLT(z)**moment
 
 
