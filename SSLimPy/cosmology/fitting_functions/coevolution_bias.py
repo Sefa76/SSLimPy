@@ -21,13 +21,16 @@ class coevolution_bias(bias_fittinig_functions):
         self.alpha = self.bias_par.get("HO_alpha", 0.707)
         self.A = self.bias_par.get("HO_A", 0.3222)
 
-    def set_model(self, p, alpha):
+    def set_model(self, p, alpha, A=None):
         self.p = p
         self.alpha = alpha
 
-        Xi = np.geomspace(1e-12, 1e3, num=2000)  # Eh... its good enough
-        F = self.unnorm_collapsefunction(Xi)
-        self.A = 1 / np.trapz(F, np.log(Xi))
+        if A is not None:
+            self.A = A
+        else:
+            Xi = np.geomspace(1e-12, 1e3, num=2000)  # Eh... its good enough
+            F = self.unnorm_collapsefunction(Xi)
+            self.A = 1 / np.trapz(F, np.log(Xi))
 
     ###########################
     # Base Halo Mass Function #
