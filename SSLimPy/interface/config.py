@@ -1,26 +1,22 @@
 # This class defines global variables that will not change through
-# the computation of one fisher matrix
-
-import sys, os
+# the computation of one fisher matrix/ chain/ etc
+import os
 import yaml
-
-
-
 from copy import copy
 from astropy import units as u
 import numpy as np
-
 from SSLimPy.cosmology import cosmology
 from SSLimPy.cosmology import astro
 
+
 def init(
-    settings_dict = dict(),
-    camb_yaml_file = None,
-    class_yaml_file = None,
-    obspars_dict = dict(),
-    cosmopars = dict(),
-    astropars = dict(),
-    BAOpars = dict(),
+    settings_dict=dict(),
+    camb_yaml_file=None,
+    class_yaml_file=None,
+    obspars_dict=dict(),
+    cosmopars=dict(),
+    astropars=dict(),
+    BAOpars=dict(),
 ):
     """This class is to handle the configuration for the computation as well as the fiducial parameters. It then gives access to all global variables
 
@@ -42,7 +38,7 @@ def init(
                       A dictionary containing the fiducial BAO toy-model parameters for BAO-only analysis
     """
 
-    #Set global defaults for the settings dictionary
+    # Set global defaults for the settings dictionary
     global settings
     settings = settings_dict
 
@@ -54,31 +50,38 @@ def init(
     settings.setdefault("cosmo_model", "LCDM")
     settings.setdefault("code", "camb")
     settings.setdefault("h-units", False)
-    settings.setdefault("do_pheno_ncdm",False)
+    settings.setdefault("do_pheno_ncdm", False)
     settings.setdefault("astro_tracer", "clustering")
 
     # Savgol numerics
-    settings.setdefault('savgol_window', 101)
-    settings.setdefault('savgol_polyorder', 3)
-    settings.setdefault('savgol_width', 1.358528901113328)
-    settings.setdefault('savgol_internalsamples', 800)
-    settings.setdefault('savgol_internalkmin', 0.001)
+    settings.setdefault("savgol_window", 101)
+    settings.setdefault("savgol_polyorder", 3)
+    settings.setdefault("savgol_width", 1.358528901113328)
+    settings.setdefault("savgol_internalsamples", 800)
+    settings.setdefault("savgol_internalkmin", 0.001)
 
     # Pk numerics
-    settings.setdefault("kmin", 1.e-3 * u.Mpc**-1)
-    settings.setdefault("kmax", 10 * u.Mpc**-1)
-    settings.setdefault("nk",200)
-    settings.setdefault("k_kind","log")
+    settings.setdefault("kmin", 1.0e-3 * u.Mpc**-1)
+    settings.setdefault("kmax", 50 * u.Mpc**-1)
+    settings.setdefault("nk", 200)
+    settings.setdefault("k_kind", "log")
     settings.setdefault("nmu", 128)
-    settings.setdefault("downsample_conv_q",1)
-    settings.setdefault("downsample_conv_muq",8)
+    settings.setdefault("downsample_conv_q", 1)
+    settings.setdefault("downsample_conv_muq", 8)
     settings.setdefault("nnodes_legendre", 9)
 
+    # Nonlinear numerics
+    settings.setdefault("Rmin", 1.0e-4 * u.Mpc)
+    settings.setdefault("Rmax", 1.5e3 * u.Mpc)
+    settings.setdefault("nR", 64)
+    settings.setdefault("alpha_iSigma", 3)
+    settings.setdefault("tol_sigma", 1e-4)
+
     # Pk specifications
-    settings.setdefault("sigma_scatter",0)
-    settings.setdefault("fduty",1)
+    settings.setdefault("sigma_scatter", 0)
+    settings.setdefault("fduty", 1)
     settings.setdefault("do_Jysr", False)
-    settings.setdefault("fix_cosmo_nl_terms",True)
+    settings.setdefault("fix_cosmo_nl_terms", True)
 
     # Pk contributions
     settings.setdefault("QNLpowerspectrum", True)
@@ -91,14 +94,14 @@ def init(
     settings.setdefault("Smooth_window", False)
 
     # VID numerics
-    settings.setdefault("Tmin_VID", 1e-2*u.uK)
-    settings.setdefault("Tmax_VID", 100*u.uK)
-    settings.setdefault("fT0_min", 1e-5*u.uK**-1)
-    settings.setdefault("fT0_max", 1e+4*u.uK**-1)
-    settings.setdefault("fT_min", 1e-5*u.uK**-1)
-    settings.setdefault("fT_max", 1e+5*u.uK**-1)
+    settings.setdefault("Tmin_VID", 1e-2 * u.uK)
+    settings.setdefault("Tmax_VID", 100 * u.uK)
+    settings.setdefault("fT0_min", 1e-5 * u.uK**-1)
+    settings.setdefault("fT0_max", 1e4 * u.uK**-1)
+    settings.setdefault("fT_min", 1e-5 * u.uK**-1)
+    settings.setdefault("fT_max", 1e5 * u.uK**-1)
     settings.setdefault("nfT0", 1000)
-    settings.setdefault("sigma_PT_stable", 0.*u.uK)
+    settings.setdefault("sigma_PT_stable", 0.0 * u.uK)
     settings.setdefault("nT", int(2**18))
     settings.setdefault("smooth_VID", True)
     settings.setdefault("Nbin_hist", 100)
@@ -106,11 +109,11 @@ def init(
     settings.setdefault("subtract_VID_mean", False)
     settings.setdefault("Lsmooth_tol", 7)
     settings.setdefault("T0_Nlogsigma", 4)
-    settings.setdefault("n_leggauss_nodes_FT",'../nodes1e5.txt')
-    settings.setdefault("n_leggauss_nodes_IFT",'../nodes1e4.txt')
+    settings.setdefault("n_leggauss_nodes_FT", "../nodes1e5.txt")
+    settings.setdefault("n_leggauss_nodes_IFT", "../nodes1e4.txt")
 
     # Output settings
-    settings.setdefault("verbosity",1)
+    settings.setdefault("verbosity", 1)
     settings.setdefault("output", [])
 
     # Load Boltzmann solver files
@@ -128,7 +131,13 @@ def init(
                 print("You asked for CAMB but the yaml path you passed did not exist")
                 raise ValueError
         else:
-            file_content_camb = yaml.safe_load(open(os.path.join(file_location,"../../input/solver_files/camb_default.yaml")))
+            file_content_camb = yaml.safe_load(
+                open(
+                    os.path.join(
+                        file_location, "../../input/solver_files/camb_default.yaml"
+                    )
+                )
+            )
         boltzmann_cambpars = file_content_camb
 
     if input_type == "class":
@@ -140,28 +149,34 @@ def init(
                 print("You asked for CLASS but the yaml path you passed did not exist")
                 raise ValueError
         else:
-            file_content_class = yaml.safe_load(open(os.path.join(file_location,"../../input/solver_files/class_default.yaml")))
+            file_content_class = yaml.safe_load(
+                open(
+                    os.path.join(
+                        file_location, "../../input/solver_files/class_default.yaml"
+                    )
+                )
+            )
         boltzmann_classpars = file_content_class
 
-    #Set global defaults and inputs for the survey specifications
+    # Set global defaults and inputs for the survey specifications
     global obspars
-    obspars = copy(obspars_dict) 
+    obspars = copy(obspars_dict)
 
-    obspars.setdefault("Tsys_NEFD", 40*u.uK)
+    obspars.setdefault("Tsys_NEFD", 40 * u.uK)
     obspars.setdefault("Nfeeds", 19)
-    obspars.setdefault("beam_FWHM", 4.1*u.arcmin)
-    obspars.setdefault("nu", 115*u.GHz)
-    obspars.setdefault("nuObs", 30*u.GHz)
-    obspars.setdefault("Delta_nu", 8*u.GHz)
-    obspars.setdefault("dnu", 15*u.MHz)
-    obspars.setdefault("tobs", 1300*u.h)
+    obspars.setdefault("beam_FWHM", 4.1 * u.arcmin)
+    obspars.setdefault("nu", 115 * u.GHz)
+    obspars.setdefault("nuObs", 30 * u.GHz)
+    obspars.setdefault("Delta_nu", 8 * u.GHz)
+    obspars.setdefault("dnu", 15 * u.MHz)
+    obspars.setdefault("tobs", 1300 * u.h)
     obspars.setdefault("nD", 1)
-    obspars.setdefault("Omega_field", 4*u.deg**2)
+    obspars.setdefault("Omega_field", 4 * u.deg**2)
     obspars.setdefault("N_FG_par", 1)
     obspars.setdefault("N_FG_perp", 1)
     obspars.setdefault("do_FG_wedge", False)
-    obspars.setdefault("a_FG", 0.)
-    obspars.setdefault("b_FG", 0.)
+    obspars.setdefault("a_FG", 0.0)
+    obspars.setdefault("b_FG", 0.0)
 
     """ # Load Survey specifications from file
     if specifications:
@@ -214,24 +229,23 @@ def init(
     # seperate the nuiscance-like cosmology parameters
     # add new ones here
     global nuiscance_like_params_names
-    nuiscance_like_params_names = ["f_NL",
-                                   "slope_ncdm",
-                                   "k_cut_ncdm"]
+    nuiscance_like_params_names = ["f_NL", "slope_ncdm", "k_cut_ncdm"]
 
     global fiducialnuiscancelikeparams
     fiducialnuiscancelikeparams = dict()
     for key in cosmopars:
         if key in nuiscance_like_params_names:
-            fiducialnuiscancelikeparams[key]=cosmopars.pop(key)
+            fiducialnuiscancelikeparams[key] = cosmopars.pop(key)
 
     global fiducialfullcosmoparams
     fiducialfullcosmoparams = {**fiducialcosmoparams, **fiducialnuiscancelikeparams}
 
     global fiducialcosmo
-    fiducialcosmo = cosmology.cosmo_functions(cosmopars=cosmopars,
-                                              nuiscance_like=fiducialnuiscancelikeparams,
-                                              input=input_type,
-                                              )
+    fiducialcosmo = cosmology.cosmo_functions(
+        cosmopars=cosmopars,
+        nuiscance_like=fiducialnuiscancelikeparams,
+        input_type=input_type,
+    )
 
     global fiducialastro
     fiducialastro = astro.astro_functions(cosmopars, astropars)

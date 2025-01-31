@@ -1,23 +1,23 @@
-import sys
-import types
 from copy import deepcopy
-
 import astropy.constants as c
 import astropy.units as u
 import numpy as np
-from scipy.interpolate import RectBivariateSpline, interp1d
-
-sys.path.append("../")
+from scipy.interpolate import RectBivariateSpline
+from SSLimPy.cosmology.cosmology import cosmo_functions
 from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
+from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
-from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb 
 from SSLimPy.interface import config as cfg
+from SSLimPy.interface import updater
+from SSLimPy.utils.utils import smooth_dW, smooth_W
 
 
 class astro_functions:
-    def __init__(self, cosmopars=dict(), astropars=dict(), cosmology = None):
+    def __init__(
+        self, cosmopars=dict(), astropars=dict(), cosmology: cosmo_functions = None
+    ):
 
         self.astroparams = deepcopy(astropars)
         self.set_astrophysics_defaults()
@@ -31,9 +31,8 @@ class astro_functions:
             self.cosmopars = cosmology.fullcosmoparams
             self.cosmology = cosmology
         else:
-            from SSLimPy.interface import updater
             self.cosmopars = cosmopars
-            self.cosmology = updater.update_cosmo(cfg.fiducialcosmo,cosmopars)
+            self.cosmology = updater.update_cosmo(cfg.fiducialcosmo, cosmopars)
 
         # Current units
         self.hubble = self.cosmology.h()
@@ -54,7 +53,7 @@ class astro_functions:
         self.nu = cfg.obspars["nu"]
         self.nuObs = cfg.obspars["nuObs"]
 
-        self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
+        self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs(self.astro_tracer)
 
         # Check passed models
         self.init_model()
@@ -134,7 +133,7 @@ class astro_functions:
         return np.squeeze(dndM).to(u.Mpc**-3 * u.Msun**-1)
 
     def sigmav_broadening(self, M, z):
-        """ Computes the physical scale of the line broadening due to
+        """Computes the physical scale of the line broadening due to
         galactic rotation curves.
         """
         Mvec = np.atleast_1d(M)[:, None]
@@ -142,7 +141,7 @@ class astro_functions:
 
         vM = np.atleast_1d(self.astroparams["v_of_M"](Mvec))
         Hz = np.atleast_1d(self.cosmology.Hubble(zvec))
-        sv = vM/self.cosmology.celeritas * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
+        sv = vM / self.cosmology.celeritas * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
 
         return np.squeeze(sv)
 
@@ -152,97 +151,115 @@ class astro_functions:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        sv = np.reshape(self.sigmav_broadening(M,z),(1, 1, *M.shape, *z.shape))
-        fac = np.exp(-1 / 2 * np.power(k[:, None, None, None] *
-                                       mu[None, :, None, None] *
-                                       sv,
-                                       2)
-                     )
+        sv = np.reshape(self.sigmav_broadening(M, z), (1, 1, *M.shape, *z.shape))
+        fac = np.exp(
+            -1 / 2 * np.power(k[:, None, None, None] * mu[None, :, None, None] * sv, 2)
+        )
         return np.squeeze(fac)
 
     def bavg(self, z, k=None, mu=None):
-        '''
+        """
         Average luminosity-weighted bias for the given cosmology and line
-        model. Assumed to be linearly weight 
+        model. Assumed to be linearly weight
 
         Includes the effects of f_NL though the wrapping functions in astro
-        '''
+        """
         # Integrands for mass-averaging
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
         M = self.M.to(self.Msunh)
         z = np.atleast_1d(z)
 
-        LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
-        dndM = np.reshape(self.halomassfunction(M,z),(*M.shape,*z.shape))
-        bh = self.restore_shape(self.halobias(M,z,k=k),k,M,z)
+        LofM = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
+        dndM = np.reshape(self.halomassfunction(M, z), (*M.shape, *z.shape))
+        bh = self.restore_shape(self.halobias(M, z, k=k), k, M, z)
 
         Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
         if self.astroparams["v_of_M"]:
-           Fv = np.reshape(self.broadening_FT(k, mu, M, z),
-                           (*k.shape, *mu.shape, *M.shape, *z.shape))
+            Fv = np.reshape(
+                self.broadening_FT(k, mu, M, z),
+                (*k.shape, *mu.shape, *M.shape, *z.shape),
+            )
 
-        itgrnd1 = Fv * LofM[None, None, :, :] * dndM[None, None, :, :] * bh[:, None, :, :]
+        itgrnd1 = (
+            Fv * LofM[None, None, :, :] * dndM[None, None, :, :] * bh[:, None, :, :]
+        )
         itgrnd2 = Fv * LofM[None, None, :, :] * dndM[None, None, :, :]
 
-        I1 = np.trapz(itgrnd1,M,axis=2)
-        I2 = np.trapz(itgrnd2,M,axis=2)
-        b_line =  I1/I2
+        I1 = np.trapz(itgrnd1, M, axis=2)
+        I2 = np.trapz(itgrnd2, M, axis=2)
+        b_line = I1 / I2
         return np.squeeze(b_line.to(1).value)
 
-
     def bavghalo(self, bstring, z, power, dc=1.6865):
-        '''
-        Average luminosity-weighted bias for higher order bias functions 
+        """
+        Average luminosity-weighted bias for higher order bias functions
 
         Pass which bias you want as a string present in bias_coevolution
-        Will default back to use ST fitting function as halo mass function! 
-        '''
+        Will default back to use ST fitting function as halo mass function!
+        """
         # Integrands for mass-averaging
         M = self.M.to(self.Msunh)
         z = np.atleast_1d(z)
 
-        LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
+        LofM = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
         dndM = self.bias_coevolution.sc_hmf(M, z, dc=dc)
-        b = np.reshape(getattr(self.bias_coevolution, bstring)(M, z, dc=dc),(*M.shape,*z.shape))
+        b = np.reshape(
+            getattr(self.bias_coevolution, bstring)(M, z, dc=dc), (*M.shape, *z.shape)
+        )
 
         itgrnd1 = M[:, None] * LofM**power * dndM * b
         itgrnd2 = M[:, None] * LofM**power * dndM
 
         I1 = np.trapz(itgrnd1, np.log(M.value), axis=0)
         I2 = np.trapz(itgrnd2, np.log(M.value), axis=0)
-        avgbL =  I1/I2
+        avgbL = I1 / I2
         return avgbL.to(1).value
 
-
     def nbar(self, z):
-        '''
+        """
         Mean number density of galaxies, computed from the luminosity function
         in 'LF' models and from the mass function in 'ML' models
-        '''
+        """
         model_type = self.astroparams["model_type"]
-        if model_type =='LF':
-            dndL  = self.haloluminosityfunction(self.L,z)
-            nbar = np.trapz(dndL,self.L,axis=0)
+        if model_type == "LF":
+            dndL = self.haloluminosityfunction(self.L, z)
+            nbar = np.trapz(dndL, self.L, axis=0)
         else:
-            dndM = self.halomassfunction(self.M,z)
-            nbar = np.trapz(dndM,self.M,axis=0)
+            dndM = self.halomassfunction(self.M, z)
+            nbar = np.trapz(dndM, self.M, axis=0)
         return nbar
 
-    def CLT(self,z):
+    def CLT(self, z):
         if cfg.settings["do_Jysr"]:
-            x = c.c / (4.0 * np.pi * self.nu * self.cosmology.Hubble(z,physical=True) * (1.0 * u.sr))
+            x = c.c / (
+                4.0
+                * np.pi
+                * self.nu
+                * self.cosmology.Hubble(z, physical=True)
+                * (1.0 * u.sr)
+            )
             CLT = x.to(u.Jy * u.Mpc**3 / (u.Lsun * u.sr))
         else:
-            x = c.c**3 * (1 + z) ** 2 / (8 * np.pi * c.k_B * self.nu**3 * self.cosmology.Hubble(z,physical=True))
+            x = (
+                c.c**3
+                * (1 + z) ** 2
+                / (
+                    8
+                    * np.pi
+                    * c.k_B
+                    * self.nu**3
+                    * self.cosmology.Hubble(z, physical=True)
+                )
+            )
             CLT = x.to(u.uK * u.Mpc**3 / u.Lsun)
         return CLT
 
     def Lmoments(self, z, k=None, mu=None, moment=1):
-        '''
+        """
         Sky-averaged luminosity density moments at nuObs from target line.
         Has two cases for 'LF' and 'ML' models that where handled in create_luminosty_function
-        '''
+        """
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
@@ -252,20 +269,26 @@ class astro_functions:
                 raise ValueError("Line width modelling only available for ML models")
             else:
                 L = self.L
-                dndL = np.reshape(self.haloluminosityfunction(L,z),(*L.shape,*z.shape))
-                itgrnd1 = dndL * np.power(L,moment)[:,None]
-                Lmoment = np.trapz(itgrnd1,L,axis=0)
+                dndL = np.reshape(
+                    self.haloluminosityfunction(L, z), (*L.shape, *z.shape)
+                )
+                itgrnd1 = dndL * np.power(L, moment)[:, None]
+                Lmoment = np.trapz(itgrnd1, L, axis=0)
         elif model_type == "ML":
             M = self.M
-            dndM = np.reshape(self.halomassfunction(M,z),(1, 1, *M.shape, *z.shape))
-            L = np.reshape(self.massluminosityfunction(M,z),(1, 1, *M.shape, *z.shape))
+            dndM = np.reshape(self.halomassfunction(M, z), (1, 1, *M.shape, *z.shape))
+            L = np.reshape(
+                self.massluminosityfunction(M, z), (1, 1, *M.shape, *z.shape)
+            )
 
             Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
             if self.astroparams["v_of_M"]:
-                Fv = np.reshape(self.broadening_FT(k, mu, M, z),
-                                (*k.shape, *mu.shape, *M.shape, *z.shape))
+                Fv = np.reshape(
+                    self.broadening_FT(k, mu, M, z),
+                    (*k.shape, *mu.shape, *M.shape, *z.shape),
+                )
 
-            itgrnd = dndM * np.power(L* Fv, moment)
+            itgrnd = dndM * np.power(L * Fv, moment)
             Lmoment = np.trapz(itgrnd, M, axis=2)
 
             # Special case for Tony Li model- scatter does not preserve LCO
@@ -273,38 +296,47 @@ class astro_functions:
                 model_pars = self.astroparams["model_par"]
                 alpha = model_pars["alpha"]
                 sig_SFR = model_pars["sig_SFR"]
-                correction = np.exp((moment * alpha**-2 - alpha**-1)
-                                    * moment * sig_SFR**2 * np.log(10)**2
-                                    / 2)
+                correction = np.exp(
+                    (moment * alpha**-2 - alpha**-1)
+                    * moment
+                    * sig_SFR**2
+                    * np.log(10) ** 2
+                    / 2
+                )
                 Lmoment *= correction
 
         return np.squeeze(Lmoment)
 
-    def Tmoments(self,z, k=None, mu=None, moment=1):
-        '''
+    def Tmoments(self, z, k=None, mu=None, moment=1):
+        """
         Sky-averaged brightness temperature moments at nuObs from target line.
         Else, you can directly input Tmean using TOY model
-        '''
-        return np.power(self.CLT(z),moment) * self.Lmoments(z, k=k, mu=mu, moment=moment)
+        """
+        return np.power(self.CLT(z), moment) * self.Lmoments(
+            z, k=k, mu=mu, moment=moment
+        )
 
     #############################
     # Additional Init Functions #
     #############################
 
-    def create_sigmaM_funcs(self):
+    def create_sigmaM_funcs(self, tracer="matter"):
         """
         This function creates the interpolating functions for sigmaM and dsigamM
         """
         M_inter = self.M
         z_inter = self.cosmology.results.zgrid
 
-        sigmaM = self._sigmaM_of_z(M_inter, z_inter)
+        sigmaM = self._sigmaM_of_z(M_inter, z_inter, tracer)
+        dsigmaM = self._dsigmaM_of_z(M_inter, z_inter, tracer)
 
         # create interpolating functions
         logM_in_Msun = np.log(M_inter.to(u.Msun).value)
         logsigmaM = np.log(sigmaM)
+        logmdsigmaM = np.log(-dsigmaM.to(u.Msun**-1).value)
 
         inter_logsigmaM = RectBivariateSpline(logM_in_Msun, z_inter, logsigmaM)
+        inter_logmdsigmaM = RectBivariateSpline(logM_in_Msun, z_inter, logmdsigmaM)
 
         # restore units
         def sigmaM_of_M_and_z(M, z):
@@ -316,24 +348,30 @@ class astro_functions:
         def dsigmaM_of_M_and_z(M, z):
             M = np.atleast_1d(M.to(u.Msun))
             z = np.atleast_1d(z)
-            sigmaM = np.reshape(sigmaM_of_M_and_z(M, z), (*M.shape, *z.shape))
             logM = np.log(M.value)
-            return np.squeeze(
-                sigmaM / M[:, None] * inter_logsigmaM.partial_derivative(1, 0)(logM, z)
-            )
+            return np.squeeze(-np.exp(inter_logmdsigmaM(logM, z)) * u.Msun**-1)
 
         return sigmaM_of_M_and_z, dsigmaM_of_M_and_z
 
-    def _sigmaM_of_z(self, M, z):
+    def _sigmaM_of_z(self, M, z, tracer="matter"):
         """
-        Mass (or CDM+baryon) variance at target redshift. Used to create interpolated versions
+        Mass (or CDM+baryon) variance at target redshift.
+        Used to create interpolated versions
         """
-        tracer = self.astrotracer
-
         rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
         R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
 
         return self.cosmology.sigmaR_of_z(R, z, tracer)
+
+    def _dsigmaM_of_z(self, M, z, tracer="matter"):
+        """
+        Matter (or CDM+baryon) derivative variance at target redshift.
+        Used to create interpolated versions
+        """
+        rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
+        R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
+
+        return self.cosmology.dsigmaR_of_z(R, z, tracer) * (R / (3 * M))
 
     def init_model(self):
         """
@@ -440,10 +478,10 @@ class astro_functions:
                 self._luminosity_function, self.astroparams["model_name"]
             )
 
-            dn_dL_of_L = dn_dL_of_L_func(L)[:,None] * np.ones_like(z)[None, :]
+            dn_dL_of_L = dn_dL_of_L_func(L)[:, None] * np.ones_like(z)[None, :]
 
         logL = np.log(L.to(u.Lsun).value)
-        dn_dL_of_L[dn_dL_of_L.value == 0] = 1e-99*dn_dL_of_L.unit
+        dn_dL_of_L[dn_dL_of_L.value == 0] = 1e-99 * dn_dL_of_L.unit
         logLF = np.log(dn_dL_of_L.to(u.Mpc ** (-3) * u.Lsun ** (-1)).value)
         logLF_inter = RectBivariateSpline(logL, z, logLF)
 
@@ -496,16 +534,19 @@ class astro_functions:
         k_2 = k[None, :, None, None, None]
         P_1 = P_phi[:, None, None, None, None]
         P_2 = P_phi[None, :, None, None, None]
+
         # functions of k1 or k2 and M
         tM = M[None, :]
         tR = R[None, :]
         tk = k[:, None]
-        j1 = self.j1(tR * tk)
-        dj1_dM = self.dj1(tR * tk) * (tk * tR) / (3 * tM)
+        x = tR * tk
+        j1 = np.reshape(smooth_W(x.flatten()), x.shape)
+        dj1_dM = np.reshape(smooth_dW(x.flatten()), x.shape) * x / (3 * tM)
         j1_1 = j1[:, None, None, :, None]
         j1_2 = j1[None, :, None, :, None]
         dj1_dM_1 = dj1_dM[:, None, None, :, None]
         dj1_dM_2 = dj1_dM[None, :, None, :, None]
+
         # functions of k1 or k2 and z
         Tm = (
             -5
@@ -517,37 +558,45 @@ class astro_functions:
         )
         Tm_1 = Tm[:, None, None, None, :]
         Tm_2 = Tm[None, :, None, None, :]
+
         # functions of k1, k2, and mu
         tk_1 = k[:, None, None]
         tk_2 = k[None, :, None]
         tmu = mu[None, None, :]
-        k_12 = np.sqrt(np.power(tk_1, 2) + np.power(tk_2, 2) + 2 * tk_1 * tk_2 * tmu)
+        k_12 = np.sqrt(
+            np.abs(np.power(tk_1, 2) + np.power(tk_2, 2) + 2 * tk_1 * tk_2 * tmu)
+        )
+
         # functions of k1, k2, mu, and M
-        tR = R[None, :]
-        tk = k_12.flatten()[:, None]
-        kmask = np.where((tk > kmin) and (tk < kmask))
-        tx = tR * tk
-        j1_12 = np.zeros_like(tx)
-        dj1_dM_12 = np.zeros_like(tx)
-        j1_12[kmask, :] = self.j1(tx[kmask, :])
-        dj1_dM_12[kmask, :] = self.dj1(tx[kmask, :]) * tx[kmask, :] / (3 * tM)
-        j1_12 = np.reshape(j1_12, (len(k), len(k), len(mu), len(M)))[:, :, :, :, None]
-        dj1_dM_12 = np.reshape(dj1_dM_12, (len(k), len(k), len(mu), len(M)))[
-            :, :, :, :, None
-        ]
+        tk = k_12.flatten()
+        kmask = (tk > kmin) & (tk < kmax)
+        xmasked = R[None, :] * tk[kmask, :]
+        j1_12 = np.zeros((*tk.shape, *R.shape))
+        dj1_dM_12 = np.zeros_like(j1_12)
+        j1_12[kmask, :] = np.reshape(
+            smooth_W(xmasked.flatten()), (*k.shape, *k.shape, *mu.shape, *M.shape)
+        )
+        dj1_dM_12[kmask, :] = (
+            np.reshape(
+                smooth_W(xmasked.flatten()), (*k.shape, *k.shape, *mu.shape, *M.shape)
+            )
+            * xmasked
+            / (3 * tM)
+        )
+        j1_12 = j1_12[:, :, :, :, None]
+        dj1_dM_12 = dj1_dM_12[:, :, :, :, None]
+
         # functions of k1, k2, mu, and z
-        Tm_12 = np.zeros((len(tk), len(z)))
+        Tm_12 = np.zeros((*tk.shape, *R.shape))
         Tm_12[kmask, :] = (
             -5
             / 3
             * np.reshape(
                 self.cosmology.Transfer(tk[kmask], z, nonlinear=False, tracer=tracer),
-                (*(tk[kmask].shape), *z.shape),
+                (*k.shape, *k.shape, *mu.shape, *z.shape),
             )
         )
-        Tm_12 = np.reshape(Tm_12, (*k.shape, *k.shape, *mu.shape, *z.shape))[
-            :, :, :, None, :
-        ]
+        Tm_12 = Tm_12[:, :, :, None, :]
 
         # Integrandts
         W = j1_1 * j1_2 * j1_12
@@ -586,9 +635,9 @@ class astro_functions:
         """
         Calculates kappa_3 its derivative with respect to halo mass M from 2009.01245
         """
-        S3, dS3_dM = self.S3_dS3(M, z)
+        S3, dS3_dM = self.S3_dS3(M, z, self.astrotracer)
         sigmaM = self.sigmaM(M, z)
-        dSigmaM = self.dsigmaM_dM(M, z)
+        dSigmaM = self.dsigmaM_dM(M, z, self.astrotracer)
 
         kappa3 = S3 / sigmaM
         dkappa3dM = (dS3_dM - 3 * S3 * dSigmaM / sigmaM) / (sigmaM**3)
@@ -668,21 +717,7 @@ class astro_functions:
                 * np.exp(-((np.log(x) - mu) ** 2) / 2.0 / sigma**2)
             )
 
-    def j1(self, x):
-        W = 3 / np.power(x, 3) * (np.sin(x * u.rad) - x * np.cos(x * u.rad))
-        W[np.where(x < 0.01)] = 1 - np.power(x[np.where(x < 0.01)], 2) / 10
-
-        return W
-
-    def dj1(self, x):
-        dW = 3 / np.power(x, 2) * np.sin(x * u.rad) - 9 / np.power(x, 4) * (
-            np.sin(x * u.rad) - x * np.cos(x * u.rad)
-        )
-        dW[np.where(x < 0.01)] = -x / 5 + np.power(x, 3) / 70
-
-        return dW
-
-    def restore_shape(self,A,*args):
+    def restore_shape(self, A, *args):
         """
         Extremely dangerous function to reshape squeezed arrays into arrays with boradcastable shapes
         Only use when there is other way as this assumes that the output shape has lenghs corresponding to input
@@ -695,7 +730,7 @@ class astro_functions:
             targetShape = (*targetShape, *np.atleast_1d(arg).shape)
 
         inputShape = np.array(inputShape)
-        targetShape= np.array(targetShape)
+        targetShape = np.array(targetShape)
 
         new_shape_A = []
         j = 0

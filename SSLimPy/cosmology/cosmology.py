@@ -2,7 +2,6 @@
 Obtain cosmological functions from the Einstein Boltzmann Code
 """
 
-import sys
 import types
 from copy import deepcopy
 from warnings import warn
@@ -10,14 +9,10 @@ from warnings import warn
 import astropy.constants as c
 import astropy.units as u
 import numpy as np
-from scipy.interpolate import (InterpolatedUnivariateSpline,
-                               RectBivariateSpline, UnivariateSpline,
-                               make_interp_spline)
+from scipy.interpolate import RectBivariateSpline, UnivariateSpline, make_interp_spline
 from scipy.signal import savgol_filter
-
-# Import SSLimPy functions
-sys.path.append("../")
 from SSLimPy.interface import config as cfg
+from SSLimPy.utils.utils import *
 
 
 class boltzmann_code:
@@ -388,17 +383,17 @@ class boltzmann_code:
             self.results.kgrid,
             Pk_cb_l.P(self.results.zgrid, self.results.kgrid),
         )
-        self.results.h_of_z = InterpolatedUnivariateSpline(
+        self.results.h_of_z = UnivariateSpline(
             self.results.zgrid, cambres.h_of_z(self.results.zgrid)
         )
-        self.results.ang_dist = InterpolatedUnivariateSpline(
+        self.results.ang_dist = UnivariateSpline(
             self.results.zgrid, cambres.angular_diameter_distance(self.results.zgrid)
         )
-        self.results.com_dist = InterpolatedUnivariateSpline(
+        self.results.com_dist = UnivariateSpline(
             self.results.zgrid, cambres.comoving_radial_distance(self.results.zgrid)
         )
         self.results.rs_drag = cambres.get_derived_params()["rdrag"]
-        self.results.Om_m = InterpolatedUnivariateSpline(
+        self.results.Om_m = UnivariateSpline(
             self.results.zgrid,
             (
                 cambres.get_Omega("cdm", z=self.results.zgrid)
@@ -407,7 +402,7 @@ class boltzmann_code:
             ),
         )
 
-        self.results.Om_cb = InterpolatedUnivariateSpline(
+        self.results.Om_cb = UnivariateSpline(
             self.results.zgrid,
             (
                 cambres.get_Omega("cdm", z=self.results.zgrid)
@@ -494,7 +489,9 @@ class boltzmann_code:
         self.results.zgrid = z[::-1]
 
         ## interpolating function Pk_nl (k,z)
-        Pk_nl, k, z = classres.get_pk_and_k_and_z(nonlinear=cfg.settings["nonlinearMatpow"])
+        Pk_nl, k, z = classres.get_pk_and_k_and_z(
+            nonlinear=cfg.settings["nonlinearMatpow"]
+        )
         self.results.Pk_nl = RectBivariateSpline(
             z[::-1], k, (np.flip(Pk_nl, axis=1)).transpose()
         )
@@ -528,7 +525,6 @@ class boltzmann_code:
         self.results.kmax_pk = self.kmax_pk
 
 
-
 class cosmo_functions:
     celeritas = c.c
 
@@ -540,9 +536,10 @@ class cosmo_functions:
     """
 
     def __init__(
-        self, cosmopars=dict(),
+        self,
+        cosmopars=dict(),
         nuiscance_like=dict(),
-        input=None,
+        input_type=None,
         cosmology=None,
     ):
         self.settings = cfg.settings
@@ -552,20 +549,20 @@ class cosmo_functions:
         self.fullcosmoparams = {**cosmopars, **nuiscance_like}
 
         self.fiducialcosmopars = cfg.fiducialcosmoparams
-        if input is None:
-            input = cfg.input_type
+        if input_type is None:
+            input_type = cfg.input_type
 
         if not cosmology:
-            if input is None:
-                input = cfg.input_type
-            if input == "camb":
+            if input_type is None:
+                input_type = cfg.input_type
+            if input_type == "camb":
                 cambresults = boltzmann_code(cosmopars, code="camb")
                 self.code = "camb"
                 self.results = cambresults.results
                 self.kgrid = cambresults.results.kgrid
                 self.cosmopars = cambresults.cosmopars
                 self.cambcosmopars = cambresults.cambcosmopars
-            elif input == "class":
+            elif input_type == "class":
                 classresults = boltzmann_code(cosmopars, code="class")
                 self.code = "class"
                 self.results = classresults.results
@@ -573,7 +570,7 @@ class cosmo_functions:
                 self.cosmopars = classresults.cosmopars
                 self.classcosmopars = classresults.classcosmopars
             else:
-                print(input, ":  This input type is not implemented yet")
+                print(input_type, ":  This input type is not implemented yet")
         else:
             self.code = cosmology.code
             self.results = cosmology.results
@@ -867,10 +864,7 @@ class cosmo_functions:
         n_savgol = int(np.round(savgol_width / np.log(1 + dlnk_loc)))
 
         P = self.matpow(
-            np.exp(log_kgrid_loc) / u.Mpc,
-            z,
-            nonlinear=nonlinear,
-            tracer=tracer
+            np.exp(log_kgrid_loc) / u.Mpc, z, nonlinear=nonlinear, tracer=tracer
         )
         uP = P.unit
 
@@ -878,7 +872,7 @@ class cosmo_functions:
             np.log(P.value),
             n_savgol,
             poly_order,
-            axis= 0,
+            axis=0,
         )
 
         intp_pnw = make_interp_spline(
@@ -888,8 +882,7 @@ class cosmo_functions:
             axis=0,
         )
 
-        P_nw = np.exp(intp_pnw(
-            np.log(k.to(u.Mpc**-1).value))) * uP
+        P_nw = np.exp(intp_pnw(np.log(k.to(u.Mpc**-1).value))) * uP
         return P_nw
 
     def transfer_ncdm(self, ncdmk):
@@ -927,7 +920,8 @@ class cosmo_functions:
         R     : float, numpy.ndarray
                 Radii
         tracer: String
-                either 'matter' if you want sigma_8 calculated from the total matter power spectrum or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
+                either 'matter' if you want sigma calculated from the total matter power spectrum
+                or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
         Returns
         -------
         float
@@ -945,11 +939,48 @@ class cosmo_functions:
 
         # Get Sigma window function
         x = (k[None, None, :] * R[:, None, None]).to(1).value
-        W = 3 / np.power(x, 3) * (np.sin(x) - x * np.cos(x))
-        W[np.where(x < 0.01)] = 1 - np.power(x[np.where(x < 0.01)], 2) / 10
+        W = np.reshape(smooth_W(x.flaten()), x.shape)
 
         Integr = np.power(k[None, None, :] * W, 2) * Pk / (2 * np.pi**2)
         return np.squeeze(np.sqrt(np.trapz(Integr, k, axis=-1)))
+
+    def dsigmaR_of_z(self, R, z, tracer="matter"):
+        """sigma_R
+
+        Parameters
+        ----------
+        z     : float
+                redshift
+        R     : float, numpy.ndarray
+                Radii
+        tracer: String
+                either 'matter' if you want sigma calculated from the total matter power spectrum
+                or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
+        Returns
+        -------
+        float
+            The derivative of the variance of the matter perturbation smoothed over a scale of R in Mpc with respect to that scale R
+
+        """
+        R = np.atleast_1d(R)
+        z = np.atleast_1d(z)
+        k = np.geomspace(self.results.kmin_pk, self.results.kmax_pk, 400) / u.Mpc
+
+        # Keep in order R,z,k
+        Pk = np.reshape(self.matpow(k, z, tracer=tracer), (*k.shape, *z.shape)).T[
+            None, :, :
+        ]
+
+        # Get Sigma window function
+        x = (k[None, None, :] * R[:, None, None]).to(1).value
+        W = np.reshape(smooth_W(x.flatten()), x.shape)
+        dW = np.reshape(smooth_dW(x.flatten()), x.shape)
+
+        # Get Sigma
+        sigma = np.reshape(self.sigmaR_of_z(R, z, tracer=tracer), (*R.shape, *z.shape))
+
+        Integr = np.power(k[None, None, :], 2) * 2 * W * dW * Pk / (2 * np.pi**2)
+        return np.squeeze(np.trapz(Integr, k, axis=-1) / (2 * sigma))
 
     def sigma8_of_z(self, z, tracer="matter"):
         """sigma_8
@@ -973,13 +1004,16 @@ class cosmo_functions:
         """
         Calculates the angular power spectrum moments of the velocity divergence field, also known as the Theta field.
         """
-        k = self.results.kgrid * 1/u.Mpc
+        k = self.results.kgrid * 1 / u.Mpc
         z = np.atleast_1d(z)
-        f_mom = np.power(np.reshape(self.growth_rate(k,z,tracer="matter"),(*k.shape,*z.shape)),moment)
-        P_mm = np.reshape(self.matpow(k,z,tracer="matter"),(*k.shape,*z.shape))
+        f_mom = np.power(
+            np.reshape(self.growth_rate(k, z, tracer="matter"), (*k.shape, *z.shape)),
+            moment,
+        )
+        P_mm = np.reshape(self.matpow(k, z, tracer="matter"), (*k.shape, *z.shape))
         integrnd = f_mom * P_mm
 
-        Int = np.trapz(integrnd, k,axis=0)
+        Int = np.trapz(integrnd, k, axis=0)
         sigma_tt = np.sqrt((1 / (6 * np.pi**2)) * Int)
         return np.squeeze(sigma_tt)
 
@@ -987,38 +1021,38 @@ class cosmo_functions:
     # Growth #
     ##########
     def create_growth(self):
-        k = self.results.kgrid * 1/u.Mpc
+        k = self.results.kgrid * 1 / u.Mpc
         z = self.results.zgrid
-        logk = np.log(k.to(1/u.Mpc).value)
+        logk = np.log(k.to(1 / u.Mpc).value)
 
-        Pm0 = self.matpow(k,0,tracer="matter")[:,None]
-        Pm = self.matpow(k,z,tracer="matter")
-        Pc0 = self.matpow(k,0,tracer="clustering")[:,None]
-        Pc = self.matpow(k,z,tracer="clustering")
+        Pm0 = self.matpow(k, 0, tracer="matter")[:, None]
+        Pm = self.matpow(k, z, tracer="matter")
+        Pc0 = self.matpow(k, 0, tracer="clustering")[:, None]
+        Pc = self.matpow(k, z, tracer="clustering")
 
-        logDm = np.log(np.sqrt((Pm/Pm0).to(1).value))
-        logDc = np.log(np.sqrt((Pc/Pc0).to(1).value))
+        logDm = np.log(np.sqrt((Pm / Pm0).to(1).value))
+        logDc = np.log(np.sqrt((Pc / Pc0).to(1).value))
 
-        logDm_inter = RectBivariateSpline(logk,z,logDm)
-        logDc_inter = RectBivariateSpline(logk,z,logDc)
+        logDm_inter = RectBivariateSpline(logk, z, logDm)
+        logDc_inter = RectBivariateSpline(logk, z, logDc)
 
         def growth_factor(k, z, tracer="matter"):
             k = np.atleast_1d(k)
             z = np.atleast_1d(z)
-            logk = np.log(k.to(1/u.Mpc).value)
+            logk = np.log(k.to(1 / u.Mpc).value)
             if tracer == "clustering":
-                D = np.squeeze(np.exp(logDc_inter(logk,z)))
+                D = np.squeeze(np.exp(logDc_inter(logk, z)))
             elif tracer == "matter":
-                D = np.squeeze(np.exp(logDm_inter(logk,z)))
+                D = np.squeeze(np.exp(logDm_inter(logk, z)))
             else:
                 warn("Did not recognize tracer: reverted to matter")
-                D = np.squeeze(np.exp(logDm_inter(logk,z)))
+                D = np.squeeze(np.exp(logDm_inter(logk, z)))
             return D
 
         def growth_rate(k, z, tracer="matter"):
             k = np.atleast_1d(k)
             z = np.atleast_1d(z)
-            logk = np.log(k.to(1/u.Mpc).value)
+            logk = np.log(k.to(1 / u.Mpc).value)
             if tracer == "clustering":
                 logdfunc = logDc_inter
             elif tracer == "matter":
@@ -1027,7 +1061,9 @@ class cosmo_functions:
                 warn("Did not recognize tracer: reverted to matter")
                 logdfunc = logDm_inter
 
-            return np.squeeze(-1*(1+z)[None,:]*logdfunc.partial_derivative(0,1)(logk,z))
+            return np.squeeze(
+                -1 * (1 + z)[None, :] * logdfunc.partial_derivative(0, 1)(logk, z)
+            )
 
         return growth_factor, growth_rate
 
@@ -1035,9 +1071,9 @@ class cosmo_functions:
         """
         Clustering parameter of LCDM
         """
-        f = self.growth_rate(k,z,tracer=tracer)
-        s8 = self.sigma8_of_z(z,tracer=tracer)
-        return f*s8
+        f = self.growth_rate(k, z, tracer=tracer)
+        s8 = self.sigma8_of_z(z, tracer=tracer)
+        return f * s8
 
     def cmb_power(self, lmin, lmax, obs1, obs2):
         if self.code == "camb":
