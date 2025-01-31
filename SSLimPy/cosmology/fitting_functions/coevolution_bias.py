@@ -65,6 +65,7 @@ class coevolution_bias(bias_fittinig_functions):
             2.77536627e11
             * self.astro.cosmology.Omega(0, self.astro.astrotracer)
             * (self.astro.Msunh * self.astro.Mpch**-3)
+            # * (1 + z)**3 # Isnt this more correct ?
         ) / M[:, None]
 
         dndM = (

@@ -74,6 +74,14 @@ def init(
     settings.setdefault("downsample_conv_muq",8)
     settings.setdefault("nnodes_legendre", 9)
 
+    # Nonlinear numerics
+    settings.setdefault("Rmin", 1.e-4 * u.Mpc)
+    settings.setdefault("Rmax", 1.e3 * u.Mpc)
+    settings.setdefault("nR", 200)
+    settings.setdefault("nt", 256)
+    settings.setdefault("alpha_iSigma", 3)
+
+
     # Pk specifications
     settings.setdefault("sigma_scatter",0)
     settings.setdefault("fduty",1)
