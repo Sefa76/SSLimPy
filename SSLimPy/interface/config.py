@@ -66,7 +66,7 @@ def init(
 
     # Pk numerics
     settings.setdefault("kmin", 1.e-3 * u.Mpc**-1)
-    settings.setdefault("kmax", 10 * u.Mpc**-1)
+    settings.setdefault("kmax", 50 * u.Mpc**-1)
     settings.setdefault("nk",200)
     settings.setdefault("k_kind","log")
     settings.setdefault("nmu", 128)
@@ -77,9 +77,9 @@ def init(
     # Nonlinear numerics
     settings.setdefault("Rmin", 1.e-4 * u.Mpc)
     settings.setdefault("Rmax", 1.e3 * u.Mpc)
-    settings.setdefault("nR", 200)
-    settings.setdefault("nt", 256)
+    settings.setdefault("nR", 64)
     settings.setdefault("alpha_iSigma", 3)
+    settings.setdefault("tol_sigma", 1e-4)
 
 
     # Pk specifications
@@ -238,7 +238,7 @@ def init(
     global fiducialcosmo
     fiducialcosmo = cosmology.cosmo_functions(cosmopars=cosmopars,
                                               nuiscance_like=fiducialnuiscancelikeparams,
-                                              input=input_type,
+                                              input_type=input_type,
                                               )
 
     global fiducialastro

@@ -542,7 +542,7 @@ class cosmo_functions:
     def __init__(
         self, cosmopars=dict(),
         nuiscance_like=dict(),
-        input=None,
+        input_type=None,
         cosmology=None,
     ):
         self.settings = cfg.settings
@@ -552,20 +552,20 @@ class cosmo_functions:
         self.fullcosmoparams = {**cosmopars, **nuiscance_like}
 
         self.fiducialcosmopars = cfg.fiducialcosmoparams
-        if input is None:
-            input = cfg.input_type
+        if input_type is None:
+            input_type = cfg.input_type
 
         if not cosmology:
-            if input is None:
-                input = cfg.input_type
-            if input == "camb":
+            if input_type is None:
+                input_type = cfg.input_type
+            if input_type == "camb":
                 cambresults = boltzmann_code(cosmopars, code="camb")
                 self.code = "camb"
                 self.results = cambresults.results
                 self.kgrid = cambresults.results.kgrid
                 self.cosmopars = cambresults.cosmopars
                 self.cambcosmopars = cambresults.cambcosmopars
-            elif input == "class":
+            elif input_type == "class":
                 classresults = boltzmann_code(cosmopars, code="class")
                 self.code = "class"
                 self.results = classresults.results
@@ -573,7 +573,7 @@ class cosmo_functions:
                 self.cosmopars = classresults.cosmopars
                 self.classcosmopars = classresults.classcosmopars
             else:
-                print(input, ":  This input type is not implemented yet")
+                print(input_type, ":  This input type is not implemented yet")
         else:
             self.code = cosmology.code
             self.results = cosmology.results
