@@ -7,6 +7,7 @@ The same signatures of the bias functions in ```bias_fitting_functions``` should
 """
 
 from copy import deepcopy
+
 import numpy as np
 from astropy import units as u
 

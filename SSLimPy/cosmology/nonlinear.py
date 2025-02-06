@@ -1,10 +1,9 @@
 import astropy.units as u
 import numpy as np
 from numba import njit, prange
-
-from SSLimPy.interface import config as cfg
-from SSLimPy.utils.utils import linear_interpolate, bilinear_interpolate
 from SSLimPy.cosmology.cosmology import cosmo_functions
+from SSLimPy.interface import config as cfg
+from SSLimPy.utils.utils import *
 
 
 # This class will contain relevant functions to compute
@@ -89,44 +88,34 @@ class nonlinear(cosmo_functions):
 
         if "dsigma" in output or "both" in output:
             dsigma = (
-                np.exp(
-                    bilinear_interpolate(mlogR, mz, np.log(self.dsigmaR_lut), vlogR, vz)
+                -np.exp(
+                    bilinear_interpolate(
+                        mlogR, mz, np.log(-self.dsigmaR_lut), vlogR, vz
+                    )
                 )
                 * u.Mpc**-1
             )
             result["dsigma"] = np.reshape(dsigma, (*Rs, *zs))
         return result
 
+    def sigmaR_of_z(self, R, z, tracer="matter"):
+        if tracer == self.tracer:
+            sigma = self.read_lut(R, z, output="sigma")["sigma"]
+            return np.squeeze(sigma)
+        else:
+            return super().sigmaR_of_z(R, z, tracer)
+
+    def dsigmaR_of_z(self, R, z, tracer="matter"):
+        if tracer == self.tracer:
+            dsigma = self.read_lut(R, z, output="dsigma")["dsigma"]
+            return np.squeeze(dsigma)
+        else:
+            return super().dsigmaR_of_z(R, z, tracer)
+
 
 ##############
 # Numba Part #
 ##############
-
-
-@njit
-def smooth_W(x):
-    lx = len(x)
-    W = np.empty(lx)
-    for ix, xi in enumerate(x):
-        if xi < 1e-3:
-            W[ix] = 1.0 - 1.0 / 10.0 * xi**2
-        else:
-            W[ix] = 3.0 / xi**3.0 * (np.sin(xi) - xi * np.cos(xi))
-    return W
-
-
-@njit
-def smooth_dW(x):
-    lx = len(x)
-    dW = np.empty(lx)
-    for ix, xi in enumerate(x):
-        if xi < 1e-3:
-            dW[ix] = -1.0 / 5.0 * xi
-        else:
-            dW[ix] = 3.0 / xi**2.0 * np.sin(xi) - 9 / xi**4 * (
-                np.sin(xi) - xi * np.cos(xi)
-            )
-    return dW
 
 
 @njit("(float64[::1], float64, float64[::1], float64[:], uint64)", fastmath=True)
