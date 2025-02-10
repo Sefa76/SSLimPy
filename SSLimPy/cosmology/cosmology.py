@@ -940,7 +940,7 @@ class cosmo_functions:
 
         # Get Sigma window function
         x = (k[None, None, :] * R[:, None, None]).to(1).value
-        W = np.reshape(smooth_W(x.flaten()), x.shape)
+        W = np.reshape(smooth_W(x.flatten()), x.shape)
 
         Integr = np.power(k[None, None, :] * W, 2) * Pk / (2 * np.pi**2)
         return np.squeeze(np.sqrt(np.trapz(Integr, k, axis=-1)))
@@ -980,7 +980,7 @@ class cosmo_functions:
         # Get Sigma
         sigma = np.reshape(self.sigmaR_of_z(R, z, tracer=tracer), (*R.shape, *z.shape))
 
-        Integr = np.power(k[None, None, :], 2) * 2 * W * dW * Pk / (2 * np.pi**2)
+        Integr = np.power(k[None, None, :], 3) * 2 * W * dW * Pk / (2 * np.pi**2)
         return np.squeeze(np.trapz(Integr, k, axis=-1) / (2 * sigma))
 
     def sigma8_of_z(self, z, tracer="matter"):
