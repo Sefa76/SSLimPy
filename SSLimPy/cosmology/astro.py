@@ -4,6 +4,7 @@ import astropy.units as u
 import numpy as np
 from scipy.interpolate import RectBivariateSpline
 from SSLimPy.cosmology.cosmology import cosmo_functions
+from SSLimPy.cosmology.nonlinear import nonlinear
 from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
 from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
@@ -33,6 +34,9 @@ class astro_functions:
         else:
             self.cosmopars = cosmopars
             self.cosmology = updater.update_cosmo(cfg.fiducialcosmo, cosmopars)
+
+        if cfg.settings["use_nonlinear"]:
+            self.cosmology = nonlinear(self.astrotracer, cosmology=self.cosmology)
 
         # Current units
         self.hubble = self.cosmology.h()

@@ -54,7 +54,6 @@ def init(
     settings.setdefault("astro_tracer", "clustering")
 
     # Savgol numerics
-    settings.setdefault("savgol_window", 101)
     settings.setdefault("savgol_polyorder", 3)
     settings.setdefault("savgol_width", 1.358528901113328)
     settings.setdefault("savgol_internalsamples", 800)
@@ -71,6 +70,7 @@ def init(
     settings.setdefault("nnodes_legendre", 9)
 
     # Nonlinear numerics
+    settings.setdefault("use_nonlinear", True)
     settings.setdefault("Rmin", 1.0e-4 * u.Mpc)
     settings.setdefault("Rmax", 1.5e3 * u.Mpc)
     settings.setdefault("nR", 64)
