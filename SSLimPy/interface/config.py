@@ -5,8 +5,6 @@ import yaml
 from copy import copy
 from astropy import units as u
 import numpy as np
-from SSLimPy.cosmology import cosmology
-from SSLimPy.cosmology import astro
 
 
 def init(
@@ -54,7 +52,6 @@ def init(
     settings.setdefault("astro_tracer", "clustering")
 
     # Savgol numerics
-    settings.setdefault("savgol_window", 101)
     settings.setdefault("savgol_polyorder", 3)
     settings.setdefault("savgol_width", 1.358528901113328)
     settings.setdefault("savgol_internalsamples", 800)
@@ -71,6 +68,7 @@ def init(
     settings.setdefault("nnodes_legendre", 9)
 
     # Nonlinear numerics
+    settings.setdefault("use_nonlinear", True)
     settings.setdefault("Rmin", 1.0e-4 * u.Mpc)
     settings.setdefault("Rmax", 1.5e3 * u.Mpc)
     settings.setdefault("nR", 64)
@@ -240,15 +238,27 @@ def init(
     global fiducialfullcosmoparams
     fiducialfullcosmoparams = {**fiducialcosmoparams, **fiducialnuiscancelikeparams}
 
+    initialize_fiducialcosmo()
+    initialize_fiducialastro()
+
+    global fiducialBAOparams
+    fiducialBAOparams = BAOpars
+
+def initialize_fiducialcosmo():
+    from SSLimPy.cosmology import cosmology
     global fiducialcosmo
+
     fiducialcosmo = cosmology.cosmo_functions(
-        cosmopars=cosmopars,
+        cosmopars=fiducialcosmoparams,
         nuiscance_like=fiducialnuiscancelikeparams,
         input_type=input_type,
     )
 
+def initialize_fiducialastro():
+    from SSLimPy.cosmology import astro
     global fiducialastro
-    fiducialastro = astro.astro_functions(cosmopars, astropars)
 
-    global fiducialBAOparams
-    fiducialBAOparams = BAOpars
+    fiducialastro = astro.astro_functions(
+        cosmopars=fiducialcosmoparams,
+        astropars=fiducialastroparams,
+    )

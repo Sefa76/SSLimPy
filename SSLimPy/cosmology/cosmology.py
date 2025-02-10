@@ -9,7 +9,7 @@ from warnings import warn
 import astropy.constants as c
 import astropy.units as u
 import numpy as np
-from scipy.interpolate import RectBivariateSpline, UnivariateSpline, make_interp_spline
+from scipy.interpolate import RectBivariateSpline, UnivariateSpline
 from scipy.signal import savgol_filter
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
@@ -849,6 +849,7 @@ class cosmo_functions:
             spectrum is then returned on a linear (not logarithmic) grid of
             wavenumbers given by the input array `k`.
         """
+        z = np.atleast_1d(z)
         h_over_Mpc = self.h() / u.Mpc
 
         # wave number grids
@@ -863,8 +864,9 @@ class cosmo_functions:
         savgol_width = self.settings["savgol_width"]
         n_savgol = int(np.round(savgol_width / np.log(1 + dlnk_loc)))
 
-        P = self.matpow(
-            np.exp(log_kgrid_loc) / u.Mpc, z, nonlinear=nonlinear, tracer=tracer
+        P = np.reshape(
+            self.matpow(np.exp(log_kgrid_loc) / u.Mpc, z, nonlinear=nonlinear, tracer=tracer),
+            (loc_samples, *z.shape)
         )
         uP = P.unit
 
@@ -875,14 +877,13 @@ class cosmo_functions:
             axis=0,
         )
 
-        intp_pnw = make_interp_spline(
-            log_kgrid_loc,
-            pow_sg,
-            k=1,
-            axis=0,
+        logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()),len(z.flatten()))
+        zj = np.tile(z.flatten(), len(k.flatten()))
+        P_nw = uP * np.exp(bilinear_interpolate(
+            log_kgrid_loc, z, pow_sg, logki, zj)
         )
 
-        P_nw = np.exp(intp_pnw(np.log(k.to(u.Mpc**-1).value))) * uP
+        P_nw = np.reshape(P_nw, (*k.shape, *z.shape))
         return P_nw
 
     def transfer_ncdm(self, ncdmk):
@@ -939,7 +940,7 @@ class cosmo_functions:
 
         # Get Sigma window function
         x = (k[None, None, :] * R[:, None, None]).to(1).value
-        W = np.reshape(smooth_W(x.flaten()), x.shape)
+        W = np.reshape(smooth_W(x.flatten()), x.shape)
 
         Integr = np.power(k[None, None, :] * W, 2) * Pk / (2 * np.pi**2)
         return np.squeeze(np.sqrt(np.trapz(Integr, k, axis=-1)))
@@ -979,7 +980,7 @@ class cosmo_functions:
         # Get Sigma
         sigma = np.reshape(self.sigmaR_of_z(R, z, tracer=tracer), (*R.shape, *z.shape))
 
-        Integr = np.power(k[None, None, :], 2) * 2 * W * dW * Pk / (2 * np.pi**2)
+        Integr = np.power(k[None, None, :], 3) * 2 * W * dW * Pk / (2 * np.pi**2)
         return np.squeeze(np.trapz(Integr, k, axis=-1) / (2 * sigma))
 
     def sigma8_of_z(self, z, tracer="matter"):

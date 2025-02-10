@@ -4,6 +4,7 @@ import astropy.units as u
 import numpy as np
 from scipy.interpolate import RectBivariateSpline
 from SSLimPy.cosmology.cosmology import cosmo_functions
+from SSLimPy.cosmology.nonlinear import nonlinear
 from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
 from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
@@ -34,6 +35,9 @@ class astro_functions:
             self.cosmopars = cosmopars
             self.cosmology = updater.update_cosmo(cfg.fiducialcosmo, cosmopars)
 
+        if cfg.settings["use_nonlinear"]:
+            self.cosmology = nonlinear(self.astrotracer, cosmology=self.cosmology)
+
         # Current units
         self.hubble = self.cosmology.h()
         self.Mpch = u.Mpc / self.hubble
@@ -52,8 +56,6 @@ class astro_functions:
         # find the redshifts for frequencies asked for:
         self.nu = cfg.obspars["nu"]
         self.nuObs = cfg.obspars["nuObs"]
-
-        self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs(self.astro_tracer)
 
         # Check passed models
         self.init_model()
@@ -90,7 +92,7 @@ class astro_functions:
         """
         Get (roughly) the mass corresponding to the nonlinear scale in units of Msun h
         """
-        sigmaM_z = self.sigmaM(self.M, z)
+        sigmaM_z = self.sigmaM(self.M, z, self.astrotracer)
         mass_non_linear = self.M[np.argmin(np.power(sigmaM_z - delta_crit, 2), axis=0)]
 
         return mass_non_linear.to(self.Msunh)
@@ -320,40 +322,7 @@ class astro_functions:
     # Additional Init Functions #
     #############################
 
-    def create_sigmaM_funcs(self, tracer="matter"):
-        """
-        This function creates the interpolating functions for sigmaM and dsigamM
-        """
-        M_inter = self.M
-        z_inter = self.cosmology.results.zgrid
-
-        sigmaM = self._sigmaM_of_z(M_inter, z_inter, tracer)
-        dsigmaM = self._dsigmaM_of_z(M_inter, z_inter, tracer)
-
-        # create interpolating functions
-        logM_in_Msun = np.log(M_inter.to(u.Msun).value)
-        logsigmaM = np.log(sigmaM)
-        logmdsigmaM = np.log(-dsigmaM.to(u.Msun**-1).value)
-
-        inter_logsigmaM = RectBivariateSpline(logM_in_Msun, z_inter, logsigmaM)
-        inter_logmdsigmaM = RectBivariateSpline(logM_in_Msun, z_inter, logmdsigmaM)
-
-        # restore units
-        def sigmaM_of_M_and_z(M, z):
-            M = np.atleast_1d(M)
-            z = np.atleast_1d(z)
-            logM = np.log(M.to(u.Msun).value)
-            return np.squeeze(np.exp(inter_logsigmaM(logM, z)))
-
-        def dsigmaM_of_M_and_z(M, z):
-            M = np.atleast_1d(M.to(u.Msun))
-            z = np.atleast_1d(z)
-            logM = np.log(M.value)
-            return np.squeeze(-np.exp(inter_logmdsigmaM(logM, z)) * u.Msun**-1)
-
-        return sigmaM_of_M_and_z, dsigmaM_of_M_and_z
-
-    def _sigmaM_of_z(self, M, z, tracer="matter"):
+    def sigmaM(self, M, z, tracer="matter"):
         """
         Mass (or CDM+baryon) variance at target redshift.
         Used to create interpolated versions
@@ -363,15 +332,19 @@ class astro_functions:
 
         return self.cosmology.sigmaR_of_z(R, z, tracer)
 
-    def _dsigmaM_of_z(self, M, z, tracer="matter"):
+    def dsigmaM_dM(self, M, z, tracer="matter"):
         """
         Matter (or CDM+baryon) derivative variance at target redshift.
         Used to create interpolated versions
         """
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
         rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
         R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
 
-        return self.cosmology.dsigmaR_of_z(R, z, tracer) * (R / (3 * M))
+        dsigma = np.reshape(self.cosmology.dsigmaR_of_z(R, z, tracer),
+                            (*M.shape, *z.shape)) * (R / (3 * M))[:, None]
+        return np.squeeze(dsigma)
 
     def init_model(self):
         """
@@ -411,7 +384,7 @@ class astro_functions:
         Initialise computation of bias function if model given by bias_model exists in the given model_type
         """
         bias_name = self.astroparams["bias_model"]
-        self._bias_function = bf.bias_fittinig_functions(self)
+        self._bias_function = bf.bias_fitting_functions(self)
         if not hasattr(self._bias_function, bias_name):
             raise ValueError(bias_name + " not found in bias_fitting_functions.py")
 
@@ -636,7 +609,7 @@ class astro_functions:
         Calculates kappa_3 its derivative with respect to halo mass M from 2009.01245
         """
         S3, dS3_dM = self.S3_dS3(M, z, self.astrotracer)
-        sigmaM = self.sigmaM(M, z)
+        sigmaM = self.sigmaM(M, z, self.astrotracer)
         dSigmaM = self.dsigmaM_dM(M, z, self.astrotracer)
 
         kappa3 = S3 / sigmaM
@@ -648,8 +621,8 @@ class astro_functions:
         """
         The correction to the HMF due to non-zero f_NL, as presented in 2009.01245.
         """
-        sigmaM = self.sigmaM(M, z)
-        dSigmaM = self.dsigmaM_dM(M, z)
+        sigmaM = self.sigmaM(M, z, self.astrotracer)
+        dSigmaM = self.dsigmaM_dM(M, z, self.astrotracer)
 
         nuc = 1.42 / sigmaM
         dnuc_dM = -1.42 * dSigmaM / (sigmaM) ** 2

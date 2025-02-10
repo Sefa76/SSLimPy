@@ -9,8 +9,7 @@ Takes inspiration from pylians
 """
 
 import numpy as np
-from scipy.interpolate import interp1d
-
+from functools import partial
 
 class halo_mass_functions:
     def __init__(self, astro):
@@ -21,8 +20,8 @@ class halo_mass_functions:
         self.Msunh = astro.Msunh
 
         # SigmaM functions
-        self.sigmaM = astro.sigmaM
-        self.dsigmaM_dM = astro.dsigmaM_dM
+        self.sigmaM = partial(self.astro.sigmaM, tracer=self.astro.astrotracer)
+        self.dsigmaM_dM = partial(self.astro.dsigmaM_dM, tracer=self.astro.astrotracer)
 
     def ST(self, Mvec, rhoM, z):
         """

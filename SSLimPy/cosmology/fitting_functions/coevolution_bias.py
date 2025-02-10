@@ -11,10 +11,10 @@ from copy import deepcopy
 import numpy as np
 from astropy import units as u
 
-from .bias_fitting_functions import bias_fittinig_functions
+from .bias_fitting_functions import bias_fitting_functions
 
 
-class coevolution_bias(bias_fittinig_functions):
+class coevolution_bias(bias_fitting_functions):
 
     def __init__(self, astro):
         super().__init__(astro)
@@ -54,11 +54,11 @@ class coevolution_bias(bias_fittinig_functions):
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        nu = np.reshape(dc / self.astro.sigmaM(M, z), (*M.shape, *z.shape))
+        nu = np.reshape(dc / self.sigmaM(M, z), (*M.shape, *z.shape))
 
-        sigmaM = np.reshape(self.astro.sigmaM(M, z), (*M.shape, *z.shape))
+        sigmaM = np.reshape(self.sigmaM(M, z), (*M.shape, *z.shape))
         dsigmaM_dM = np.reshape(
-            self.astro.dsigmaM_dM(M, z).to(self.astro.Msunh**-1), (*M.shape, *z.shape)
+            self.dsigmaM_dM(M, z).to(self.astro.Msunh**-1), (*M.shape, *z.shape)
         )
         dlogsigmaM_dM = dsigmaM_dM / sigmaM
 
@@ -84,14 +84,14 @@ class coevolution_bias(bias_fittinig_functions):
     # Obtained from completeness relations
 
     def b1(self, M, z, dc):
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         eps1 = (self.alpha * nu**2 - 1) / dc
         E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)
         return 1 + eps1 + E1
 
     def b2(self, M, z, dc):
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         eps1 = (self.alpha * nu**2 - 1) / dc
         E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)
@@ -100,7 +100,7 @@ class coevolution_bias(bias_fittinig_functions):
         return 2 * (1 - 17 / 21) * (eps1 + E1) + eps2 + E2
 
     def b3(self, M, z, dc):
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         eps1 = (self.alpha * nu**2 - 1) / dc
         E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)

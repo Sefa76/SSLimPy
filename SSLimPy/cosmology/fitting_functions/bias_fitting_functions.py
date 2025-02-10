@@ -8,21 +8,23 @@ Each function should have the same signature (M, z, dc) -> scalar or array like
 """
 
 from copy import deepcopy
-
+from functools import partial
 import numpy as np
 
 
-class bias_fittinig_functions:
+class bias_fitting_functions:
 
     def __init__(self, astro):
         self.astro = astro  # dont call it astrology
         self.cosmology = astro.cosmology
         self.astroparams = deepcopy(astro.astroparams)
         self.bias_par = self.astroparams["bias_par"]
+        self.sigmaM = partial(self.astro.sigmaM, tracer=self.astro.astrotracer)
+        self.dsigmaM_dM = partial(self.astro.dsigmaM_dM, tracer=self.astro.astrotracer)
 
     def Tinker10(self, M, z, dc):
 
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
         # Parameters of bias fit
         y = self.bias_par.get("y", np.log10(200.0))
         B = self.bias_par.get("B", 0.183)
@@ -41,7 +43,7 @@ class bias_fittinig_functions:
 
         Taken from Mo and White (1996)
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         return 1.0 + (nu**2.0 - 1.0) / dc
 
@@ -75,7 +77,7 @@ class bias_fittinig_functions:
 
         Taken from Sheth & Tormen (1999).
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         q = self.bias_par.get("q", 0.707)
         p = self.bias_par.get("p", 0.3)
@@ -88,7 +90,7 @@ class bias_fittinig_functions:
 
         Taken from Sheth, Mo & Tormen (2001)
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         a = self.bias_par.get("a", 0.707)
         b = self.bias_par.get("b", 0.5)
@@ -172,7 +174,7 @@ class bias_fittinig_functions:
         """
         Empirical bias, same as SMT01 but modified parameters.
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         a = self.bias_par.get("a", 0.707)
         b = self.bias_par.get("b", 0.35)
@@ -189,7 +191,7 @@ class bias_fittinig_functions:
         """
         Empirical bias, same as ST99 but changed parameters
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         q = self.bias_par.get("q", 0.73)
         p = self.bias_par.get("p", 0.15)
@@ -202,7 +204,7 @@ class bias_fittinig_functions:
         """
         Empirical bias, same as ST99 but changed parameters
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         q = self.bias_par.get("q", 0.709)
         p = self.bias_par.get("p", 0.248)
@@ -215,6 +217,6 @@ class bias_fittinig_functions:
         """
         Returns a linear constant bias
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         return self.bias_par["b"] * np.ones_like(nu)

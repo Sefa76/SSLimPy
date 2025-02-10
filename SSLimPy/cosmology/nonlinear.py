@@ -73,7 +73,7 @@ class nonlinear(cosmo_functions):
         Rs = np.atleast_1d(R).shape
         zs = np.atleast_1d(z).shape
         logR = np.log(np.atleast_1d(R).flatten().to(u.Mpc).value)
-        z = np.atleast_1d(z).flatten()
+        z = np.atleast_1d(z).flatten().astype(float)
         vlogR = np.repeat(logR, len(z))
         vz = np.tile(z, len(logR))
 
