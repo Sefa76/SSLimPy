@@ -1,371 +1,49 @@
 from copy import copy
 from time import time
-from typing import Tuple, Union
 import numpy as np
 from astropy import units as u
-from astropy.units import Quantity
 from numba import njit, prange
-from numpy.typing import DTypeLike, NDArray
 from scipy.integrate import simpson
-from scipy.interpolate import RectBivariateSpline, UnivariateSpline, interp1d
-from scipy.special import legendre, sici, spherical_jn
+from scipy.interpolate import RectBivariateSpline, UnivariateSpline
+from scipy.special import legendre, spherical_jn
 from SSLimPy.cosmology.astro import astro_functions
-from SSLimPy.cosmology.cosmology import cosmo_functions
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
-k_types = Union[Quantity, NDArray, Tuple[Quantity, ...], Tuple[NDArray, ...]]
-mu_types = Union[DTypeLike, NDArray, Tuple[DTypeLike, ...], Tuple[NDArray, ...]]
-
-
 class PowerSpectra:
-    def __init__(
-        self, cosmology: cosmo_functions, astro: astro_functions, BAOpars=dict()
-    ):
-        self.cosmology = cosmology
-        self.fiducialcosmo = cfg.fiducialcosmo
-        self.astro = astro
-        self.BAOpars = copy(BAOpars)
+    return
 
-        self.tracer = cfg.settings["TracerPowerSpectrum"]
+    def __init__(
+        self, astro: astro_functions, BAOpars=dict()
+    ):
+        self.cosmology = astro.cosmology
+        self.halomodel = astro.halomodel
+        self.astro = astro
+
+        self.BAOpars = copy(BAOpars)
+        self.tracer = self.halomodel.tracer
 
         #################################
         # Properties of target redshift #
         #################################
-        self.nu = cfg.obspars["nu"]
-        self.nuObs = cfg.obspars["nuObs"]
+
+        self.nu = astro.nu
+        self.nuObs = astro.nuObs
         self.Delta_nu = cfg.obspars["Delta_nu"]
-        self.z = cfg.z
-        self.H = self.cosmology.Hubble(self.z, physical=True)
+        self.z = np.sort(np.atleast_1d(self.nu / self.nuObs).to(1).value - 1)
 
         #########################################
         # Masses, luminosities, and wavenumbers #
         #########################################
         self.M = astro.M
         self.L = astro.L
-        if "log" in cfg.settings["k_kind"]:
-            self.k_edge = np.geomspace(
-                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"] + 1
-            )
-        else:
-            self.k_edge = np.linspace(
-                cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"] + 1
-            )
-        self.k = (self.k_edge[:-1] + self.k_edge[1:]) / 2.0
+
+        self.k = self.halomodel.k
         self.dk = np.diff(self.k)
+
         self.mu_edge = np.linspace(-1, 1, cfg.settings["nmu"] + 1)
         self.mu = (self.mu_edge[:-1] + self.mu_edge[1:]) / 2.0
         self.dmu = np.diff(self.mu)
-        self.k_par = self.k[:, None] * self.mu[None, :]
-        self.k_perp = self.k[:, None] * np.sqrt(1 - np.power(self.mu[None, :], 2))
-
-        ##########################
-        # The LIM power spectrum #
-        ##########################
-
-        # Compute the power spectrum on the internal grid
-        self.c_NFW = self.prepare_c_NFW()
-
-        # self.compute_power_spectra()
-        # self.compute_power_spectra_moments()
-
-        # Create interpolationg fucuntion
-        # self.Pk_obs_func = self.create_pk_interp()
-
-    ###################
-    # Halo Properties #
-    ###################
-
-    def prepare_c_NFW(self):
-        """
-        concentration-mass relation for the NFW profile.
-        Following Diemer & Joyce (2019)
-        c = R_delta / r_s (the scale radius, not the sound horizon)
-        """
-        zvec = self.cosmology.results.zgrid
-        Mvec = self.astro.M
-
-        # fit parameters
-        kappa = 0.42
-        a0 = 2.37
-        a1 = 1.74
-        b0 = 3.39
-        b1 = 1.82
-        ca = 0.2
-
-        # Compute the effective slope of the growth factor
-        alpha_eff = self.cosmology.growth_rate(1e-4 / u.Mpc, zvec)
-        # Compute the effective slope to the power spectrum (as function of M)
-        sigmaM = self.astro.sigmaM(Mvec, zvec)
-        dsigmaM_dM = self.astro.dsigmaM_dM(Mvec, zvec)
-
-        neff_at_R = -2.0 * 3.0 * Mvec[:, None] / sigmaM * dsigmaM_dM - 3.0
-
-        # konvert to solar masses
-        logMvec = np.log(Mvec.to(u.Msun).value)
-        neff_inter = interp1d(
-            logMvec, neff_at_R, fill_value="extrapolate", kind="linear", axis=0
-        )
-        neff = neff_inter(np.log(kappa**3 * Mvec.to(u.Msun).value))
-
-        # Quantities for c
-        A = a0 * (1.0 + a1 * (neff + 3))
-        B = b0 * (1.0 + b1 * (neff + 3))
-        C = 1.0 - ca * (1.0 - alpha_eff)
-        nu = 1.686 / sigmaM
-        arg = A / nu * (1.0 + nu**2 / B)
-
-        # Compute G(x), with x = r/r_s, and evaluate c
-        x = np.logspace(-3, 3, 256)
-        g = np.log(1 + x) - x / (1.0 + x)
-        G = x[None, None, :] / np.power(
-            g[None, None, :], (5.0 + neff[:, :, None]) / 6.0
-        )
-
-        c = np.zeros_like(arg)
-        for iM, G_z_and_x in enumerate(G):
-            for iz, G_x in enumerate(G_z_and_x):
-                invG = interp1d(G_x, x, fill_value="extrapolate", kind="linear")
-                c[iM, iz] = C[iz] * invG(arg[iM, iz])
-
-        c_spline = RectBivariateSpline(logMvec, zvec, c)
-
-        # restore units
-        def cNFW_of_M_and_z(M, z):
-            M = np.atleast_1d(M)
-            z = np.atleast_1d(z)
-            logM = np.log(M.to(u.Msun).value)
-            return c_spline(logM[:, None], z[None, :])
-
-        return cNFW_of_M_and_z
-
-    def ft_NFW(self, k, M, z):
-        """
-        Fourier transform of NFW profile, for computing one-halo term
-        """
-        k = np.atleast_1d(k)
-        M = np.atleast_1d(M)
-        z = np.atleast_1d(z)
-
-        # Radii of the SO collapsed (assuming 200*rho_crit)
-        Delta = 200.0
-        rho_crit = self.astro.rho_crit
-        R_NFW = (3.0 * M / (4.0 * np.pi * Delta * rho_crit)) ** (1.0 / 3.0)
-
-        # get characteristic radius
-        c = self.c_NFW(M, z)[None, :, :]
-        r_s = R_NFW[None, :, None] / c
-        gc = np.log(1 + c) - c / (1.0 + c)
-        # argument: k*rs
-        x = (k[:, None, None] * r_s).to(1).value
-
-        si_x, ci_x = sici(x)
-        si_cx, ci_cx = sici((1.0 + c) * x)
-        u_km = (
-            np.cos(x) * (ci_cx - ci_x)
-            + np.sin(x) * (si_cx - si_x)
-            - np.sin(c * x) / ((1.0 + c) * x)
-        )
-        return np.squeeze(u_km / gc)
-
-    def higher_halomoments(self, z, *args, moment=1, bias_order=0, kbias=None):
-        """Computes higher order of the halo bias taking into account
-        Line broadening and scale dependent bias
-
-        pass every k and then every mu in the same order in args
-        """
-        M = self.M
-        kbias = np.atleast_1d(kbias)
-        z = np.atleast_1d(z)
-
-        if len(args) % moment != 0:
-            raise ValueError("You have to pass wave-vectors for every moment")
-        else:
-            kd = [np.atleast_1d(args[ik]) for ik in range(moment)]
-
-        # Independent of k
-        dn_dM = np.reshape(self.astro.halomassfunction(M, z), (*M.shape, *z.shape))
-        L_of_M = np.reshape(
-            self.astro.massluminosityfunction(M, z), (*M.shape, *z.shape)
-        )
-
-        # Dependent only on the external momenta
-        if bias_order == 0:
-            bias = np.ones((*kbias.shape, *M.shape, *z.shape))
-        elif bias_order == 1:
-            bias = self.astro.restore_shape(
-                self.astro.halobias(M, z, k=kbias), kbias, M, z
-            )
-        else:
-            raise ValueError(
-                "Order of bias asked for does is not implemented: {}".format(bias_order)
-            )
-
-        # Dependent on k
-        normhaloprofile = []
-        for ik in range(moment):
-            k = kd[ik]
-            U = np.reshape(self.ft_NFW(k, M, z), (*k.shape, *M.shape, *z.shape))
-            U = np.expand_dims(U, (*range(ik), *range(ik + 1, moment)))
-            U = np.expand_dims(U, (*range(moment, 2 * moment + 1),))
-            normhaloprofile.append(U)
-
-        # Dependent on k and mu
-        Fv = np.ones((moment,))
-        if self.astro.astroparams["v_of_M"]:
-            Fv = []
-            for ik in range(moment):
-                k = kd[ik]
-                mu = np.atleast_1d(args[moment + ik])
-                F = np.reshape(
-                    self.astro.broadening_FT(k, mu, M, z),
-                    (*k.shape, *mu.shape, *M.shape, *z.shape),
-                )
-                F = np.expand_dim(
-                    F,
-                    (*range(ik), *range(ik + 1, moment)),
-                )
-                F = np.expand_dim(
-                    F,
-                    (*range(moment, moment + ik), *range(moment + ik + 1, 2 * moment)),
-                )
-                F = np.expand_dims(F, 2 * moment)
-                Fv.append(F)
-
-        # indicies : k1, ..., kn, mu1, ..., mun, kext, M, z
-        integrnd = (
-            np.expand_dims(dn_dM, (*range(2 * moment + 1),))
-            * np.power(np.expand_dims(L_of_M, (*range(2 * moment + 1),)), moment)
-            * np.expand_dims(bias, (*range(2 * moment),))
-        )
-        for i in range(moment):
-            integrnd = integrnd * Fv[i] * normhaloprofile[i]
-
-        hm_corr = np.trapz(integrnd, M, axis=-2)
-        return np.squeeze(hm_corr)
-
-    def reduced_halo_moments(self, z, *args, moment=1, dc=1.6865):
-        """Computes the mean halo profile weight with some power of the luminosity.
-        This shows up when appoximating that the mean of higher order biases are
-        independent from the scale dependence of the halo profile
-        """
-        M = self.M
-        z = np.atleast_1d(z)
-
-        if len(args) % moment != 0:
-            raise ValueError("You have to pass wave-vectors for every moment")
-        else:
-            kd = [np.atleast_1d(args[ik]) for ik in range(moment)]
-
-        # Independent of k
-        L_of_M = np.reshape(
-            self.astro.massluminosityfunction(M, z), (*M.shape, *z.shape)
-        )
-        dndM = self.astro.bias_coevolution.sc_hmf(M, z, dc=dc)
-
-        # Dependent on k
-        normhaloprofile = []
-        for ik in range(moment):
-            k = kd[ik]
-            U = np.reshape(self.ft_NFW(k, M, z), (*k.shape, *M.shape, *z.shape))
-            U = np.expand_dims(U, (*range(ik), *range(ik + 1, moment)))
-            U = np.expand_dims(U, (*range(moment, 2 * moment),))
-            normhaloprofile.append(U)
-
-        # Dependent on k and mu
-        Fv = np.ones((moment,))
-        if self.astro.astroparams["v_of_M"]:
-            Fv = []
-            for ik in range(moment):
-                k = kd[ik]
-                mu = np.atleast_1d(args[moment + ik])
-                F = np.reshape(
-                    self.astro.broadening_FT(k, mu, M, z),
-                    (*k.shape, *mu.shape, *M.shape, *z.shape),
-                )
-                F = np.expand_dim(
-                    F,
-                    (*range(ik), *range(ik + 1, moment)),
-                )
-                F = np.expand_dim(
-                    F,
-                    (*range(moment, moment + ik), *range(moment + ik + 1, 2 * moment)),
-                )
-                Fv.append(F)
-
-        # Construct the integrand
-        weight_halo = 1
-        for ik in range(moment):
-            weight_halo = weight_halo * Fv[ik] * normhaloprofile[ik] * L_of_M
-        M = M.to(u.Msun)
-        logM = np.log(M.value)
-        I0x = np.trapz(M[:, None] * dndM * weight_halo, logM, axis=-2)
-        return I0x
-
-    def halo_temperature_moments(self, z, *args, moment=1, bias_order=0, kbias=None):
-        """Computes higher order of the halo bias taking into account
-        Line broadening and scale dependent bias
-
-        pass every k and then every mu in the same order in args
-        """
-        hm = self.higher_halomoments(
-            z, *args, moment=moment, bias_order=bias_order, kbias=kbias
-        )
-        return hm * self.astro.CLT(z) ** moment
-
-    def reduced_halo_temperature_moments(self, z, *args, moment=1, dc=1.6865):
-        """Extension to `reduced_halo_moments`"""
-        hm = self.reduced_halo_moments(z, *args, moment=moment, dc=dc)
-        return hm * self.astro.CLT(z) ** moment
-
-    def halomoments(
-        self, k: k_types, z, mu: mu_types = None, moment: int = 1, bias_order: int = 0
-    ):
-        """
-        Computes the Luminosity weight halo profile
-        In ML models this is equivalent to the n-halo-self-correlation terms
-        In a LF model this will be off by a consant and should not be taken into an accurate physical model
-        """
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        M = self.M
-        z = np.atleast_1d(z)
-
-        dn_dM = np.reshape(self.astro.halomassfunction(M, z), (*M.shape, *z.shape))
-        L_of_M = np.reshape(
-            self.astro.massluminosityfunction(M, z), (*M.shape, *z.shape)
-        )
-
-        if bias_order == 0:
-            bias = np.ones((*k.shape, *M.shape, *z.shape))
-        elif bias_order == 1:
-            bias = self.astro.restore_shape(self.astro.halobias(M, z, k=k), k, M, z)
-        else:
-            raise ValueError(
-                "Order of bias asked for does is not implemented: {}".format(bias_order)
-            )
-
-        Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
-        if self.astro.astroparams["v_of_M"]:
-            Fv = np.reshape(
-                self.astro.broadening_FT(k, mu, M, z),
-                (*k.shape, *mu.shape, *M.shape, *z.shape),
-            )
-
-        normhaloprofile = np.reshape(
-            self.ft_NFW(k, M, z), (*k.shape, *M.shape, *z.shape)
-        )
-
-        integrnd = (
-            dn_dM[None, None, :, :]
-            * np.power(
-                L_of_M[None, None, :, :] * normhaloprofile[:, None, :, :] * Fv,
-                moment,
-            )
-            * bias[:, None, :, :]
-        )
-        hm_corr = np.trapz(integrnd, M, axis=2)
-        return np.squeeze(hm_corr)
 
     ###############
     # De-Wiggling #
@@ -394,9 +72,9 @@ class PowerSpectra:
                 + np.power(mu, 2)[:, None] * (1 + f_scaleindependent[None, :]) ** 2
             )
         else:
-            f0 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 0), 2))[:, None]
-            f1 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 1), 2))[:, None]
-            f2 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 2), 2))[:, None]
+            f0 = np.atleast_1d(np.power(cosmo.sigmaV_of_z(z, 0), 2))[:, None]
+            f1 = np.atleast_1d(np.power(cosmo.sigmaV_of_z(z, 1), 2))[:, None]
+            f2 = np.atleast_1d(np.power(cosmo.sigmaV_of_z(z, 2), 2))[:, None]
             sv2 = f0 + 2 * mu[None, :] ** 2 * f1 + mu[None, :] ** 2 * f2
         return np.squeeze(np.sqrt(sv2))
 
@@ -537,7 +215,7 @@ class PowerSpectra:
                     )
                 Tmean = Tmean[None, None, :]
             else:
-                Tmean = self.astro.restore_shape(
+                Tmean = restore_shape(
                     self.astro.Tmoments(z, k=k, mu=mu, moment=1), k, mu, z
                 )
 
@@ -550,8 +228,8 @@ class PowerSpectra:
             )
         else:
             Biasterm = (
-                self.astro.restore_shape(self.astro.bavg(z, k=k, mu=mu), k, mu, z)
-                * self.astro.restore_shape(
+                restore_shape(self.astro.bavg(z, k=k, mu=mu), k, mu, z)
+                * restore_shape(
                     self.astro.Tmoments(z, k=k, mu=mu, moment=1), k, mu, z
                 )
                 * np.atleast_1d(self.cosmology.sigma8_of_z(z, tracer=self.tracer))[
@@ -574,7 +252,7 @@ class PowerSpectra:
                 raise ValueError("did not pass mean Temperature for every z asked for")
             Tmean = Tmean[None, None, :]
         else:
-            Tmean = self.astro.restore_shape(
+            Tmean = restore_shape(
                 self.astro.Tmoments(z, k=k, mu=mu, moment=1), k, mu, z
             )
 
@@ -589,7 +267,7 @@ class PowerSpectra:
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
-        bterm = self.astro.restore_shape(
+        bterm = restore_shape(
             self.bias_term(z, k=k, mu=mu, BAOpars=BAOpars), k, mu, z
         )
         if "beta" in BAOpars:
@@ -630,7 +308,7 @@ class PowerSpectra:
             f_scaleindependent = cosmo.growth_rate(1e-4 / u.Mpc, z)
             sp = sigmap * f_scaleindependent
         else:
-            sp = np.atleast_1d(cosmo.P_ThetaTheta_Moments(z, moment=2))
+            sp = np.atleast_1d(cosmo.sigmaV_of_z(z, moment=2))
         FoG_damp = cfg.settings["FoG_damp"]
         if FoG_damp == "Lorentzian":
             FoG = np.power(
@@ -813,12 +491,12 @@ class PowerSpectra:
             Ps = Pshot[None, None, :]
         else:
             if cfg.settings["halo_model_PS"]:
-                Ps = self.astro.restore_shape(
+                Ps = restore_shape(
                     self.halomoments(k, z, mu=mu, moment=2), k, mu, z
                 )
                 Ps *= self.astro.CLT(z)[None, None, :] ** 2
             else:
-                Ps = self.astro.restore_shape(
+                Ps = restore_shape(
                     self.astro.Tmoments(z, k=k, mu=mu, moment=2), k, mu, z
                 )
         return np.squeeze(Ps)

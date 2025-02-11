@@ -1,6 +1,59 @@
 from numba import njit
 import numpy as np
 
+##################
+# Helper Functions
+##################
+def lognormal(x, mu, sigma):
+    """
+    Returns a lognormal PDF as function of x with mu and sigma
+    being the mean of log(x) and standard deviation of log(x), respectively
+    """
+    try:
+        return (
+            1
+            / x
+            / sigma
+            / (2.0 * np.pi) ** 0.5
+            * np.exp(-((np.log(x.value) - mu) ** 2) / 2.0 / sigma**2)
+        )
+    except AttributeError:
+        return (
+            1
+            / x
+            / sigma
+            / (2.0 * np.pi) ** 0.5
+            * np.exp(-((np.log(x) - mu) ** 2) / 2.0 / sigma**2)
+        )
+
+
+def restore_shape(A, *args):
+    """
+    Extremely dangerous function to reshape squeezed arrays into arrays with boradcastable shapes
+    This assumes that the output shape has lenghs corresponding to input 
+    and is sqeezed in order of the input
+    """
+    A = np.atleast_1d(A)
+    inputShape = A.shape
+    targetShape = ()
+    for arg in args:
+        targetShape = (*targetShape, *np.atleast_1d(arg).shape)
+
+    inputShape = np.array(inputShape)
+    targetShape = np.array(targetShape)
+
+    new_shape_A = []
+    j = 0
+    for i in range(len(targetShape)):
+        if j < len(inputShape) and inputShape[j] == targetShape[i]:
+            new_shape_A.append(inputShape[j])
+            j += 1
+        else:
+            new_shape_A.append(1)
+
+    A = A.reshape(new_shape_A)
+    return A
+
 #####################
 # Special Functions #
 #####################

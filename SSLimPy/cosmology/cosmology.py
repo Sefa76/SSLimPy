@@ -528,13 +528,6 @@ class boltzmann_code:
 class cosmo_functions:
     celeritas = c.c
 
-    """
-    This class is where you can extract all of the EBS results.
-    When modifying the code try to keep using the funcitons of this class
-    instead of the callables inside of results.
-    It also handles the nuiscance-like cosmological parameters.
-    """
-
     def __init__(
         self,
         cosmopars=dict(),
@@ -542,11 +535,16 @@ class cosmo_functions:
         input_type=None,
         cosmology=None,
     ):
+        """
+        This class is where you can extract all of the EBS results.
+        When modifying the code try to keep using the funcitons of this class
+        instead of the callables inside of results.
+        Will not read cosmopars if cosmology is directly passed 
+        """
         self.settings = cfg.settings
 
         self.cosmopars = deepcopy(cosmopars)
         self.nuiscance_like = deepcopy(nuiscance_like)
-        self.fullcosmoparams = {**cosmopars, **nuiscance_like}
 
         self.fiducialcosmopars = cfg.fiducialcosmoparams
         if input_type is None:
@@ -577,9 +575,11 @@ class cosmo_functions:
             self.kgrid = cosmology.results.kgrid
             self.cosmopars = cosmology.cosmopars
             if self.code == "class":
-                self.classcosmopars = cosmology.classcomopars
+                self.classcosmopars = cosmology.classcosmopars
             if self.code == "camb":
                 self.cambcosmopars = cosmology.cambcosmopars
+
+        self.fullcosmoparams = {**self.cosmopars, **nuiscance_like}
 
         self.growth_factor, self.growth_rate = self.create_growth()
 
@@ -865,8 +865,10 @@ class cosmo_functions:
         n_savgol = int(np.round(savgol_width / np.log(1 + dlnk_loc)))
 
         P = np.reshape(
-            self.matpow(np.exp(log_kgrid_loc) / u.Mpc, z, nonlinear=nonlinear, tracer=tracer),
-            (loc_samples, *z.shape)
+            self.matpow(
+                np.exp(log_kgrid_loc) / u.Mpc, z, nonlinear=nonlinear, tracer=tracer
+            ),
+            (loc_samples, *z.shape),
         )
         uP = P.unit
 
@@ -877,11 +879,9 @@ class cosmo_functions:
             axis=0,
         )
 
-        logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()),len(z.flatten()))
+        logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()), len(z.flatten()))
         zj = np.tile(z.flatten(), len(k.flatten()))
-        P_nw = uP * np.exp(bilinear_interpolate(
-            log_kgrid_loc, z, pow_sg, logki, zj)
-        )
+        P_nw = uP * np.exp(bilinear_interpolate(log_kgrid_loc, z, pow_sg, logki, zj))
 
         P_nw = np.reshape(P_nw, (*k.shape, *z.shape))
         return P_nw
@@ -946,7 +946,7 @@ class cosmo_functions:
         return np.squeeze(np.sqrt(np.trapz(Integr, k, axis=-1)))
 
     def dsigmaR_of_z(self, R, z, tracer="matter"):
-        """sigma_R
+        """dsigma_R/dR
 
         Parameters
         ----------
@@ -1001,17 +1001,17 @@ class cosmo_functions:
         R = 8 * u.Mpc / self.h()
         return self.sigmaR_of_z(R, z, tracer=tracer)
 
-    def P_ThetaTheta_Moments(self, z, moment=0):
+    def sigmaV_of_z(self, z, tracer="matter", moment=0):
         """
         Calculates the angular power spectrum moments of the velocity divergence field, also known as the Theta field.
         """
         k = self.results.kgrid * 1 / u.Mpc
         z = np.atleast_1d(z)
         f_mom = np.power(
-            np.reshape(self.growth_rate(k, z, tracer="matter"), (*k.shape, *z.shape)),
+            np.reshape(self.growth_rate(k, z, tracer=tracer), (*k.shape, *z.shape)),
             moment,
         )
-        P_mm = np.reshape(self.matpow(k, z, tracer="matter"), (*k.shape, *z.shape))
+        P_mm = np.reshape(self.matpow(k, z, tracer=tracer), (*k.shape, *z.shape))
         integrnd = f_mom * P_mm
 
         Int = np.trapz(integrnd, k, axis=0)

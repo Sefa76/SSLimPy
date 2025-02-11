@@ -14,13 +14,12 @@ import numpy as np
 
 class bias_fitting_functions:
 
-    def __init__(self, astro):
-        self.astro = astro  # dont call it astrology
-        self.cosmology = astro.cosmology
-        self.astroparams = deepcopy(astro.astroparams)
+    def __init__(self, halomodel):
+        self.halomodel = halomodel
+        self.cosmology = halomodel.cosmology
         self.bias_par = self.astroparams["bias_par"]
-        self.sigmaM = partial(self.astro.sigmaM, tracer=self.astro.astrotracer)
-        self.dsigmaM_dM = partial(self.astro.dsigmaM_dM, tracer=self.astro.astrotracer)
+        self.sigmaM = partial(self.halomodel.sigmaM, tracer=self.halomodel.tracer)
+        self.dsigmaM_dM = partial(self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer)
 
     def Tinker10(self, M, z, dc):
 
@@ -54,11 +53,11 @@ class bias_fitting_functions:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        M_NL = self.astro.mass_non_linear(z, delta_crit=dc)
+        M_NL = self.halomodel.mass_non_linear(z, delta_crit=dc)
         x = (M[:, None] / M_NL[None, :]).to(1).value
 
-        ns = self.cosmology.input_cosmopars.get(
-            "ns", self.cosmology.input_cosmopars["n_s"]
+        ns = self.cosmology.fullcosmoparams.get(
+            "ns", self.cosmology.fullcosmoparams["n_s"]
         )
         nu_star = x ** (ns + 3.0) / 6.0
 
@@ -111,7 +110,7 @@ class bias_fitting_functions:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        M_NL = self.astro.mass_non_linear(z, delta_crit=dc)
+        M_NL = self.halomodel.mass_non_linear(z, delta_crit=dc)
         x = (M[:, None] / M_NL[None, :]).to(1).value
 
         a = self.bias_par.get("a", 0.53)
@@ -133,7 +132,7 @@ class bias_fitting_functions:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        M_NL = self.astro.mass_non_linear(z, delta_crit=dc)
+        M_NL = self.halomodel.mass_non_linear(z, delta_crit=dc)
         x = (M[:, None] / M_NL[None, :]).to(1).value
 
         a = self.bias_par.get("a", 0.53)
@@ -148,11 +147,11 @@ class bias_fitting_functions:
         a3 = self.bias_par.get("a3", 0.8)
 
         Om0m = self.cosmology.Omegam_of_z(0)
-        ns = self.cosmology.input_cosmopars.get(
-            "ns", self.cosmology.input_cosmopars["n_s"]
+        ns = self.cosmology.fullcosmoparams.get(
+            "ns", self.cosmology.fullcosmoparams["n_s"]
         )
-        nrun = self.cosmology.input_cosmopars.get(
-            "alpha_s", self.cosmology.input_cosmopars["nrun"]
+        nrun = self.cosmology.fullcosmoparams.get(
+            "alpha_s", self.cosmology.fullcosmoparams["nrun"]
         )
         s8 = self.cosmology.sigma8_of_z(0)
 
