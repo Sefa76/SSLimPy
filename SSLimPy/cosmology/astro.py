@@ -342,8 +342,10 @@ class astro_functions:
         rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
         R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
 
-        dsigma = np.reshape(self.cosmology.dsigmaR_of_z(R, z, tracer),
-                            (*M.shape, *z.shape)) * (R / (3 * M))[:, None]
+        dsigma = (
+            np.reshape(self.cosmology.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape))
+            * (R / (3 * M))[:, None]
+        )
         return np.squeeze(dsigma)
 
     def init_model(self):

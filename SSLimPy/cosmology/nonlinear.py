@@ -98,19 +98,79 @@ class nonlinear(cosmo_functions):
             result["dsigma"] = np.reshape(dsigma, (*Rs, *zs))
         return result
 
-    def sigmaR_of_z(self, R, z, tracer="matter"):
-        if tracer == self.tracer:
+    def sigmaR_of_z(self, R, z, tracer="matter", moment=0):
+        if tracer == self.tracer and moment == 0:
             sigma = self.read_lut(R, z, output="sigma")["sigma"]
             return np.squeeze(sigma)
         else:
-            return super().sigmaR_of_z(R, z, tracer)
+            return np.sqrt(
+                self._compute_sigma(R, z, sigma_integrand, tracer=tracer, moment=moment)
+            )
 
-    def dsigmaR_of_z(self, R, z, tracer="matter"):
-        if tracer == self.tracer:
+    def dsigmaR_of_z(self, R, z, tracer="matter", moment=0):
+        if tracer == self.tracer and moment == 0:
             dsigma = self.read_lut(R, z, output="dsigma")["dsigma"]
             return np.squeeze(dsigma)
         else:
-            return super().dsigmaR_of_z(R, z, tracer)
+            sig = np.sqrt(
+                self._compute_sigma(R, z, sigma_integrand, tracer=tracer, moment=moment)
+            )
+            dsig = self._compute_sigma(
+                R, z, dsigma_integrand, tracer=tracer, moment=moment
+            )
+            return dsig / (2 * sig) * u.Mpc**-1
+
+    def sigmaV_of_z(self, z, tracer="matter", moment=0):
+        R = 0.0  # Only appears like this in the code but could be easily added as an option
+        sv = np.sqrt(
+            self._compute_sigma(R, z, sigmav_integrand, tracer=tracer, moment=moment)
+        )
+        return sv * u.Mpc
+
+    def _compute_sigma(self, R, z, ingrnd, tracer="matter", moment=0):
+        R = np.atleast_1d(R.to(u.Mpc))
+        z = np.atleast_1d(z).astype(float)
+        # Save shapes
+        Rs = R.shape
+        zs = z.shape
+        R = R.flatten()
+        z = z.flatten()
+
+        kinter = self.k.to(u.Mpc**-1)
+        f_mom = np.power(
+            np.reshape(
+                self.growth_rate(kinter, z, tracer=tracer), (*kinter.shape, *z.shape)
+            ),
+            moment,
+        )
+        Dkinter = (
+            (
+                4
+                * np.pi
+                * (kinter[:, None] / (2 * np.pi)) ** 3
+                * np.reshape(
+                    self.matpow(kinter, z, nonlinear=False, tracer=tracer),
+                    (*kinter.shape, *z.shape),
+                )
+                * f_mom
+            )
+            .to(1)
+            .value
+        )
+        sigma = np.empty((*R.shape, *z.shape))
+        for iR, Ri in enumerate(R):
+            for iz, zi in enumerate(z):
+                sigma[iR, iz] = adaptive_mesh_integral(
+                    0,
+                    1,
+                    ingrnd,
+                    Ri,
+                    kinter.value,
+                    Dkinter[:, iz],
+                    cfg.settings["alpha_iSigma"],
+                    cfg.settings["tol_sigma"],
+                )
+        return np.squeeze(np.reshape(sigma, (*Rs, *zs)))
 
 
 ##############
@@ -161,6 +221,33 @@ def dsigma_integrand(t, R, kinter, Dkinter, alpha):
         )
     )
     integrand[mask] = alpha * Dk * 2 * k * dW * W / (t[mask] * (1 - t[mask]))
+    return integrand
+
+
+@njit("(float64[::1], float64, float64[::1], float64[:], uint64)", fastmath=True)
+def sigmav_integrand(t, R, kinter, Dkinter, alpha):
+    nt = len(t)
+    integrand = np.zeros(nt)
+    # mask out region where integrand is 0
+    mask = (t > 0) & (t < 1)
+
+    if np.isclose(R, 0):
+        Rk = 0
+        k = (1 / t[mask] - 1) ** alpha  # Don't worry to hard about the units
+    else:
+        Rk = (1 / t[mask] - 1) ** alpha
+        k = Rk / R
+    W = smooth_W(Rk)
+
+    # power law extrapolation
+    Dk = np.exp(
+        linear_interpolate(
+            np.log(kinter),
+            np.log(Dkinter),
+            np.log(k),
+        )
+    )
+    integrand[mask] = alpha * Dk * W**2 / (3 * k**2 * t[mask] * (1 - t[mask]))
     return integrand
 
 

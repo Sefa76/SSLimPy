@@ -102,13 +102,13 @@ class sslimpy:
                                      self.curent_astro,
                                      astropars,
                                      updated_cosmo=cosmo,
-                                     )
+                                     ) # This astro object might have updated the cosmo functions entering the NL computation
 
         astro = updater.update_obspars(obspars,
                                        astro,
                                        )
 
-        outputdict["Power spectrum"] = PowerSpectra(cosmo,astro,BAOpars)
+        outputdict["Power spectrum"] = PowerSpectra(astro.cosmology, astro, BAOpars) # Use updated cosmo functions
         outputdict["Power spectrum"].compute_power_spectra()
         outputdict["Power spectrum"].compute_power_spectra_moments()
 

@@ -394,9 +394,9 @@ class PowerSpectra:
                 + np.power(mu, 2)[:, None] * (1 + f_scaleindependent[None, :]) ** 2
             )
         else:
-            f0 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 0), 2))[:, None]
-            f1 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 1), 2))[:, None]
-            f2 = np.atleast_1d(np.power(cosmo.P_ThetaTheta_Moments(z, 2), 2))[:, None]
+            f0 = np.atleast_1d(np.power(cosmo.sigmaV_of_z(z, 0), 2))[:, None]
+            f1 = np.atleast_1d(np.power(cosmo.sigmaV_of_z(z, 1), 2))[:, None]
+            f2 = np.atleast_1d(np.power(cosmo.sigmaV_of_z(z, 2), 2))[:, None]
             sv2 = f0 + 2 * mu[None, :] ** 2 * f1 + mu[None, :] ** 2 * f2
         return np.squeeze(np.sqrt(sv2))
 
@@ -630,7 +630,7 @@ class PowerSpectra:
             f_scaleindependent = cosmo.growth_rate(1e-4 / u.Mpc, z)
             sp = sigmap * f_scaleindependent
         else:
-            sp = np.atleast_1d(cosmo.P_ThetaTheta_Moments(z, moment=2))
+            sp = np.atleast_1d(cosmo.sigmaV_of_z(z, moment=2))
         FoG_damp = cfg.settings["FoG_damp"]
         if FoG_damp == "Lorentzian":
             FoG = np.power(
