@@ -5,10 +5,8 @@ For now all functions assume a underlying spherical collapse (ST, SMT, Tinker) b
 
 The same signatures of the bias functions in ```bias_fitting_functions``` should be kept
 """
-
-from copy import deepcopy
-
 import numpy as np
+
 from astropy import units as u
 
 from .bias_fitting_functions import bias_fitting_functions
@@ -16,8 +14,8 @@ from .bias_fitting_functions import bias_fitting_functions
 
 class coevolution_bias(bias_fitting_functions):
 
-    def __init__(self, astro):
-        super().__init__(astro)
+    def __init__(self, halomodel):
+        super().__init__(halomodel)
         self.p = self.bias_par.get("HO_p", 0.3)
         self.alpha = self.bias_par.get("HO_alpha", 0.707)
         self.A = self.bias_par.get("HO_A", 0.3222)
@@ -62,12 +60,7 @@ class coevolution_bias(bias_fitting_functions):
         )
         dlogsigmaM_dM = dsigmaM_dM / sigmaM
 
-        rho_over_M = (
-            2.77536627e11
-            * self.astro.cosmology.Omega(0, self.astro.astrotracer)
-            * (self.astro.Msunh * self.astro.Mpch**-3)
-            # * (1 + z)**3 # Isnt this more correct ?
-        ) / M[:, None]
+        rho_over_M = self.halomodel.rho_tracer / M[:, None]
 
         dndM = (
             -2

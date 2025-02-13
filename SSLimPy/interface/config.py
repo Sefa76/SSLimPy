@@ -49,7 +49,6 @@ def init(
     settings.setdefault("code", "camb")
     settings.setdefault("h-units", False)
     settings.setdefault("do_pheno_ncdm", False)
-    settings.setdefault("astro_tracer", "clustering")
 
     # Savgol numerics
     settings.setdefault("savgol_polyorder", 3)
@@ -58,26 +57,19 @@ def init(
     settings.setdefault("savgol_internalkmin", 0.001)
 
     # Pk numerics
+    settings.setdefault("k_kind", "log")
     settings.setdefault("kmin", 1.0e-3 * u.Mpc**-1)
     settings.setdefault("kmax", 50 * u.Mpc**-1)
     settings.setdefault("nk", 200)
-    settings.setdefault("k_kind", "log")
+    settings.setdefault("zmin", 0)
+    settings.setdefault("zmax", 5)
+    settings.setdefault("nz", 32)
     settings.setdefault("nmu", 128)
     settings.setdefault("downsample_conv_q", 1)
     settings.setdefault("downsample_conv_muq", 8)
     settings.setdefault("nnodes_legendre", 9)
 
-    # Nonlinear numerics
-    settings.setdefault("use_nonlinear", True)
-    settings.setdefault("Rmin", 1.0e-4 * u.Mpc)
-    settings.setdefault("Rmax", 1.5e3 * u.Mpc)
-    settings.setdefault("nR", 64)
-    settings.setdefault("alpha_iSigma", 3)
-    settings.setdefault("tol_sigma", 1e-4)
-
     # Pk specifications
-    settings.setdefault("sigma_scatter", 0)
-    settings.setdefault("fduty", 1)
     settings.setdefault("do_Jysr", False)
     settings.setdefault("fix_cosmo_nl_terms", True)
 

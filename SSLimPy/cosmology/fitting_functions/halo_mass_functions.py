@@ -13,16 +13,17 @@ from functools import partial
 
 
 class halo_mass_functions:
-    def __init__(self, astro):
-        self.astro = astro
+    def __init__(self, halomodel):
+        self.halomodel = halomodel
+        self.cosmology = halomodel.cosmology
 
         # Units and Redshifts
-        self.Mpch = astro.Mpch
-        self.Msunh = astro.Msunh
+        self.Mpch = halomodel.Mpch
+        self.Msunh = halomodel.Mpch
 
         # SigmaM functions
-        self.sigmaM = partial(self.astro.sigmaM, tracer=self.astro.astrotracer)
-        self.dsigmaM_dM = partial(self.astro.dsigmaM_dM, tracer=self.astro.astrotracer)
+        self.sigmaM = partial(self.halomodel.sigmaM, tracer=self.halomodel.tracer)
+        self.dsigmaM_dM = partial(self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer)
 
     def ST(self, Mvec, rhoM, z):
         """
@@ -137,12 +138,7 @@ class halo_mass_functions:
         Watson et al. halo mass function for delta=200. Can be changed
         """
         delta = 200.0
-        OmegaM = (
-            rhoM
-            / 2.77536627e11
-            * (self.Msunh * self.Mpch**-3).to(self.Msunh * self.Mpch**-3)
-        )
-
+        OmegaM = self.cosmology.Omega(0, "matter")
         A = 0.194
         a = 1.805
         b = 2.267

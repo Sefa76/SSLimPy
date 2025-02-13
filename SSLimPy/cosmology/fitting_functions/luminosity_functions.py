@@ -6,21 +6,14 @@ All functions take a vector of luminosities in L_sun and return dn/dL in
 
 """
 
-from copy import deepcopy
-
 import astropy.units as u
 import numpy as np
 
 
 class luminosity_functions:
-    def __init__(self, astro, model_par=dict()):
+    def __init__(self, astro, model_par):
         self.astro = astro
-        self.astroparams = deepcopy(astro.astroparams)
-
-        if model_par:
-            self.model_par = model_par
-        else:
-            self.model_par = self.astroparams["model_par"]
+        self.model_par = model_par
 
     def Sch(self, Lvec):
         """

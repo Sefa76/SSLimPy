@@ -3,12 +3,13 @@ from time import time
 from typing import Tuple, Union
 import numpy as np
 from astropy import units as u
+from astropy import constants as c
 from astropy.units import Quantity
 from numba import njit, prange
 from numpy.typing import DTypeLike, NDArray
 from scipy.integrate import simpson
-from scipy.interpolate import RectBivariateSpline, UnivariateSpline, interp1d
-from scipy.special import legendre, sici, spherical_jn
+from scipy.interpolate import RectBivariateSpline, UnivariateSpline
+from scipy.special import legendre, spherical_jn
 from SSLimPy.cosmology.astro import astro_functions
 from SSLimPy.cosmology.cosmology import cosmo_functions
 from SSLimPy.interface import config as cfg
@@ -64,7 +65,6 @@ class PowerSpectra:
         ##########################
 
         # Compute the power spectrum on the internal grid
-        self.c_NFW = self.prepare_c_NFW()
 
         # self.compute_power_spectra()
         # self.compute_power_spectra_moments()
@@ -75,98 +75,6 @@ class PowerSpectra:
     ###################
     # Halo Properties #
     ###################
-
-    def prepare_c_NFW(self):
-        """
-        concentration-mass relation for the NFW profile.
-        Following Diemer & Joyce (2019)
-        c = R_delta / r_s (the scale radius, not the sound horizon)
-        """
-        zvec = self.cosmology.results.zgrid
-        Mvec = self.astro.M
-
-        # fit parameters
-        kappa = 0.42
-        a0 = 2.37
-        a1 = 1.74
-        b0 = 3.39
-        b1 = 1.82
-        ca = 0.2
-
-        # Compute the effective slope of the growth factor
-        alpha_eff = self.cosmology.growth_rate(1e-4 / u.Mpc, zvec)
-        # Compute the effective slope to the power spectrum (as function of M)
-        sigmaM = self.astro.sigmaM(Mvec, zvec)
-        dsigmaM_dM = self.astro.dsigmaM_dM(Mvec, zvec)
-
-        neff_at_R = -2.0 * 3.0 * Mvec[:, None] / sigmaM * dsigmaM_dM - 3.0
-
-        # konvert to solar masses
-        logMvec = np.log(Mvec.to(u.Msun).value)
-        neff_inter = interp1d(
-            logMvec, neff_at_R, fill_value="extrapolate", kind="linear", axis=0
-        )
-        neff = neff_inter(np.log(kappa**3 * Mvec.to(u.Msun).value))
-
-        # Quantities for c
-        A = a0 * (1.0 + a1 * (neff + 3))
-        B = b0 * (1.0 + b1 * (neff + 3))
-        C = 1.0 - ca * (1.0 - alpha_eff)
-        nu = 1.686 / sigmaM
-        arg = A / nu * (1.0 + nu**2 / B)
-
-        # Compute G(x), with x = r/r_s, and evaluate c
-        x = np.logspace(-3, 3, 256)
-        g = np.log(1 + x) - x / (1.0 + x)
-        G = x[None, None, :] / np.power(
-            g[None, None, :], (5.0 + neff[:, :, None]) / 6.0
-        )
-
-        c = np.zeros_like(arg)
-        for iM, G_z_and_x in enumerate(G):
-            for iz, G_x in enumerate(G_z_and_x):
-                invG = interp1d(G_x, x, fill_value="extrapolate", kind="linear")
-                c[iM, iz] = C[iz] * invG(arg[iM, iz])
-
-        c_spline = RectBivariateSpline(logMvec, zvec, c)
-
-        # restore units
-        def cNFW_of_M_and_z(M, z):
-            M = np.atleast_1d(M)
-            z = np.atleast_1d(z)
-            logM = np.log(M.to(u.Msun).value)
-            return c_spline(logM[:, None], z[None, :])
-
-        return cNFW_of_M_and_z
-
-    def ft_NFW(self, k, M, z):
-        """
-        Fourier transform of NFW profile, for computing one-halo term
-        """
-        k = np.atleast_1d(k)
-        M = np.atleast_1d(M)
-        z = np.atleast_1d(z)
-
-        # Radii of the SO collapsed (assuming 200*rho_crit)
-        Delta = 200.0
-        rho_crit = self.astro.rho_crit
-        R_NFW = (3.0 * M / (4.0 * np.pi * Delta * rho_crit)) ** (1.0 / 3.0)
-
-        # get characteristic radius
-        c = self.c_NFW(M, z)[None, :, :]
-        r_s = R_NFW[None, :, None] / c
-        gc = np.log(1 + c) - c / (1.0 + c)
-        # argument: k*rs
-        x = (k[:, None, None] * r_s).to(1).value
-
-        si_x, ci_x = sici(x)
-        si_cx, ci_cx = sici((1.0 + c) * x)
-        u_km = (
-            np.cos(x) * (ci_cx - ci_x)
-            + np.sin(x) * (si_cx - si_x)
-            - np.sin(c * x) / ((1.0 + c) * x)
-        )
-        return np.squeeze(u_km / gc)
 
     def higher_halomoments(self, z, *args, moment=1, bias_order=0, kbias=None):
         """Computes higher order of the halo bias taking into account
@@ -193,7 +101,7 @@ class PowerSpectra:
         if bias_order == 0:
             bias = np.ones((*kbias.shape, *M.shape, *z.shape))
         elif bias_order == 1:
-            bias = self.astro.restore_shape(
+            bias = restore_shape(
                 self.astro.halobias(M, z, k=kbias), kbias, M, z
             )
         else:
@@ -339,7 +247,7 @@ class PowerSpectra:
         if bias_order == 0:
             bias = np.ones((*k.shape, *M.shape, *z.shape))
         elif bias_order == 1:
-            bias = self.astro.restore_shape(self.astro.halobias(M, z, k=k), k, M, z)
+            bias = restore_shape(self.astro.halobias(M, z, k=k), k, M, z)
         else:
             raise ValueError(
                 "Order of bias asked for does is not implemented: {}".format(bias_order)
@@ -537,7 +445,7 @@ class PowerSpectra:
                     )
                 Tmean = Tmean[None, None, :]
             else:
-                Tmean = self.astro.restore_shape(
+                Tmean = restore_shape(
                     self.astro.Tmoments(z, k=k, mu=mu, moment=1), k, mu, z
                 )
 
@@ -550,8 +458,8 @@ class PowerSpectra:
             )
         else:
             Biasterm = (
-                self.astro.restore_shape(self.astro.bavg(z, k=k, mu=mu), k, mu, z)
-                * self.astro.restore_shape(
+                restore_shape(self.astro.bavg(z, k=k, mu=mu), k, mu, z)
+                * restore_shape(
                     self.astro.Tmoments(z, k=k, mu=mu, moment=1), k, mu, z
                 )
                 * np.atleast_1d(self.cosmology.sigma8_of_z(z, tracer=self.tracer))[
@@ -574,7 +482,7 @@ class PowerSpectra:
                 raise ValueError("did not pass mean Temperature for every z asked for")
             Tmean = Tmean[None, None, :]
         else:
-            Tmean = self.astro.restore_shape(
+            Tmean = restore_shape(
                 self.astro.Tmoments(z, k=k, mu=mu, moment=1), k, mu, z
             )
 
@@ -589,7 +497,7 @@ class PowerSpectra:
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
-        bterm = self.astro.restore_shape(
+        bterm = restore_shape(
             self.bias_term(z, k=k, mu=mu, BAOpars=BAOpars), k, mu, z
         )
         if "beta" in BAOpars:
@@ -813,12 +721,12 @@ class PowerSpectra:
             Ps = Pshot[None, None, :]
         else:
             if cfg.settings["halo_model_PS"]:
-                Ps = self.astro.restore_shape(
+                Ps = restore_shape(
                     self.halomoments(k, z, mu=mu, moment=2), k, mu, z
                 )
                 Ps *= self.astro.CLT(z)[None, None, :] ** 2
             else:
-                Ps = self.astro.restore_shape(
+                Ps = restore_shape(
                     self.astro.Tmoments(z, k=k, mu=mu, moment=2), k, mu, z
                 )
         return np.squeeze(Ps)

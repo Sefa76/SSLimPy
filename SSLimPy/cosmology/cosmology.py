@@ -528,13 +528,6 @@ class boltzmann_code:
 class cosmo_functions:
     celeritas = c.c
 
-    """
-    This class is where you can extract all of the EBS results.
-    When modifying the code try to keep using the funcitons of this class
-    instead of the callables inside of results.
-    It also handles the nuiscance-like cosmological parameters.
-    """
-
     def __init__(
         self,
         cosmopars=dict(),
@@ -542,11 +535,16 @@ class cosmo_functions:
         input_type=None,
         cosmology=None,
     ):
+        """
+        This class is where you can extract all of the EBS results.
+        When modifying the code try to keep using the funcitons of this class
+        instead of the callables inside of results.
+        Will not read cosmopars if cosmology is directly passed 
+        """
         self.settings = cfg.settings
 
         self.cosmopars = deepcopy(cosmopars)
         self.nuiscance_like = deepcopy(nuiscance_like)
-        self.fullcosmoparams = {**cosmopars, **nuiscance_like}
 
         self.fiducialcosmopars = cfg.fiducialcosmoparams
         if input_type is None:
@@ -577,9 +575,11 @@ class cosmo_functions:
             self.kgrid = cosmology.results.kgrid
             self.cosmopars = cosmology.cosmopars
             if self.code == "class":
-                self.classcosmopars = cosmology.classcomopars
+                self.classcosmopars = cosmology.classcosmopars
             if self.code == "camb":
                 self.cambcosmopars = cosmology.cambcosmopars
+
+        self.fullcosmoparams = {**self.cosmopars, **nuiscance_like}
 
         self.growth_factor, self.growth_rate = self.create_growth()
 
