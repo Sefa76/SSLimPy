@@ -18,7 +18,7 @@ class halomodel:
     def __init__(
         self,
         Cosmo: cosmo_functions,
-        halopars:dict=dict(),
+        halopars: dict = dict(),
     ):
         self.cosmology = Cosmo
         self.haloparams = deepcopy(halopars)
@@ -45,17 +45,18 @@ class halomodel:
         self.M = (4 * np.pi / 3 * self.rho_tracer * self.R**3).to(u.Msun)
 
         if cfg.settings["k_kind"] == "log":
-            self.k = np.geomspace(
+            k_edge = np.geomspace(
                 cfg.settings["kmin"],
                 cfg.settings["kmax"],
                 cfg.settings["nk"],
             ).to(u.Mpc**-1)
         else:
-            self.k = np.linspace(
+            k_edge = np.linspace(
                 cfg.settings["kmin"],
-                cfg.settings["kmax"],
                 cfg.settings["nk"],
             ).to(u.Mpc**-1)
+        self.k = (k_edge[1:] + k_edge[:-1])/2.0
+
         self.z = np.linspace(
             cfg.settings["zmin"],
             cfg.settings["zmax"],
@@ -277,6 +278,19 @@ class halomodel:
             return np.sqrt(
                 self._compute_sigma(R, z, sigma_integrand, tracer=tracer, moment=0.0)
             )
+
+    def sigma8_of_z(self, z, tracer="matter"):
+        """Cosmological quantity known as sigma8.
+        Will have a slight missmatch with the input sigma8 because
+        it is computed numerically from Pk
+        """
+        return self.sigmaR_of_z(8 * self.Mpch, z, tracer=tracer)
+
+    def fsigma8_of_z(self, z, tracer="matter"):
+        """(scale-independent) growthrate times sigma8"""
+        return self.cosmology.growth_rate(
+            1e-3 * u.Mpc**-1, z, tracer=tracer
+        ) * self.sigma8_of_z(z, tracer=tracer)
 
     def dsigmaR_of_z(self, R, z, tracer="matter"):
         """Derivative of real space variance of matter or cb smoothed over a comoving scale R"""

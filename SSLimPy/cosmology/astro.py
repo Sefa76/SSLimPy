@@ -14,7 +14,9 @@ from SSLimPy.utils.utils import *
 
 class astro_functions:
     def __init__(
-        self, Halomodel: halomodel, astropars:dict=dict(),
+        self,
+        Halomodel: halomodel,
+        astropars: dict = dict(),
     ):
         self.halomodel = Halomodel
         self.cosmology = Halomodel.cosmology
@@ -30,6 +32,7 @@ class astro_functions:
         self.model_name = self.astroparams["model_name"]
         self.model_par = self.astroparams["model_par"]
         self.nu = self.astroparams["nu"]
+        self.nuObs = self.astroparams["nu"]
         self.sigma_scater = self.astroparams["sigma_scatter"]
         self.fduty = self.astroparams["fduty"]
 
@@ -80,6 +83,8 @@ class astro_functions:
         self.astroparams.setdefault("sigma_scatter", 0)
         self.astroparams.setdefault("fduty", 1)
         self.astroparams.setdefault("nu", cfg.obspars["nu"])
+        self.astroparams.setdefault("nuObs", cfg.obspars["nuObs"])
+
 
     def _init_model(self):
         """
@@ -164,7 +169,7 @@ class astro_functions:
 
         elif "LF" in self.model_type:
             dn_dL_of_L_func = getattr(
-                self._luminosicosmology.results.zgridty_function, self.astroparams["model_name"]
+                self._luminosity_function, self.astroparams["model_name"]
             )
 
             dn_dL_of_L = dn_dL_of_L_func(L)[:, None] * np.ones_like(z)[None, :]
@@ -228,67 +233,42 @@ class astro_functions:
         return CLT
 
     def Lavg(self, z, p=1):
+        """Mean halo luminosity and higher powers."""
         z = np.atleast_1d(z)
         if "ML" in self.model_type:
             log10 = np.log(10)
             M = self.M
-            Lp = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))**p
-            dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
-            Lpbar = np.trapz(M[:,None] * Lp * dndM, np.log(M.value)).to(u.Lsun)
+            Lp = (
+                np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape)) ** p
+            )
+            dndM = np.reshape(
+                self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape)
+            )
+            Lpbar = np.trapz(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(u.Lsun)
 
             # Add L scatter
-            Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scater * log10)**2)*self.fduty
-
+            Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scater * log10) ** 2)
             if "TonyLi" == self.model_name:
                 # LCO is nolonger conserved
-                Lpbar *= np.exp(-0.5 * p * (p - 1) * (self.sigma_scater * log10)**2)
+                Lpbar *= np.exp(0.5 * p * (self.sigma_scater * log10) ** 2)
 
-                alpha = self.model_par['alpha']
-                sig_SFR = self.model_par['sig_SFR']
+                alpha = self.model_par["alpha"]
+                sig_SFR = self.model_par["sig_SFR"]
                 # SFR scatter
-                Lpbar *= np.exp(0.5 * p * (p - 1) * (1 / alpha * sig_SFR * log10)**2)
-                # LCO scatter
-                Lpbar *= np.exp(0.5 * p**2 * (self.sigma_scater * log10)**2)
-
-
-    def bavg(self, z, k=None, mu=None):
-        """
-        Average luminosity-weighted bias for the given cosmology and line
-        model. Assumed to be linearly weight
-
-        Includes the effects of f_NL though the wrapping functions in astro
-        """
-        # Integrands for mass-averaging
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        M = self.M.to(self.Msunh)
-        z = np.atleast_1d(z)
-
-        bh = restore_shape(self.halomodel.halobias(M, z, k=k), k, M, z)
-        U = np.reshape(self.halomodel.ft_NFW(k, M, z), (*k.shape, *M.shape, *z.shape))
-        LofM = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
-        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
-
-        Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
-        if self.astroparams["v_of_M"]:
-            Fv = np.reshape(
-                self.halomodel.broadening_FT(k, mu, M, z),
-                (*k.shape, *mu.shape, *M.shape, *z.shape),
+                Lpbar *= np.exp(0.5 * p * (p - 1) * (sig_SFR / alpha * log10) ** 2)
+        else:
+            L = self.L
+            haloluminosity = self.haloluminosityfunction(L, z)
+            Lpbar = np.trapz(
+                L[:, None] ** (p + 1) * haloluminosity, np.log(L.value), axis=0
             )
 
-        itgrnd1 = (
-            Fv * LofM[None, None, :, :] * dndM[None, None, :, :] * (bh * U)[:, None, :, :]
-        )
-        itgrnd2 = (
-            Fv * LofM[None, None, :, :] * dndM[None, None, :, :] * U[:, None, :, :]
-        )
+        return Lpbar * self.fduty
 
-        I1 = np.trapz(itgrnd1, M, axis=2)
-        I2 = np.trapz(itgrnd2, M, axis=2)
-        b_line = I1 / I2
-        return np.squeeze(b_line.to(1).value)
+    def Tavg(self, z, p=1):
+        return self.CLT(z)**p * self.Lavg(z, p=p)
 
-    def bavghalo(self, bstring, z, power, dc=1.6865):
+    def bavg(self, bstring, z, power, dc=1.6865):
         """
         Average luminosity-weighted bias for higher order bias functions
 
@@ -302,7 +282,8 @@ class astro_functions:
         LofM = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
         dndM = self.halomodel._bias_function.sc_hmf(M, z, dc=dc)
         b = np.reshape(
-            getattr(self.halomodel._bias_function, bstring)(M, z, dc=dc), (*M.shape, *z.shape)
+            getattr(self.halomodel._bias_function, bstring)(M, z, dc=dc),
+            (*M.shape, *z.shape),
         )
 
         itgrnd1 = M[:, None] * LofM**power * dndM * b
@@ -313,66 +294,119 @@ class astro_functions:
         avgbL = I1 / I2
         return avgbL.to(1).value
 
-    def Lmoments(self, z, k=None, mu=None, moment=1):
-        """
-        Sky-averaged luminosity density moments at nuObs from target line.
-        Has two cases for 'LF' and 'ML' models that where handled in create_luminosty_function
-        """
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        z = np.atleast_1d(z)
-        model_type = self.model_type
-        if model_type == "LF":
-            if self.astroparams["v_of_M"]:
-                raise ValueError("Line width modelling only available for ML models")
-            else:
-                L = self.L
-                dndL = np.reshape(
-                    self.haloluminosityfunction(L, z), (*L.shape, *z.shape)
-                )
-                itgrnd1 = dndL * np.power(L, moment)[:, None]
-                Lmoment = np.trapz(itgrnd1, L, axis=0)
-        elif model_type == "ML":
-            M = self.M
-            dndM = np.reshape(self.halomodel.halomassfunction(M, z), (1, 1, *M.shape, *z.shape))
-            L = np.reshape(
-                self.massluminosityfunction(M, z), (1, 1, *M.shape, *z.shape)
-            )
+    ##################
+    # Halo integrals #
+    ##################
 
-            Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
-            if self.astroparams["v_of_M"]:
-                Fv = np.reshape(
+    def Lhalo(self, z, *args, p=1):
+        """Luminosity weight higher order halo profiles for n-halo terms
+        Computes the mean halo profile weight with some power of the luminosity.
+        this shows up for example in the halo shot noise,
+        or when appoximating that the mean of higher order biases are
+        independent from the scale dependence of the halo profile
+        """
+        M = self.M
+        z = np.atleast_1d(z)
+
+        if len(args) % p != 0:
+            raise ValueError("You have to pass wave-vectors for every p")
+        else:
+            kd = [np.atleast_1d(args[ik]) for ik in range(p)]
+
+        # Independent of k
+        L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
+        dndM = self.halomodel.halomassfunction(M, z)
+        log10 = np.log(10)
+
+        # Dependent on k
+        normhaloprofile = []
+        for ik in range(p):
+            k = kd[ik]
+            U = np.reshape(
+                self.halomodel.ft_NFW(k, M, z), (*k.shape, *M.shape, *z.shape)
+            )
+            U = np.expand_dims(U, (*range(ik), *range(ik + 1, p)))
+            U = np.expand_dims(U, (*range(p, 2 * p),))
+            normhaloprofile.append(U)
+
+        # Dependent on k and mu
+        Fv = np.ones((p,))
+        if self.astroparams["v_of_M"]:
+            Fv = []
+            for ik in range(p):
+                k = kd[ik]
+                mu = np.atleast_1d(args[p + ik])
+                F = np.reshape(
                     self.halomodel.broadening_FT(k, mu, M, z),
                     (*k.shape, *mu.shape, *M.shape, *z.shape),
                 )
-
-            itgrnd = dndM * np.power(L * Fv, moment)
-            Lmoment = np.trapz(itgrnd, M, axis=2)
-
-            # Special case for Tony Li model- scatter does not preserve LCO
-            if self.astroparams["model_name"] == "TonyLi":
-                model_pars = self.astroparams["model_par"]
-                alpha = model_pars["alpha"]
-                sig_SFR = model_pars["sig_SFR"]
-                correction = np.exp(
-                    (moment * alpha**-2 - alpha**-1)
-                    * moment
-                    * sig_SFR**2
-                    * np.log(10) ** 2
-                    / 2
+                F = np.expand_dims(
+                    F,
+                    (*range(ik), *range(ik + 1, p)),
                 )
-                Lmoment *= correction
+                F = np.expand_dims(
+                    F,
+                    (*range(p, p + ik), *range(p + ik + 1, 2 * p)),
+                )
+                Fv.append(F)
 
-        return np.squeeze(Lmoment)
+        # Construct the integrand
+        weight_halo = 1
+        for ik in range(p):
+            weight_halo = weight_halo * Fv[ik] * normhaloprofile[ik] * L_of_M
+        M = M.to(u.Msun)
+        logM = np.log(M.value)
+        I0x = np.trapz(M[:, None] * dndM * weight_halo, logM, axis=-2)
 
-    def Tmoments(self, z, k=None, mu=None, moment=1):
-        """
-        Sky-averaged brightness temperature moments at nuObs from target line.
-        Else, you can directly input Tmean using TOY model
-        """
-        return np.power(self.CLT(z), moment) * self.Lmoments(
-            z, k=k, mu=mu, moment=moment
+        # Add L scatter
+        I0x *= np.exp(0.5 * p * (p - 1) * (self.sigma_scater * log10) ** 2)
+        if "TonyLi" == self.model_name:
+            # LCO is nolonger conserved
+            I0x *= np.exp(0.5 * p * (self.sigma_scater * log10) ** 2)
+
+            alpha = self.model_par["alpha"]
+            sig_SFR = self.model_par["sig_SFR"]
+            # SFR scatter
+            I0x *= np.exp(0.5 * p * (p - 1) * (sig_SFR / alpha * log10) ** 2)
+        return I0x
+
+    def Thalo(self, z, *args, p=1):
+        return self.CLT(z)**p * self.Lhalo(z, *args, p=p)
+
+    def bhalo(self, k, z, mu=None):
+        """Mean Tb, factor in front of the clutstering part of the LIM-autopower spectrum"""
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+        mu = np.atleast_1d(mu)
+        M = self.M
+
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
+        L = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
+        b = restore_shape(self.halomodel.halobias(M, z, k=k), k, M, z)
+        U = restore_shape(
+            self.halomodel.ft_NFW(k, M, z), (*k.shape, *M.shape, *z.shape)
         )
+
+        Fv = 1
+        if self.astroparams["v_of_M"]:
+            Fv = np.reshape(
+                self.halomodel.broadening_FT(k, mu, M, z),
+                (*k.shape, *mu.shape, *M.shape, *z.shape),
+            )
+
+        ingrnd = (
+            (b * U)[:, None, :, :]
+            * (L * dndM)[None, None, :, :]
+            * Fv
+            * M.to(u.Msun)[None, :, None, None]
+        )
+        bbar = np.trapz(ingrnd, np.log(M.to(u.Msun).value))
+        if "TonyLi" == self.model_name:
+            # LCO is nolonger conserved
+            log10 = np.log(10)
+            bbar *= np.exp(0.5 * (self.sigma_scater * log10) ** 2)
+
+        return self.CLT(z) * bbar * self.fduty
 
     def recap_astro(self):
         print("Astronomical Parameters:")

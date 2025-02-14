@@ -156,9 +156,9 @@ def init(
     obspars.setdefault("Nfeeds", 19)
     obspars.setdefault("beam_FWHM", 4.1 * u.arcmin)
     obspars.setdefault("nu", 115 * u.GHz)
+    obspars.setdefault("dnu", 15 * u.MHz)
     obspars.setdefault("nuObs", 30 * u.GHz)
     obspars.setdefault("Delta_nu", 8 * u.GHz)
-    obspars.setdefault("dnu", 15 * u.MHz)
     obspars.setdefault("tobs", 1300 * u.h)
     obspars.setdefault("nD", 1)
     obspars.setdefault("Omega_field", 4 * u.deg**2)
@@ -206,9 +206,7 @@ def init(
     obspars["Omega_field"] *= u.deg**2
     obspars["a_FG"] *= u.Mpc**-1
  """
-    global z
     z = np.atleast_1d((obspars["nu"] / obspars["nuObs"]).to(1).value - 1)
-    z = np.sort(z)
 
     global fiducialcosmoparams
     fiducialcosmoparams = cosmopars
