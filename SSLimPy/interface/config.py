@@ -13,6 +13,7 @@ def init(
     class_yaml_file=None,
     obspars_dict=dict(),
     cosmopars=dict(),
+    halopars=dict(),
     astropars=dict(),
     BAOpars=dict(),
 ):
@@ -206,10 +207,12 @@ def init(
     obspars["Omega_field"] *= u.deg**2
     obspars["a_FG"] *= u.Mpc**-1
  """
-    z = np.atleast_1d((obspars["nu"] / obspars["nuObs"]).to(1).value - 1)
 
     global fiducialcosmoparams
     fiducialcosmoparams = cosmopars
+
+    global fiducialhaloparams
+    fiducialhaloparams = halopars
 
     global fiducialastroparams
     fiducialastroparams = astropars
@@ -229,6 +232,7 @@ def init(
     fiducialfullcosmoparams = {**fiducialcosmoparams, **fiducialnuiscancelikeparams}
 
     initialize_fiducialcosmo()
+    initialize_fiducialhalomodel()
     initialize_fiducialastro()
 
     global fiducialBAOparams
@@ -244,11 +248,20 @@ def initialize_fiducialcosmo():
         input_type=input_type,
     )
 
+def initialize_fiducialhalomodel():
+    from SSLimPy.cosmology import halomodel
+    global fiducialhalomodel
+
+    fiducialhalomodel = halomodel.halomodel(
+        Cosmo= fiducialcosmo,
+        halopars= fiducialhaloparams,
+    )
+
 def initialize_fiducialastro():
     from SSLimPy.cosmology import astro
     global fiducialastro
 
     fiducialastro = astro.astro_functions(
-        cosmopars=fiducialcosmoparams,
-        astropars=fiducialastroparams,
+        Halomodel= fiducialhalomodel,
+        astropars= fiducialastroparams
     )

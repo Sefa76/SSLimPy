@@ -165,7 +165,7 @@ def addVectors(
 
 
 @njit(
-    "(float64[::1], float64[::1], float64[::1])",
+    "(float64[:], float64[:], float64[:])",
     fastmath=True,
 )
 def linear_interpolate(xi, yi, x):
@@ -192,7 +192,7 @@ def linear_interpolate(xi, yi, x):
 
 
 @njit(
-    "(float64[::1], float64[::1], float64[:,:], float64[::1], float64[::1])",
+    "(float64[:], float64[:], float64[:,:], float64[:], float64[:])",
     fastmath=True,
 )
 def bilinear_interpolate(xi, yj, zij, x, y):
