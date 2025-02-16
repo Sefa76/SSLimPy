@@ -5,17 +5,19 @@ from astropy import units as u
 from numba import njit, prange
 from scipy.integrate import simpson
 from scipy.interpolate import RectBivariateSpline
-from scipy.special import legendre, spherical_jn
+from scipy.special import legendre
 from SSLimPy.cosmology.astro import astro_functions
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
-class PowerSpectra:
+class power_spectra:
 
     def __init__(self, astro: astro_functions, BAOpars=dict()):
         self.cosmology = astro.cosmology
         self.halomodel = astro.halomodel
+        # Nu enters into the Mass-Luminosity and Luminosity-Temperature relations
+        self.survey_specs = astro.survey_specs 
         self.astro = astro
 
         self.BAOpars = copy(BAOpars)
@@ -30,7 +32,6 @@ class PowerSpectra:
 
         self.nu = astro.nu
         self.nuObs = astro.nuObs
-        self.Delta_nu = cfg.obspars["Delta_nu"]
         self.z = np.sort(np.atleast_1d(self.nu / self.nuObs).to(1).value - 1)
 
         #########################################
@@ -319,99 +320,6 @@ class PowerSpectra:
 
         return np.squeeze(FoG)
 
-    #####################
-    # Survey Resolution #
-    #####################
-    # Call these functions before applying the AP transformations, scale fixes, ect
-
-    def sigma_parr(self, z, nu_obs):
-        x = (cfg.obspars["dnu"] / nu_obs).to(1).value
-        y = (1 + z) / self.fiducialcosmo.Hubble(z)
-        return x * y
-
-    def sigma_perp(self, z):
-        x = cfg.obspars["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
-        y = self.fiducialcosmo.angdist(z) * (1 + z)
-        return x * y
-
-    def F_parr(self, k, mu, z, nu_obs):
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        z = np.atleast_1d(z)
-
-        logF = -0.5 * np.power(
-            k[:, None, None]
-            * mu[None, :, None]
-            * self.sigma_parr(z, nu_obs)[None, None, :],
-            2,
-        )
-
-        return np.squeeze(np.exp(logF))
-
-    def F_perp(self, k, mu, z):
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        z = np.atleast_1d(z)
-
-        logF = -0.5 * np.power(
-            k[:, None, None]
-            * np.sqrt(1 - mu[None, :, None] ** 2)
-            * self.sigma_perp(z)[None, None, :],
-            2,
-        )
-
-        return np.squeeze(np.exp(logF))
-
-    ##################################
-    # Convolution and Survey Windows #
-    ##################################
-
-    def Lfield(self, z1, z2):
-        zgrid = [z1, z2]
-        Lgrid = self.fiducial_cosmology.comoving(zgrid)
-        return Lgrid[1] - Lgrid[0]
-
-    def Sfield(self, zc, Omegafield):
-        r2 = np.power(self.fiducial_cosmology.comoving(zc).to(u.Mpc), 2)
-        sO = Omegafield.to(u.rad**2).value
-        return r2 * sO
-
-    def Wsurvey(self, q, muq):
-        """Compute the Fourier-transformed sky selection window function"""
-        q = np.atleast_1d(q)
-        muq = np.atleast_1d(muq)
-
-        qparr = q[:, None, None] * muq[None, :, None]
-        qperp = q[:, None, None] * np.sqrt(1 - np.power(muq[None, :, None], 2))
-
-        # Calculate dz from deltanu
-        nu = self.nu
-        nuObs = self.nuObs
-        Delta_nu = self.Delta_nu
-        z = (nu / nuObs - 1).to(1).value
-        z_min = (nu / (nuObs + Delta_nu / 2) - 1).to(1).value
-        z_max = (nu / (nuObs - Delta_nu / 2) - 1).to(1).value
-
-        # Construct W_survey (now just a cylinder)
-        Sfield = self.Sfield(z, cfg.obspars["Omega_field"])
-        Lperp = np.sqrt(Sfield / np.pi)
-        Lparr = self.Lfield(z_min, z_max)
-        x = (qperp * Lperp).to(1).value
-        Wperp = 2 * np.pi * Lperp * np.reshape(smooth_W(x.flatten()), x.shape) / qperp
-        Wparr = Lparr * spherical_jn(0, (qparr * Lparr / 2).to(1).value)
-
-        Wsurvey = Wperp * Wparr
-        Vsurvey = (
-            simpson(
-                q[:, None] ** 3
-                * simpson(np.abs(Wsurvey) ** 2 / (2 * np.pi) ** 2, muq, axis=1),
-                np.log(q.value),
-                axis=0,
-            )
-            * (Sfield * Lparr).unit
-        )
-        return Wsurvey, Vsurvey
-
     def convolved_Pk(self):
         """Convolves the Observed power spectrum with the survey volume
 
@@ -437,7 +345,7 @@ class PowerSpectra:
         deltaphi = np.linspace(-np.pi, np.pi, 2 * len(muq))
 
         # Obtain survey Window
-        Wsurvey, Vsurvey = self.Wsurvey(q, muq)
+        Wsurvey, Vsurvey = self.survey_specs.Wsurvey(q, muq)
 
         Pconv = np.empty(Pobs.shape)
         # Do the convolution for each redshift bin
@@ -599,8 +507,8 @@ class PowerSpectra:
         Fnu = np.ones(outputshape)
         if cfg.settings["Smooth_resolution"]:
             # The dampning from resolution is to be computed without any cosmolgy dependance
-            F_parr = np.reshape(self.F_parr(k, mu, z, self.nuObs), outputshape)
-            F_perp = np.reshape(self.F_perp(k, mu, z), outputshape)
+            F_parr = np.reshape(self.survey_specs.F_parr(k, mu, z, self.nuObs), outputshape)
+            F_perp = np.reshape(self.survey_specs.F_perp(k, mu, z), outputshape)
             Fnu = F_parr * F_perp
 
         self.Pk_Obs = (

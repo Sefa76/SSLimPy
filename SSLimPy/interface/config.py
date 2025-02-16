@@ -2,10 +2,7 @@
 # the computation of one fisher matrix/ chain/ etc
 import os
 import yaml
-from copy import copy
 from astropy import units as u
-import numpy as np
-
 
 def init(
     settings_dict=dict(),
@@ -41,7 +38,7 @@ def init(
     global settings
     settings = settings_dict
 
-    # Cosmology settings
+    # Cosmology numerics
     settings.setdefault("nonlinearMatpow", True)
     settings.setdefault("share_delta_neff", True)
     settings.setdefault("LP_rescale_ini_As", 2.1e-9)
@@ -149,73 +146,8 @@ def init(
             )
         boltzmann_classpars = file_content_class
 
-    # Set global defaults and inputs for the survey specifications
-    global obspars
-    obspars = copy(obspars_dict)
-
-    obspars.setdefault("Tsys_NEFD", 40 * u.uK)
-    obspars.setdefault("Nfeeds", 19)
-    obspars.setdefault("beam_FWHM", 4.1 * u.arcmin)
-    obspars.setdefault("nu", 115 * u.GHz)
-    obspars.setdefault("dnu", 15 * u.MHz)
-    obspars.setdefault("nuObs", 30 * u.GHz)
-    obspars.setdefault("Delta_nu", 8 * u.GHz)
-    obspars.setdefault("tobs", 1300 * u.h)
-    obspars.setdefault("nD", 1)
-    obspars.setdefault("Omega_field", 4 * u.deg**2)
-    obspars.setdefault("N_FG_par", 1)
-    obspars.setdefault("N_FG_perp", 1)
-    obspars.setdefault("do_FG_wedge", False)
-    obspars.setdefault("a_FG", 0.0)
-    obspars.setdefault("b_FG", 0.0)
-
-    """ # Load Survey specifications from file
-    if specifications:
-        if os.path.exists(specifications):
-            file_content_specs =  yaml.safe_load(open(specifications))
-        else:
-            print("The specified path to the survey specifications does not exist")
-            raise ValueError
-    else:
-        file_content_specs = yaml.safe_load(open(os.path.join(file_location,"../../input/survey_files/default.yaml")))
-
-    # restore units and fill seperate spec dirs
-
-    global vidpars
-    vidpars = copy(file_content_specs["VID"])
-
-    vidpars["Tmin_VID"] *= u.uK
-    vidpars["Tmax_VID"] *= u.uK
-    vidpars["fT0_min"] *= u.uK**-1
-    vidpars["fT0_max"] *= u.uK**-1
-    vidpars["fT_min"] *= u.uK**-1
-    vidpars["fT_max"] *= u.uK**-1
-    vidpars["sigma_PT_stable"] *= u.uK
-    vidpars["nT"]=int(np.power(2,vidpars["lognT"]))
-
-    global obspars
-    obspars = copy(file_content_specs["OBS"])
-
-    obspars["Tsys_NEFD"] *= u.K
-    obspars["beam_FWHM"] *= u.arcmin
-    obspars["nu"] *= u.GHz
-    obspars["nuObs"] *= u.GHz
-    obspars["Delta_nu"] *= u.GHz
-    obspars["dnu"] *= u.MHz
-    # We should change the other parameters also like this to read the units
-    obspars["tobs"] = obspars["tobs"][:-1] * getattr(u,obspars["tobs"][-1])
-    obspars["Omega_field"] *= u.deg**2
-    obspars["a_FG"] *= u.Mpc**-1
- """
-
     global fiducialcosmoparams
     fiducialcosmoparams = cosmopars
-
-    global fiducialhaloparams
-    fiducialhaloparams = halopars
-
-    global fiducialastroparams
-    fiducialastroparams = astropars
 
     # seperate the nuiscance-like cosmology parameters
     # add new ones here
@@ -231,8 +163,18 @@ def init(
     global fiducialfullcosmoparams
     fiducialfullcosmoparams = {**fiducialcosmoparams, **fiducialnuiscancelikeparams}
 
+    global fiducialhaloparams
+    fiducialhaloparams = halopars
+
+    global fiducialspecparams
+    fiducialspecparams = obspars_dict
+
+    global fiducialastroparams
+    fiducialastroparams = astropars
+
     initialize_fiducialcosmo()
     initialize_fiducialhalomodel()
+    initialize_fiducialspecs()
     initialize_fiducialastro()
 
     global fiducialBAOparams
@@ -255,6 +197,15 @@ def initialize_fiducialhalomodel():
     fiducialhalomodel = halomodel.halomodel(
         Cosmo= fiducialcosmo,
         halopars= fiducialhaloparams,
+    )
+
+def initialize_fiducialspecs():
+    from SSLimPy.interface import surveySpecs
+    global fiducialspecs
+
+    fiducialspecs = surveySpecs.survey_specifications(
+        obspars= fiducialspecparams,
+        cosmo= fiducialcosmo,
     )
 
 def initialize_fiducialastro():

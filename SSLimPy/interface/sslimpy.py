@@ -6,7 +6,7 @@ from numpy import atleast_1d
 
 sys.path.append("../")
 import SSLimPy.interface.config as cfg
-import SSLimPy.interface.updater as updater
+from SSLimPy.interface import updater
 
 class sslimpy:
     def __init__(
@@ -18,7 +18,6 @@ class sslimpy:
         cosmopars = dict(),
         astropars = dict(),
         BAOpars = dict(),
-        freepars = dict(),
     ):
 
         print("#--------------------------------------------------#")
@@ -50,8 +49,6 @@ class sslimpy:
         self.fiducialastro = cfg.fiducialastro
         self.fiducialastroparams = cfg.fiducialastroparams
 
-        self.obspars = cfg.obspars
-        #self.vidpars = cfg.vidpars
         self.output = atleast_1d(cfg.settings["output"])
 
         ### save very fist cosmology ###
@@ -125,11 +122,4 @@ class sslimpy:
         print("Settings:")
         for key in cfg.settings:
             print("   " + key + ": {}".format(cfg.settings[key]))
-        print("")
-        print("Observational Parameters:")
-        for key in cfg.obspars:
-            print("   " + key + ": {}".format(cfg.obspars[key]))
-        #print("VID Parameters:")
-        #for key in cfg.vidpars:
-        #    print("   " + key + ": {}".format(cfg.vidpars[key]))
 
