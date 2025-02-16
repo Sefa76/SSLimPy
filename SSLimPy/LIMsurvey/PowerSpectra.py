@@ -10,11 +10,10 @@ from SSLimPy.cosmology.astro import astro_functions
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
+
 class PowerSpectra:
 
-    def __init__(
-        self, astro: astro_functions, BAOpars=dict()
-    ):
+    def __init__(self, astro: astro_functions, BAOpars=dict()):
         self.cosmology = astro.cosmology
         self.halomodel = astro.halomodel
         self.astro = astro
@@ -113,10 +112,11 @@ class PowerSpectra:
         P_dd = np.reshape(P_dd, (*k.shape, *z.shape))
         P_dd_NW = np.reshape(P_dd_NW, (*k.shape, *z.shape))
 
-        P_dd_DW = (P_dd[:, None, :]
-                   * np.exp(-gmudamping[None, :, :] * k[:, None, None] ** 2)
-                   + P_dd_NW[:, None, :]
-                   * (1 - np.exp(-gmudamping[None, :, :] * k[:, None, None] ** 2)))
+        P_dd_DW = P_dd[:, None, :] * np.exp(
+            -gmudamping[None, :, :] * k[:, None, None] ** 2
+        ) + P_dd_NW[:, None, :] * (
+            1 - np.exp(-gmudamping[None, :, :] * k[:, None, None] ** 2)
+        )
         return np.squeeze(P_dd_DW)
 
     ################
@@ -202,9 +202,8 @@ class PowerSpectra:
             bmean = bmean[None, :]
             if "f_NL" in self.cosmology.fullcosmoparams:
                 M_pivot = 1e7 * u.Msun
-                fac = (
-                    (bmean - 1)
-                    / np.reshape(self.halomodel._b_of_M(M_pivot, z) - 1, z.shape)
+                fac = (bmean - 1) / np.reshape(
+                    self.halomodel._b_of_M(M_pivot, z) - 1, z.shape
                 )
                 Delta_b = self.halomodel.Delta_b(k, M_pivot, z) * fac[None, :]
 
@@ -218,13 +217,15 @@ class PowerSpectra:
                     )
                 Tmean = Tmean[None, None, :]
             else:
-                Tmean = restore_shape(
-                    self.astro.Thalo(z, k, mu, p=1), k, mu, z
-                )
+                Tmean = restore_shape(self.astro.Thalo(z, k, mu, p=1), k, mu, z)
 
             Biasterm = (
-                bmean[:, None, :] * Tmean
-                * np.atleast_1d(self.halomodel.sigma8_of_z(z, tracer=self.tracer))[None, None, :])
+                bmean[:, None, :]
+                * Tmean
+                * np.atleast_1d(self.halomodel.sigma8_of_z(z, tracer=self.tracer))[
+                    None, None, :
+                ]
+            )
         else:
             Biasterm = (
                 restore_shape(self.astro.bhalo(k, z, mu=mu), k, mu, z)
@@ -248,29 +249,22 @@ class PowerSpectra:
         else:
             Tmean = restore_shape(self.astro.Thalo(z, k, mu, p=1), k, mu, z)
 
-        fs8 = np.reshape(self.halomodel.fsigma8_of_z(k, z, tracer=self.tracer),(*k.shape, *z.shape))
-        Kaiser_RSD = (
-            Tmean
-            * fs8[:, None, :]
-            * np.power(mu, 2)[None, :, None]
+        fs8 = np.reshape(
+            self.halomodel.fsigma8_of_z(k, z, tracer=self.tracer), (*k.shape, *z.shape)
         )
+        Kaiser_RSD = Tmean * fs8[:, None, :] * np.power(mu, 2)[None, :, None]
         return np.squeeze(Kaiser_RSD)
 
     def Kaiser_Term(self, k, mu, z, BAOpars=dict()):
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
-        bterm = restore_shape(
-            self.bias_term(z, k=k, mu=mu, BAOpars=BAOpars), k, mu, z
-        )
+        bterm = restore_shape(self.bias_term(z, k=k, mu=mu, BAOpars=BAOpars), k, mu, z)
         if "beta" in BAOpars:
             beta = np.atleast_1d(BAOpars["beta"])
             if len(beta) != len(z):
                 raise ValueError("did not pass RSD amplitude for every z asked for")
-            fterm = (
-                beta[None, None, :]
-                * np.power(mu[None, :, None], 2)
-            )
+            fterm = beta[None, None, :] * np.power(mu[None, :, None], 2)
             linear_Kaiser = np.power(bterm * (1 + fterm), 2)
         else:
             fterm = np.reshape(
@@ -510,27 +504,36 @@ class PowerSpectra:
 
         if cfg.settings["QNLpowerspectrum"]:
             # Obtain the normalized dewiggled power spectrum
-            Pk = np.reshape(self.dewiggled_pdd(k, mu, z, BAOpars=self.BAOpars), outputshape)
+            Pk = np.reshape(
+                self.dewiggled_pdd(k, mu, z, BAOpars=self.BAOpars), outputshape
+            )
         else:
             # Use linear power spectrum
-            Pk = np.reshape(self.cosmology.matpow(k, z, tracer=self.tracer), (*k.shape, *z.shape))
+            Pk = np.reshape(
+                self.cosmology.matpow(k, z, tracer=self.tracer), (*k.shape, *z.shape)
+            )
             Pk = Pk[:, None, :]
 
         if cfg.settings["verbosity"] > 1:
             tPk = time()
             print("Power spectrum obtained in {} seconds".format(tPk - tstart))
 
-
         if cfg.settings["do_RSD"]:
             # Obtain redshiftspace distortions
             rsd = restore_shape(
-                self.Kaiser_Term(k, mu, z, BAOpars=self.BAOpars), k, mu, z,
+                self.Kaiser_Term(k, mu, z, BAOpars=self.BAOpars),
+                k,
+                mu,
+                z,
             )
             if cfg.settings["nonlinearRSD"]:
                 rsd = rsd * self.fingers_of_god(k, mu, z, BAOpars=self.BAOpars)
         else:
             rsd = restore_shape(
-                self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars), k, mu, z,
+                self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),
+                k,
+                mu,
+                z,
             )
 
         if cfg.settings["verbosity"] > 1:
@@ -569,20 +572,26 @@ class PowerSpectra:
         mu_ap = kparr_ap / k_ap
 
         for iz, zi in enumerate(z):
-            logk_ap_zi = logk_ap[:,:,iz].flatten()
-            if cfg.settings["QNLpowerspectrum"] or cfg.settings["do_RSD"] or self.halomodel.haloparams["v_of_M"]:
-                mu_ap_zi = mu_ap[:,:,iz].flatten()
-                Pk_Obs[:,:, iz] = np.exp(
+            logk_ap_zi = logk_ap[:, :, iz].flatten()
+            if (
+                cfg.settings["QNLpowerspectrum"]
+                or cfg.settings["do_RSD"]
+                or self.halomodel.haloparams["v_of_M"]
+            ):
+                mu_ap_zi = mu_ap[:, :, iz].flatten()
+                Pk_Obs[:, :, iz] = np.exp(
                     np.reshape(
-                        bilinear_interpolate(logk, mu, logPk_ref[:,:,iz], logk_ap_zi, mu_ap_zi),
+                        bilinear_interpolate(
+                            logk, mu, logPk_ref[:, :, iz], logk_ap_zi, mu_ap_zi
+                        ),
                         (*k.shape, *mu.shape),
                     )
                 )
             else:
-                Pk_Obs[:,:, iz] = np.exp(
+                Pk_Obs[:, :, iz] = np.exp(
                     np.reshape(
                         linear_interpolate(logk, logPk_ref[:, 0, iz], logk_ap_zi),
-                        (*k.shape, *mu.shape),                        
+                        (*k.shape, *mu.shape),
                     )
                 )
         Pk_Obs = Pk_Obs * uP
@@ -595,14 +604,14 @@ class PowerSpectra:
             Fnu = F_parr * F_perp
 
         self.Pk_Obs = (
-            (alpha_par * np.power(alpha_perp, 2))[None, None, :]
-            * Pk_Obs
-            * Fnu
+            (alpha_par * np.power(alpha_perp, 2))[None, None, :] * Pk_Obs * Fnu
         )
 
         if cfg.settings["verbosity"] > 1:
             tap = time()
-            print("Alcock-Paczynski projection performed in {} seconds".format(tap - tps))
+            print(
+                "Alcock-Paczynski projection performed in {} seconds".format(tap - tps)
+            )
 
         if cfg.settings["Smooth_window"]:
             self.Pk_true = copy(self.Pk_Obs)

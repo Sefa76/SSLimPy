@@ -539,7 +539,7 @@ class cosmo_functions:
         This class is where you can extract all of the EBS results.
         When modifying the code try to keep using the funcitons of this class
         instead of the callables inside of results.
-        Will not read cosmopars if cosmology is directly passed 
+        Will not read cosmopars if cosmology is directly passed
         """
         self.settings = cfg.settings
 

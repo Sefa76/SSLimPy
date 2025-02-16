@@ -5,6 +5,7 @@ For now all functions assume a underlying spherical collapse (ST, SMT, Tinker) b
 
 The same signatures of the bias functions in ```bias_fitting_functions``` should be kept
 """
+
 import numpy as np
 
 from astropy import units as u

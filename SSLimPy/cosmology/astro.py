@@ -85,7 +85,6 @@ class astro_functions:
         self.astroparams.setdefault("nu", cfg.obspars["nu"])
         self.astroparams.setdefault("nuObs", cfg.obspars["nuObs"])
 
-
     def _init_model(self):
         """
         Check if model given by model_name exists in the given model_type
@@ -266,7 +265,7 @@ class astro_functions:
         return Lpbar * self.fduty
 
     def Tavg(self, z, p=1):
-        return self.CLT(z)**p * self.Lavg(z, p=p)
+        return self.CLT(z) ** p * self.Lavg(z, p=p)
 
     def bavg(self, bstring, z, power, dc=1.6865):
         """
@@ -371,7 +370,7 @@ class astro_functions:
         return I0x
 
     def Thalo(self, z, *args, p=1):
-        return self.CLT(z)**p * self.Lhalo(z, *args, p=p)
+        return self.CLT(z) ** p * self.Lhalo(z, *args, p=p)
 
     def bhalo(self, k, z, mu=None):
         """Mean Tb, factor in front of the clutstering part of the LIM-autopower spectrum"""

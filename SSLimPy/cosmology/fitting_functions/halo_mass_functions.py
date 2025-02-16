@@ -23,7 +23,9 @@ class halo_mass_functions:
 
         # SigmaM functions
         self.sigmaM = partial(self.halomodel.sigmaM, tracer=self.halomodel.tracer)
-        self.dsigmaM_dM = partial(self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer)
+        self.dsigmaM_dM = partial(
+            self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer
+        )
 
     def ST(self, Mvec, rhoM, z):
         """

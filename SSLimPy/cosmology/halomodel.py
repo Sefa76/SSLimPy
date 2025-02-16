@@ -55,7 +55,7 @@ class halomodel:
                 cfg.settings["kmin"],
                 cfg.settings["nk"],
             ).to(u.Mpc**-1)
-        self.k = (k_edge[1:] + k_edge[:-1])/2.0
+        self.k = (k_edge[1:] + k_edge[:-1]) / 2.0
 
         self.z = np.linspace(
             cfg.settings["zmin"],
@@ -288,9 +288,10 @@ class halomodel:
 
     def fsigma8_of_z(self, k, z, tracer="matter"):
         """(scale-independent) growthrate times sigma8"""
-        f = np.reshape(self.cosmology.growth_rate(k, z, tracer=tracer),
-                       (*k.shape, *z.shape),
-                       )
+        f = np.reshape(
+            self.cosmology.growth_rate(k, z, tracer=tracer),
+            (*k.shape, *z.shape),
+        )
         s8 = self.sigma8_of_z(z, tracer=tracer)
         return f * s8[None, :]
 
