@@ -8,6 +8,7 @@ from scipy.interpolate import RectBivariateSpline
 from SSLimPy.cosmology.halomodel import halomodel
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
+from SSLimPy.interface.surveySpecs import survey_specifications
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
@@ -16,10 +17,12 @@ class astro_functions:
     def __init__(
         self,
         Halomodel: halomodel,
+        Surveyspecs: survey_specifications,
         astropars: dict = dict(),
     ):
         self.halomodel = Halomodel
         self.cosmology = Halomodel.cosmology
+        self.survey_specs = Surveyspecs
 
         # Units
         self.hubble = Halomodel.hubble
@@ -31,9 +34,9 @@ class astro_functions:
         self.model_type = self.astroparams["model_type"]
         self.model_name = self.astroparams["model_name"]
         self.model_par = self.astroparams["model_par"]
-        self.nu = self.astroparams["nu"]
-        self.nuObs = self.astroparams["nu"]
-        self.sigma_scater = self.astroparams["sigma_scatter"]
+        self.nu = self.survey_specs.obsparams["nu"]
+        self.nuObs = self.survey_specs.obsparams["nuObs"]
+        self.sigma_scatter = self.astroparams["sigma_scatter"]
         self.fduty = self.astroparams["fduty"]
 
         ### TEXT VOMIT ###
@@ -82,8 +85,6 @@ class astro_functions:
         self.astroparams.setdefault("nL", 5000)
         self.astroparams.setdefault("sigma_scatter", 0)
         self.astroparams.setdefault("fduty", 1)
-        self.astroparams.setdefault("nu", cfg.obspars["nu"])
-        self.astroparams.setdefault("nuObs", cfg.obspars["nuObs"])
 
     def _init_model(self):
         """
@@ -143,7 +144,7 @@ class astro_functions:
         L = self.L
 
         if "ML" in self.model_type:
-            sigma = np.maximum(cfg.settings["sigma_scatter"], 0.05)
+            sigma = np.maximum(self.sigma_scatter, 0.05)
             # Special case for Tony Li model- scatter does not preserve LCO
             if self.astroparams["model_name"] == "TonyLi":
                 alpha = self.model_par["alpha"]
@@ -246,10 +247,10 @@ class astro_functions:
             Lpbar = np.trapz(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(u.Lsun)
 
             # Add L scatter
-            Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scater * log10) ** 2)
+            Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)
             if "TonyLi" == self.model_name:
                 # LCO is nolonger conserved
-                Lpbar *= np.exp(0.5 * p * (self.sigma_scater * log10) ** 2)
+                Lpbar *= np.exp(0.5 * p * (self.sigma_scatter * log10) ** 2)
 
                 alpha = self.model_par["alpha"]
                 sig_SFR = self.model_par["sig_SFR"]
@@ -358,10 +359,10 @@ class astro_functions:
         I0x = np.trapz(M[:, None] * dndM * weight_halo, logM, axis=-2)
 
         # Add L scatter
-        I0x *= np.exp(0.5 * p * (p - 1) * (self.sigma_scater * log10) ** 2)
+        I0x *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)
         if "TonyLi" == self.model_name:
             # LCO is nolonger conserved
-            I0x *= np.exp(0.5 * p * (self.sigma_scater * log10) ** 2)
+            I0x *= np.exp(0.5 * p * (self.sigma_scatter * log10) ** 2)
 
             alpha = self.model_par["alpha"]
             sig_SFR = self.model_par["sig_SFR"]
@@ -403,7 +404,7 @@ class astro_functions:
         if "TonyLi" == self.model_name:
             # LCO is nolonger conserved
             log10 = np.log(10)
-            bbar *= np.exp(0.5 * (self.sigma_scater * log10) ** 2)
+            bbar *= np.exp(0.5 * (self.sigma_scatter * log10) ** 2)
 
         return self.CLT(z) * bbar * self.fduty
 

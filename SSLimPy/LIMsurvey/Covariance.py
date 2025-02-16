@@ -1,7 +1,7 @@
 import itertools
 from numba import njit, prange
 import numpy as np
-import SSLimPy.LIMsurvey.PowerSpectra as pobs
+from SSLimPy.LIMsurvey import PowerSpectra
 from astropy import constants as c
 from astropy import units as u
 from scipy.integrate import trapezoid
@@ -12,9 +12,10 @@ from SSLimPy.utils.utils import *
 
 
 class Covariance:
-    def __init__(self, powerspectrum: pobs.PowerSpectra):
-        self.cosmology = powerspectrum.fiducialcosmo
-        self.powerspectrum = powerspectrum
+    def __init__(self, Powerspectrum: PowerSpectra.power_spectra):
+        self.cosmology = Powerspectrum.fiducial_cosmology
+        self.survey_specs = Powerspectrum.survey_specs
+        self.powerspectrum = Powerspectrum
         self.k = self.powerspectrum.k
         dk = self.powerspectrum.dk
         self.dk = np.append(dk, dk[-1])
@@ -23,16 +24,16 @@ class Covariance:
 
     def Nmodes(self):
         Vk = 4 * np.pi * self.k**2 * self.dk
-        _, Vw = self.powerspectrum.Wsurvey(self.k, self.mu)
+        _, Vw = self.survey_specs.Wsurvey(self.k, self.mu)
         return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi) ** 3)
 
     def Detector_noise(self):
         F1 = (
-            cfg.obspars["Tsys_NEFD"] ** 2
-            * cfg.obspars["Omega_field"].to(u.sr).value
-            / (2 * cfg.obspars["nD"] * cfg.obspars["tobs"])
+            self.survey_specs.obsparams["Tsys_NEFD"] ** 2
+            * self.survey_specs.obsparams["Omega_field"].to(u.sr).value
+            / (2 * self.survey_specs.obsparams["nD"] * self.survey_specs.obsparams["tobs"])
         )
-        F2 = c.c / cfg.obspars["nu"]
+        F2 = c.c / self.survey_specs.obsparams["nu"]
         F3 = (
             self.cosmology.comoving(self.z) ** 2
             * (1 + self.z) ** 2
@@ -85,13 +86,13 @@ class Covariance:
 
 
 class nonGuassianCov:
-    def __init__(self, powerSpectrum: pobs.PowerSpectra):
-        self.cosmo = powerSpectrum.cosmology
-        self.astro = powerSpectrum.astro
-        self.powerSpectrum = powerSpectrum
-        self.k = powerSpectrum.k
-        self.mu = powerSpectrum.mu
-        self.z = powerSpectrum.z
+    def __init__(self, Powerspectrum: PowerSpectra.power_spectra):
+        self.cosmo = Powerspectrum.cosmology
+        self.astro = Powerspectrum.astro
+        self.powerSpectrum = Powerspectrum
+        self.k = Powerspectrum.k
+        self.mu = Powerspectrum.mu
+        self.z = Powerspectrum.z
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
     def integrate_4h(self):
