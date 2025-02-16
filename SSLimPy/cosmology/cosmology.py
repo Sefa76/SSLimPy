@@ -539,7 +539,7 @@ class cosmo_functions:
         This class is where you can extract all of the EBS results.
         When modifying the code try to keep using the funcitons of this class
         instead of the callables inside of results.
-        Will not read cosmopars if cosmology is directly passed 
+        Will not read cosmopars if cosmology is directly passed
         """
         self.settings = cfg.settings
 
@@ -907,117 +907,6 @@ class cosmo_functions:
 
         return Tk
 
-    #######################
-    # Real Space Variance #
-    #######################
-
-    def sigmaR_of_z(self, R, z, tracer="matter"):
-        """sigma_R
-
-        Parameters
-        ----------
-        z     : float
-                redshift
-        R     : float, numpy.ndarray
-                Radii
-        tracer: String
-                either 'matter' if you want sigma calculated from the total matter power spectrum
-                or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
-        Returns
-        -------
-        float
-            The Variance of the matter perturbation smoothed over a scale of R in Mpc
-
-        """
-        R = np.atleast_1d(R)
-        z = np.atleast_1d(z)
-        k = np.geomspace(self.results.kmin_pk, self.results.kmax_pk, 400) / u.Mpc
-
-        # Keep in order R,z,k
-        Pk = np.reshape(self.matpow(k, z, tracer=tracer), (*k.shape, *z.shape)).T[
-            None, :, :
-        ]
-
-        # Get Sigma window function
-        x = (k[None, None, :] * R[:, None, None]).to(1).value
-        W = np.reshape(smooth_W(x.flatten()), x.shape)
-
-        Integr = np.power(k[None, None, :] * W, 2) * Pk / (2 * np.pi**2)
-        return np.squeeze(np.sqrt(np.trapz(Integr, k, axis=-1)))
-
-    def dsigmaR_of_z(self, R, z, tracer="matter"):
-        """dsigma_R/dR
-
-        Parameters
-        ----------
-        z     : float
-                redshift
-        R     : float, numpy.ndarray
-                Radii
-        tracer: String
-                either 'matter' if you want sigma calculated from the total matter power spectrum
-                or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
-        Returns
-        -------
-        float
-            The derivative of the variance of the matter perturbation smoothed over a scale of R in Mpc with respect to that scale R
-
-        """
-        R = np.atleast_1d(R)
-        z = np.atleast_1d(z)
-        k = np.geomspace(self.results.kmin_pk, self.results.kmax_pk, 400) / u.Mpc
-
-        # Keep in order R,z,k
-        Pk = np.reshape(self.matpow(k, z, tracer=tracer), (*k.shape, *z.shape)).T[
-            None, :, :
-        ]
-
-        # Get Sigma window function
-        x = (k[None, None, :] * R[:, None, None]).to(1).value
-        W = np.reshape(smooth_W(x.flatten()), x.shape)
-        dW = np.reshape(smooth_dW(x.flatten()), x.shape)
-
-        # Get Sigma
-        sigma = np.reshape(self.sigmaR_of_z(R, z, tracer=tracer), (*R.shape, *z.shape))
-
-        Integr = np.power(k[None, None, :], 3) * 2 * W * dW * Pk / (2 * np.pi**2)
-        return np.squeeze(np.trapz(Integr, k, axis=-1) / (2 * sigma))
-
-    def sigma8_of_z(self, z, tracer="matter"):
-        """sigma_8
-
-        Parameters
-        ----------
-        z     : float
-                redshift
-        tracer: String
-                either 'matter' if you want sigma_8 calculated from the total matter power spectrum or 'clustering' if you want it from the Powerspectrum with massive neutrinos substracted
-        Returns
-        -------
-        float
-            The Variance of the matter perturbation smoothed over a scale of 8 Mpc/h
-
-        """
-        R = 8 * u.Mpc / self.h()
-        return self.sigmaR_of_z(R, z, tracer=tracer)
-
-    def sigmaV_of_z(self, z, tracer="matter", moment=0):
-        """
-        Calculates the angular power spectrum moments of the velocity divergence field, also known as the Theta field.
-        """
-        k = self.results.kgrid * 1 / u.Mpc
-        z = np.atleast_1d(z)
-        f_mom = np.power(
-            np.reshape(self.growth_rate(k, z, tracer=tracer), (*k.shape, *z.shape)),
-            moment,
-        )
-        P_mm = np.reshape(self.matpow(k, z, tracer=tracer), (*k.shape, *z.shape))
-        integrnd = f_mom * P_mm
-
-        Int = np.trapz(integrnd, k, axis=0)
-        sigma_tt = np.sqrt((1 / (6 * np.pi**2)) * Int)
-        return np.squeeze(sigma_tt)
-
     ##########
     # Growth #
     ##########
@@ -1067,14 +956,6 @@ class cosmo_functions:
             )
 
         return growth_factor, growth_rate
-
-    def fsigma8_of_z(self, k, z, tracer="matter"):
-        """
-        Clustering parameter of LCDM
-        """
-        f = self.growth_rate(k, z, tracer=tracer)
-        s8 = self.sigma8_of_z(z, tracer=tracer)
-        return f * s8
 
     def cmb_power(self, lmin, lmax, obs1, obs2):
         if self.code == "camb":

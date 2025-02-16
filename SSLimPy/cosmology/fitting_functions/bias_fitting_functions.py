@@ -19,7 +19,9 @@ class bias_fitting_functions:
         self.cosmology = halomodel.cosmology
         self.bias_par = self.astroparams["bias_par"]
         self.sigmaM = partial(self.halomodel.sigmaM, tracer=self.halomodel.tracer)
-        self.dsigmaM_dM = partial(self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer)
+        self.dsigmaM_dM = partial(
+            self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer
+        )
 
     def Tinker10(self, M, z, dc):
 

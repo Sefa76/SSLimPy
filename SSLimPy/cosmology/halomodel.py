@@ -55,7 +55,7 @@ class halomodel:
                 cfg.settings["kmin"],
                 cfg.settings["nk"],
             ).to(u.Mpc**-1)
-        self.k = (k_edge[1:] + k_edge[:-1])/2.0
+        self.k = (k_edge[1:] + k_edge[:-1]) / 2.0
 
         self.z = np.linspace(
             cfg.settings["zmin"],
@@ -286,11 +286,14 @@ class halomodel:
         """
         return self.sigmaR_of_z(8 * self.Mpch, z, tracer=tracer)
 
-    def fsigma8_of_z(self, z, tracer="matter"):
+    def fsigma8_of_z(self, k, z, tracer="matter"):
         """(scale-independent) growthrate times sigma8"""
-        return self.cosmology.growth_rate(
-            1e-3 * u.Mpc**-1, z, tracer=tracer
-        ) * self.sigma8_of_z(z, tracer=tracer)
+        f = np.reshape(
+            self.cosmology.growth_rate(k, z, tracer=tracer),
+            (*k.shape, *z.shape),
+        )
+        s8 = self.sigma8_of_z(z, tracer=tracer)
+        return f * s8[None, :]
 
     def dsigmaR_of_z(self, R, z, tracer="matter"):
         """Derivative of real space variance of matter or cb smoothed over a comoving scale R"""
