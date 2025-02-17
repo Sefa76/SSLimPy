@@ -5,29 +5,29 @@ import numpy as np
 from copy import deepcopy
 from scipy.interpolate import RectBivariateSpline
 
-from SSLimPy.cosmology.halomodel import halomodel
+from SSLimPy.SSLimPy.cosmology.halo_model import HaloModel
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
-from SSLimPy.interface.surveySpecs import survey_specifications
+from SSLimPy.interface.survey_specs import SurveySpecifications
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
-class astro_functions:
+class AstroFunctions:
     def __init__(
         self,
-        Halomodel: halomodel,
-        Surveyspecs: survey_specifications,
+        halomodel: HaloModel,
+        survey_specs: SurveySpecifications,
         astropars: dict = dict(),
     ):
-        self.halomodel = Halomodel
-        self.cosmology = Halomodel.cosmology
-        self.survey_specs = Surveyspecs
+        self.halomodel = halomodel
+        self.cosmology = halomodel.cosmology
+        self.survey_specs = survey_specs
 
         # Units
-        self.hubble = Halomodel.hubble
-        self.Mpch = Halomodel.Mpch
-        self.Msunh = Halomodel.Msunh
+        self.hubble = halomodel.hubble
+        self.Mpch = halomodel.Mpch
+        self.Msunh = halomodel.Msunh
 
         self.astroparams = deepcopy(astropars)
         self._set_astrophysics_defaults()

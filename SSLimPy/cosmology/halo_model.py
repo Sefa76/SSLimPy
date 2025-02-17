@@ -5,22 +5,22 @@ from numba import njit, prange
 from copy import deepcopy
 from scipy.special import sici
 
-from SSLimPy.cosmology.cosmology import cosmo_functions
+from SSLimPy.cosmology.cosmology import CosmoFunctions
 from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
-class halomodel:
+class HaloModel:
     """Computation of Halo model ingredients used to compute the nonlinear power spectrum"""
 
     def __init__(
         self,
-        Cosmo: cosmo_functions,
+        cosmo: CosmoFunctions,
         halopars: dict = dict(),
     ):
-        self.cosmology = Cosmo
+        self.cosmology = cosmo
         self.haloparams = deepcopy(halopars)
         self._set_halo_defaults()
 
@@ -377,7 +377,7 @@ class halomodel:
 
         vM = np.atleast_1d(self.haloparams["v_of_M"](Mvec))
         Hz = np.atleast_1d(self.cosmology.Hubble(zvec))
-        sv = vM / self.cosmology.celeritas * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
+        sv = vM / self.cosmology.CELERITAS * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
 
         return np.squeeze(sv)
 
@@ -653,7 +653,7 @@ class halomodel:
         bias = np.reshape(self._b_of_M(M, z, self.delta_crit), (*M.shape, *z.shape))
 
         f1 = (
-            (self.cosmology.Hubble(0, physical=True) / (self.cosmology.celeritas * k))
+            (self.cosmology.Hubble(0, physical=True) / (self.cosmology.CELERITAS * k))
             .to(1)
             .value
         )

@@ -184,26 +184,26 @@ def initialize_fiducialcosmo():
     from SSLimPy.cosmology import cosmology
     global fiducialcosmo
 
-    fiducialcosmo = cosmology.cosmo_functions(
+    fiducialcosmo = cosmology.CosmoFunctions(
         cosmopars=fiducialcosmoparams,
         nuiscance_like=fiducialnuiscancelikeparams,
         input_type=input_type,
     )
 
 def initialize_fiducialhalomodel():
-    from SSLimPy.cosmology import halomodel
+    from SSLimPy.cosmology import halo_model
     global fiducialhalomodel
 
-    fiducialhalomodel = halomodel.halomodel(
+    fiducialhalomodel = halo_model.HaloModel(
         Cosmo= fiducialcosmo,
         halopars= fiducialhaloparams,
     )
 
 def initialize_fiducialspecs():
-    from SSLimPy.interface import surveySpecs
+    from SSLimPy.interface import survey_specs
     global fiducialspecs
 
-    fiducialspecs = surveySpecs.survey_specifications(
+    fiducialspecs = survey_specs.SurveySpecifications(
         obspars= fiducialspecparams,
         cosmo= fiducialcosmo,
     )
@@ -212,7 +212,7 @@ def initialize_fiducialastro():
     from SSLimPy.cosmology import astro
     global fiducialastro
 
-    fiducialastro = astro.astro_functions(
+    fiducialastro = astro.AstroFunctions(
         Halomodel= fiducialhalomodel,
         astropars= fiducialastroparams
     )

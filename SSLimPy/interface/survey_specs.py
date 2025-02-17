@@ -4,11 +4,11 @@ from copy import copy
 from scipy.special import spherical_jn
 from scipy.integrate import simpson
 
-from SSLimPy.cosmology.cosmology import cosmo_functions
+from SSLimPy.cosmology.cosmology import CosmoFunctions
 from SSLimPy.utils.utils import *
 
-class survey_specifications:
-    def __init__(self, obspars, cosmo: cosmo_functions):
+class SurveySpecifications:
+    def __init__(self, obspars, cosmo: CosmoFunctions):
         obspars = copy(obspars)
         obspars.setdefault("Tsys_NEFD", 40 * u.uK)
         obspars.setdefault("Nfeeds", 19)

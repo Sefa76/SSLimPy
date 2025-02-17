@@ -1,10 +1,7 @@
 import sys
 from warnings import warn
 from copy import copy
-
 from numpy import atleast_1d
-
-sys.path.append("../")
 import SSLimPy.interface.config as cfg
 from SSLimPy.interface import updater
 
@@ -89,7 +86,7 @@ class sslimpy:
         return outputdict
 
     def _compute_ps(self, cosmopars, astropars, BAOpars, obspars, outputdict):
-        from SSLimPy.LIMsurvey.PowerSpectra import PowerSpectra
+        from SSLimPy.SSLimPy.LIMsurvey.power_spectrum import PowerSpectra
         cosmo = updater.update_cosmo(self.curent_cosmo,
                                      cosmopars,
                                      )
@@ -111,7 +108,7 @@ class sslimpy:
 
 
     def _compute_cov(self, power_spectrum, outputdict):
-        from SSLimPy.LIMsurvey.Covariance import Covariance
+        from SSLimPy.SSLimPy.LIMsurvey.covariance import Covariance
         outputdict["Covariance"] = Covariance(power_spectrum)
 
     def recap_options(self):

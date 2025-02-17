@@ -6,14 +6,14 @@ from numba import njit, prange
 from scipy.integrate import simpson
 from scipy.interpolate import RectBivariateSpline
 from scipy.special import legendre
-from SSLimPy.cosmology.astro import astro_functions
+from SSLimPy.cosmology.astro import AstroFunctions
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
-class power_spectra:
+class PowerSpectra:
 
-    def __init__(self, astro: astro_functions, BAOpars=dict()):
+    def __init__(self, astro: AstroFunctions, BAOpars=dict()):
         self.cosmology = astro.cosmology
         self.halomodel = astro.halomodel
         # Nu enters into the Mass-Luminosity and Luminosity-Temperature relations
