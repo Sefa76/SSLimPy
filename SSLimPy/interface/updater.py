@@ -5,24 +5,26 @@ Like this the update is done heirachially from bottom to top.
 
 from copy import copy
 
-import SSLimPy.interface.config as cfg
-from SSLimPy.cosmology import cosmology, halomodel, astro
-from SSLimPy.interface import surveySpecs
+from SSLimPy.interface import config as cfg
+from SSLimPy.cosmology import cosmology
+from SSLimPy.cosmology import halo_model
+from SSLimPy.cosmology import astro
+from SSLimPy.interface import survey_specs
 
 
 def update_surveySpecs(
     obspars: dict,
-) -> surveySpecs.survey_specifications:
+) -> survey_specs.SurveySpecifications:
     """This class only depends on the fiducial cosmology and
     needs only one dict
     """
-    return surveySpecs.survey_specifications(obspars, cfg.fiducialcosmo)
+    return survey_specs.SurveySpecifications(obspars, cfg.fiducialcosmo)
 
 
 def update_cosmo(
-    current_cosmo: cosmology.cosmo_functions,
+    current_cosmo: cosmology.CosmoFunctions,
     cosmopars: dict,
-) -> cosmology.cosmo_functions:
+) -> cosmology.CosmoFunctions:
     """This function gets the old cosmology aswell as a new set of
     cosmological parameters. It then seperates EBS parameters from
     nuiscance parameters. Finally it compares the inputs to previously
@@ -41,25 +43,25 @@ def update_cosmo(
     if cosmopars == current_cosmopars:
         cosmo = current_cosmo
         if nuiscance_like != current_nuiscance_like:
-            cosmo = cosmology.cosmo_functions(
+            cosmo = cosmology.CosmoFunctions(
                 cosmology=current_cosmo, nuiscance_like=nuiscance_like
             )
     elif cosmopars == cfg.fiducialcosmoparams:
         cosmo = cfg.fiducialcosmo
         if nuiscance_like != cfg.fiducialnuiscancelikeparams:
-            cosmo = cosmology.cosmo_functions(
+            cosmo = cosmology.CosmoFunctions(
                 cosmology=cfg.fiducialcosmo, nuiscance_like=nuiscance_like
             )
     else:
-        cosmo = cosmology.cosmo_functions(cosmopars, nuiscance_like)
+        cosmo = cosmology.CosmoFunctions(cosmopars, nuiscance_like)
     return cosmo
 
 
 def update_halomodel(
-    current_halomodel: halomodel.halomodel,
+    current_halomodel: halo_model.HaloModel,
     cosmopars: dict,
     halopars: dict,
-) -> halomodel.halomodel:
+) -> halo_model.HaloModel:
     """Will update the cosmology and halomodel with passed parameters."""
     current_cosmo = current_halomodel.cosmology
     current_haloparams = current_halomodel.haloparams
@@ -70,24 +72,24 @@ def update_halomodel(
         if halopars == current_haloparams:
             halo = current_halomodel
         else:
-            halo = halomodel.halomodel(current_cosmo, halopars)
+            halo = halo_model.HaloModel(current_cosmo, halopars)
     elif updated_cosmo == cfg.fiducialcosmo:
         if halopars == cfg.fiducialhaloparams:
             halo = cfg.fiducialhalomodel
         else:
-            halo = halomodel.halomodel(cfg.fiducialcosmo, halopars)
+            halo = halo_model.HaloModel(cfg.fiducialcosmo, halopars)
     else:
-        halo = halomodel.halomodel(updated_cosmo, halopars)
+        halo = halo_model.HaloModel(updated_cosmo, halopars)
     return halo
 
 
 def update_astro(
-    current_astro: astro.astro_functions,
+    current_astro: astro.AstroFunctions,
     cosmopars: dict,
     halopars: dict,
     astropars: dict,
     obspars: dict,
-) -> astro.astro_functions:
+) -> astro.AstroFunctions:
     """Will update the cosmology, halomodel, survey specifications, and the astro model with passed parameters."""
 
     current_halomodel = current_astro.halomodel
@@ -102,20 +104,20 @@ def update_astro(
                 return current_astro
             else:
                 survey_specs = update_surveySpecs(obspars)
-                return astro.astro_functions(current_halomodel, survey_specs, current_astoparams)
+                return astro.AstroFunctions(current_halomodel, survey_specs, current_astoparams)
         else:
             survey_specs = update_surveySpecs(obspars)
-            return astro.astro_functions(current_halomodel, survey_specs, astropars)
+            return astro.AstroFunctions(current_halomodel, survey_specs, astropars)
     elif updated_halomodel == cfg.fiducialhalomodel:
         if astropars == cfg.fiducialastroparams:
             if obspars == cfg.fiducialspecparams:
                 return cfg.fiducialastro
             else:
                 survey_specs = update_surveySpecs(obspars)
-                return astro.astro_functions(cfg.fiducialhalomodel, survey_specs, cfg.fiducialastroparams)
+                return astro.AstroFunctions(cfg.fiducialhalomodel, survey_specs, cfg.fiducialastroparams)
         else:
             survey_specs = update_surveySpecs(obspars)
-            return astro.astro_functions(cfg.fiducialhalomodel, survey_specs, astropars)
+            return astro.AstroFunctions(cfg.fiducialhalomodel, survey_specs, astropars)
     else:
         survey_specs = update_surveySpecs(obspars)
-        return astro.astro_functions(updated_halomodel, survey_specs, astropars)
+        return astro.AstroFunctions(updated_halomodel, survey_specs, astropars)

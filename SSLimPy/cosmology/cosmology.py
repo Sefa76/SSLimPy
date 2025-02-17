@@ -15,9 +15,9 @@ from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
-class boltzmann_code:
-    hardcoded_Neff = 3.043
-    hardcoded_neutrino_mass_fac = 94.07
+class BoltzmannCode:
+    N_EFF = 3.043
+    NEUTRINO_MASS_FAC = 94.07
 
     def __init__(self, cosmopars, code="camb"):
         """
@@ -143,17 +143,14 @@ class boltzmann_code:
             )  # This version does not have the discontinuity at Nur = 1.99
             g_factor = Neff / 3.0
         else:
-            classpars["N_ur"] = Neff - boltzmann_code.hardcoded_Neff / 3.0
-            g_factor = boltzmann_code.hardcoded_Neff / 3.0
+            classpars["N_ur"] = Neff - BoltzmannCode.N_EFF / 3.0
+            g_factor = BoltzmannCode.N_EFF / 3.0
 
         if "mnu" in classpars:
             mnu = classpars.pop("mnu")
             classpars["T_ncdm"] = (4.0 / 11.0) ** (1.0 / 3.0) * g_factor ** (1.0 / 4.0)
             classpars["Omega_ncdm"] = (
-                mnu
-                * g_factor ** (0.75)
-                / boltzmann_code.hardcoded_neutrino_mass_fac
-                / h**2
+                mnu * g_factor ** (0.75) / BoltzmannCode.NEUTRINO_MASS_FAC / h**2
             )
         elif "Omeganu" in classpars:
             classpars["Omega_ncdm"] = classpars.pop("Omeganu")
@@ -191,19 +188,23 @@ class boltzmann_code:
 
         if "Neff" in cambpars:
             Neff = cambpars.pop("Neff")
-            cambpars["num_nu_massless"] = Neff - boltzmann_code.hardcoded_Neff / 3
+            cambpars["num_nu_massless"] = Neff - BoltzmannCode.N_EFF / 3
         else:
             Neff = cambpars["num_nu_massive"] + cambpars["num_nu_massless"]
 
         if shareDeltaNeff:
             g_factor = Neff / 3
         else:
-            g_factor = boltzmann_code.hardcoded_Neff / 3
+            g_factor = BoltzmannCode.N_EFF / 3
 
-        neutrino_mass_fac = 94.07
         h2 = (cambpars["H0"] / 100) ** 2
         if "mnu" in cambpars:
-            Onu = cambpars["mnu"] / neutrino_mass_fac * (g_factor) ** 0.75 / h2
+            Onu = (
+                cambpars["mnu"]
+                / BoltzmannCode.NEUTRINO_MASS_FAC
+                * (g_factor) ** 0.75
+                / h2
+            )
             onuh2 = Onu * h2
             cambpars["omnuh2"] = onuh2
         elif "Omeganu" in cambpars:
@@ -525,8 +526,8 @@ class boltzmann_code:
         self.results.kmax_pk = self.kmax_pk
 
 
-class cosmo_functions:
-    celeritas = c.c
+class CosmoFunctions:
+    CELERITAS = c.c
 
     def __init__(
         self,
@@ -554,14 +555,14 @@ class cosmo_functions:
             if input_type is None:
                 input_type = cfg.input_type
             if input_type == "camb":
-                cambresults = boltzmann_code(cosmopars, code="camb")
+                cambresults = BoltzmannCode(cosmopars, code="camb")
                 self.code = "camb"
                 self.results = cambresults.results
                 self.kgrid = cambresults.results.kgrid
                 self.cosmopars = cambresults.cosmopars
                 self.cambcosmopars = cambresults.cambcosmopars
             elif input_type == "class":
-                classresults = boltzmann_code(cosmopars, code="class")
+                classresults = BoltzmannCode(cosmopars, code="class")
                 self.code = "class"
                 self.results = classresults.results
                 self.kgrid = classresults.results.kgrid
@@ -605,7 +606,7 @@ class cosmo_functions:
         """
         prefactor = 1
         if physical:
-            prefactor = cosmo_functions.celeritas
+            prefactor = CosmoFunctions.CELERITAS
 
         hubble = prefactor * self.results.h_of_z(z) * 1 / u.Mpc
 
@@ -850,7 +851,6 @@ class cosmo_functions:
             wavenumbers given by the input array `k`.
         """
         z = np.atleast_1d(z)
-        h_over_Mpc = self.h() / u.Mpc
 
         # wave number grids
         kmin_loc = self.settings["savgol_internalkmin"]  # 1/Mpc
@@ -879,9 +879,15 @@ class cosmo_functions:
             axis=0,
         )
 
-        logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()), len(z.flatten()))
-        zj = np.tile(z.flatten(), len(k.flatten()))
-        P_nw = uP * np.exp(bilinear_interpolate(log_kgrid_loc, z, pow_sg, logki, zj))
+        if len(z) == 1:
+            logki = np.log(k.to(u.Mpc**-1).value)
+            P_nw = uP * np.exp(linear_interpolate(log_kgrid_loc, pow_sg[:, 0], logki))
+        else:
+            logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()), len(z.flatten()))
+            zj = np.tile(z.flatten(), len(k.flatten()))
+            P_nw = uP * np.exp(
+                bilinear_interpolate(log_kgrid_loc, z, pow_sg, logki, zj)
+            )
 
         P_nw = np.reshape(P_nw, (*k.shape, *z.shape))
         return P_nw

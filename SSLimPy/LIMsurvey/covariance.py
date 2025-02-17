@@ -1,26 +1,25 @@
 import itertools
 from numba import njit, prange
 import numpy as np
-from SSLimPy.LIMsurvey import PowerSpectra
-from astropy import constants as c
+from SSLimPy.LIMsurvey import power_spectrum
 from astropy import units as u
 from scipy.integrate import trapezoid
 from scipy.special import legendre, roots_legendre
 from SSLimPy.interface import config as cfg
-from SSLimPy.LIMsurvey.higherorder import _integrate_2h, _integrate_3h, _integrate_4h
+from SSLimPy.LIMsurvey.higher_order import _integrate_2h, _integrate_3h, _integrate_4h
 from SSLimPy.utils.utils import *
 
 
 class Covariance:
-    def __init__(self, Powerspectrum: PowerSpectra.power_spectra):
-        self.cosmology = Powerspectrum.fiducial_cosmology
-        self.survey_specs = Powerspectrum.survey_specs
-        self.powerspectrum = Powerspectrum
-        self.k = self.powerspectrum.k
-        dk = self.powerspectrum.dk
+    def __init__(self, power_spectrum: power_spectrum.PowerSpectra):
+        self.cosmology = power_spectrum.fiducial_cosmology
+        self.survey_specs = power_spectrum.survey_specs
+        self.power_spectrum = power_spectrum
+        self.k = self.power_spectrum.k
+        dk = self.power_spectrum.dk
         self.dk = np.append(dk, dk[-1])
-        self.mu = self.powerspectrum.mu
-        self.z = self.powerspectrum.z
+        self.mu = self.power_spectrum.mu
+        self.z = self.power_spectrum.z
 
     def Nmodes(self):
         Vk = 4 * np.pi * self.k**2 * self.dk
@@ -33,17 +32,17 @@ class Covariance:
             * self.survey_specs.obsparams["Omega_field"].to(u.sr).value
             / (2 * self.survey_specs.obsparams["nD"] * self.survey_specs.obsparams["tobs"])
         )
-        F2 = c.c / self.survey_specs.obsparams["nu"]
+        F2 = self.cosmology.CELERITAS / self.survey_specs.obsparams["nu"]
         F3 = (
             self.cosmology.comoving(self.z) ** 2
             * (1 + self.z) ** 2
             / self.cosmology.Hubble(self.z, physical=True)
         )
-        PI = (F1 * F2 * F3).to(self.powerspectrum.Pk_Obs.unit)
+        PI = (F1 * F2 * F3).to(self.power_spectrum.Pk_Obs.unit)
         return PI
 
     def gaussian_cov(self):
-        Pobs = self.powerspectrum.Pk_Obs
+        Pobs = self.power_spectrum.Pk_Obs
         PI = self.Detector_noise()
         sigma = (Pobs + PI) ** 2 / self.Nmodes()[:, None, :]
 
@@ -86,13 +85,13 @@ class Covariance:
 
 
 class nonGuassianCov:
-    def __init__(self, Powerspectrum: PowerSpectra.power_spectra):
-        self.cosmo = Powerspectrum.cosmology
-        self.astro = Powerspectrum.astro
-        self.powerSpectrum = Powerspectrum
-        self.k = Powerspectrum.k
-        self.mu = Powerspectrum.mu
-        self.z = Powerspectrum.z
+    def __init__(self, power_spectrum: power_spectrum.PowerSpectra):
+        self.cosmo = power_spectrum.cosmology
+        self.astro = power_spectrum.astro
+        self.powerSpectrum = power_spectrum
+        self.k = power_spectrum.k
+        self.mu = power_spectrum.mu
+        self.z = power_spectrum.z
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
     def integrate_4h(self):

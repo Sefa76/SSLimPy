@@ -6,14 +6,14 @@ from numba import njit, prange
 from scipy.integrate import simpson
 from scipy.interpolate import RectBivariateSpline
 from scipy.special import legendre
-from SSLimPy.cosmology.astro import astro_functions
+from SSLimPy.cosmology.astro import AstroFunctions
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
-class power_spectra:
+class PowerSpectra:
 
-    def __init__(self, astro: astro_functions, BAOpars=dict()):
+    def __init__(self, astro: AstroFunctions, BAOpars=dict()):
         self.cosmology = astro.cosmology
         self.halomodel = astro.halomodel
         # Nu enters into the Mass-Luminosity and Luminosity-Temperature relations
@@ -46,6 +46,9 @@ class power_spectra:
         self.mu_edge = np.linspace(-1, 1, cfg.settings["nmu"] + 1)
         self.mu = (self.mu_edge[:-1] + self.mu_edge[1:]) / 2.0
         self.dmu = np.diff(self.mu)
+
+        self.compute_power_spectra()
+        self.compute_power_spectra_moments()
 
     ###############
     # De-Wiggling #
@@ -230,7 +233,7 @@ class power_spectra:
         else:
             Biasterm = (
                 restore_shape(self.astro.bhalo(k, z, mu=mu), k, mu, z)
-                * self.halomodel.sigma8_of_z(z, tracer=self.tracer)[None, None, :]
+                * np.reshape(self.halomodel.sigma8_of_z(z, tracer=self.tracer), z.shape)[None, None, :]
             )
         return np.squeeze(Biasterm)
 
@@ -387,12 +390,7 @@ class power_spectra:
             Ps = Pshot[None, None, :]
         else:
             if cfg.settings["halo_model_PS"]:
-                Ps = np.empty((*k.shape, *mu.shape, *z.shape))
-                for imu, mui in enumerate(mu):
-                    for ik, ki in enumerate(k):
-                        L2 = np.reshape(self.astro.Thalo(z, ki, ki, mui, -mui), z.shape)
-                        Ps[ik, imu, :] = L2.value
-                Ps = Ps * L2.unit
+                Ps = self.astro.T_one_halo(k, z, mu=mu)
             else:
                 Ps = self.astro.Tavg(z, p=2)
         return np.squeeze(Ps)
@@ -435,7 +433,10 @@ class power_spectra:
                 z,
             )
             if cfg.settings["nonlinearRSD"]:
-                rsd = rsd * self.fingers_of_god(k, mu, z, BAOpars=self.BAOpars)
+                rsd = rsd * np.reshape(
+                    self.fingers_of_god(k, mu, z, BAOpars=self.BAOpars),
+                    (*k.shape, *mu.shape, *z.shape),
+                )
         else:
             rsd = restore_shape(
                 self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),

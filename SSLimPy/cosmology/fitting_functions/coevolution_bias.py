@@ -57,7 +57,7 @@ class coevolution_bias(bias_fitting_functions):
 
         sigmaM = np.reshape(self.sigmaM(M, z), (*M.shape, *z.shape))
         dsigmaM_dM = np.reshape(
-            self.dsigmaM_dM(M, z).to(self.astro.Msunh**-1), (*M.shape, *z.shape)
+            self.dsigmaM_dM(M, z).to(self.halomodel.Msunh**-1), (*M.shape, *z.shape)
         )
         dlogsigmaM_dM = dsigmaM_dM / sigmaM
 

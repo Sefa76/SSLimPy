@@ -17,7 +17,7 @@ class bias_fitting_functions:
     def __init__(self, halomodel):
         self.halomodel = halomodel
         self.cosmology = halomodel.cosmology
-        self.bias_par = self.astroparams["bias_par"]
+        self.bias_par = halomodel.haloparams["bias_par"]
         self.sigmaM = partial(self.halomodel.sigmaM, tracer=self.halomodel.tracer)
         self.dsigmaM_dM = partial(
             self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer

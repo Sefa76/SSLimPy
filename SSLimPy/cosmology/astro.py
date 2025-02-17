@@ -5,29 +5,29 @@ import numpy as np
 from copy import deepcopy
 from scipy.interpolate import RectBivariateSpline
 
-from SSLimPy.cosmology.halomodel import halomodel
+from SSLimPy.cosmology.halo_model import HaloModel
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
-from SSLimPy.interface.surveySpecs import survey_specifications
+from SSLimPy.interface.survey_specs import SurveySpecifications
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
-class astro_functions:
+class AstroFunctions:
     def __init__(
         self,
-        Halomodel: halomodel,
-        Surveyspecs: survey_specifications,
+        halomodel: HaloModel,
+        survey_specs: SurveySpecifications,
         astropars: dict = dict(),
     ):
-        self.halomodel = Halomodel
-        self.cosmology = Halomodel.cosmology
-        self.survey_specs = Surveyspecs
+        self.halomodel = halomodel
+        self.cosmology = halomodel.cosmology
+        self.survey_specs = survey_specs
 
         # Units
-        self.hubble = Halomodel.hubble
-        self.Mpch = Halomodel.Mpch
-        self.Msunh = Halomodel.Msunh
+        self.hubble = halomodel.hubble
+        self.Mpch = halomodel.Mpch
+        self.Msunh = halomodel.Msunh
 
         self.astroparams = deepcopy(astropars)
         self._set_astrophysics_defaults()
@@ -92,8 +92,8 @@ class astro_functions:
         """
         model_type = self.model_type
         model_name = self.astroparams["model_name"]
-        self._luminosity_function = lf.luminosity_functions(self)
-        self._mass_luminosity_function = ml.mass_luminosity(self)
+        self._luminosity_function = lf.luminosity_functions(self, self.model_par)
+        self._mass_luminosity_function = ml.mass_luminosity(self, self.model_par)
 
         if model_type == "ML" and not hasattr(
             self._mass_luminosity_function, model_name
@@ -129,8 +129,8 @@ class astro_functions:
             LF_par = {
                 "A": 2.0e-6,
                 "b": 1.0,
-                "Mcut_min": self.astroparams["Mmin"],
-                "Mcut_max": self.astroparams["Mmax"],
+                "Mcut_min": self.halomodel.Mmin,
+                "Mcut_max": self.halomodel.Mmax,
             }
             off_mass_luminosity = ml.mass_luminosity(self, LF_par)
             L_of_M = getattr(off_mass_luminosity, "MassPow")
@@ -258,7 +258,10 @@ class astro_functions:
                 Lpbar *= np.exp(0.5 * p * (p - 1) * (sig_SFR / alpha * log10) ** 2)
         else:
             L = self.L
-            haloluminosity = self.haloluminosityfunction(L, z)
+            haloluminosity = np.reshape(
+                self.haloluminosityfunction(L, z),
+                (*L.shape, *z.shape),
+            )
             Lpbar = np.trapz(
                 L[:, None] ** (p + 1) * haloluminosity, np.log(L.value), axis=0
             )
@@ -305,7 +308,7 @@ class astro_functions:
         or when appoximating that the mean of higher order biases are
         independent from the scale dependence of the halo profile
         """
-        M = self.M
+        M = self.M.to(u.Msun)
         z = np.atleast_1d(z)
 
         if len(args) % p != 0:
@@ -315,8 +318,7 @@ class astro_functions:
 
         # Independent of k
         L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
-        dndM = self.halomodel.halomassfunction(M, z)
-        log10 = np.log(10)
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
 
         # Dependent on k
         normhaloprofile = []
@@ -331,7 +333,7 @@ class astro_functions:
 
         # Dependent on k and mu
         Fv = np.ones((p,))
-        if self.astroparams["v_of_M"]:
+        if self.halomodel.haloparams["v_of_M"]:
             Fv = []
             for ik in range(p):
                 k = kd[ik]
@@ -351,27 +353,48 @@ class astro_functions:
                 Fv.append(F)
 
         # Construct the integrand
-        weight_halo = 1
+        I1 = dndM * L_of_M**p * M[:, None]
+        I2 = I1
         for ik in range(p):
-            weight_halo = weight_halo * Fv[ik] * normhaloprofile[ik] * L_of_M
-        M = M.to(u.Msun)
+            I2 = I2 * Fv[ik] * normhaloprofile[ik]
         logM = np.log(M.value)
-        I0x = np.trapz(M[:, None] * dndM * weight_halo, logM, axis=-2)
-
-        # Add L scatter
-        I0x *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)
-        if "TonyLi" == self.model_name:
-            # LCO is nolonger conserved
-            I0x *= np.exp(0.5 * p * (self.sigma_scatter * log10) ** 2)
-
-            alpha = self.model_par["alpha"]
-            sig_SFR = self.model_par["sig_SFR"]
-            # SFR scatter
-            I0x *= np.exp(0.5 * p * (p - 1) * (sig_SFR / alpha * log10) ** 2)
-        return I0x
+        Umean = (np.trapz(I2, logM, axis=-2) / np.trapz(I1, logM, axis=-2)).to(1).value
+        return np.squeeze(self.Lavg(z, p=p) * Umean)
 
     def Thalo(self, z, *args, p=1):
         return self.CLT(z) ** p * self.Lhalo(z, *args, p=p)
+
+    def T_one_halo(self, k, z, mu=None):
+        """Directly computes the one-halo power spectrum."""
+        M = self.M.to(u.Msun)
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        z = np.atleast_1d(z)
+
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
+        L_of_M = np.reshape(
+            self.massluminosityfunction(M, z) ** 2, (*M.shape, *z.shape)
+        )
+        U2 = np.reshape(
+            self.halomodel.ft_NFW(k, M, z) ** 2, (*k.shape, *M.shape, *z.shape)
+        )
+        Fv = 1
+        if self.halomodel.haloparams["v_of_M"]:
+            Fv = np.reshape(
+                self.halomodel.broadening_FT(k, mu, M, z) ** 2,
+                (*k.shape, *mu.shape, *M.shape, *z.shape),
+            )
+        I1 = M[None, None, :, None] * L_of_M[None, None, :, :] * dndM[None, None, :, :]
+        I2 = I1 * U2[:, None, :, :] * Fv
+        Uavg = (
+            (
+                np.trapz(I2, np.log(M.value), axis=-2)
+                / np.trapz(I1, np.log(M.value), axis=-2)
+            )
+            .to(1)
+            .value
+        )
+        return np.squeeze(self.Tavg(z, p=2) * Uavg)
 
     def bhalo(self, k, z, mu=None):
         """Mean Tb, factor in front of the clutstering part of the LIM-autopower spectrum"""
@@ -383,30 +406,22 @@ class astro_functions:
         dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
         L = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
         b = restore_shape(self.halomodel.halobias(M, z, k=k), k, M, z)
-        U = restore_shape(
-            self.halomodel.ft_NFW(k, M, z), (*k.shape, *M.shape, *z.shape)
-        )
+        U = restore_shape(self.halomodel.ft_NFW(k, M, z), k, M, z)
 
         Fv = 1
-        if self.astroparams["v_of_M"]:
+        if self.halomodel.haloparams["v_of_M"]:
             Fv = np.reshape(
                 self.halomodel.broadening_FT(k, mu, M, z),
                 (*k.shape, *mu.shape, *M.shape, *z.shape),
             )
 
-        ingrnd = (
-            (b * U)[:, None, :, :]
-            * (L * dndM)[None, None, :, :]
-            * Fv
-            * M.to(u.Msun)[None, :, None, None]
+        I1 = L * dndM * M[:, None]
+        I2 = I1 * Fv * U[:, None, :, :] * b[:, None, :, :]
+        bmean = (
+            (np.trapz(I2, np.log(M.value), axis=-2) / np.trapz(I1, np.log(M.value), axis=-2)).to(1).value
         )
-        bbar = np.trapz(ingrnd, np.log(M.to(u.Msun).value))
-        if "TonyLi" == self.model_name:
-            # LCO is nolonger conserved
-            log10 = np.log(10)
-            bbar *= np.exp(0.5 * (self.sigma_scatter * log10) ** 2)
 
-        return self.CLT(z) * bbar * self.fduty
+        return np.squeeze(self.Tavg(z, p=1) * bmean)
 
     def recap_astro(self):
         print("Astronomical Parameters:")

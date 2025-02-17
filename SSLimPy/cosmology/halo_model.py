@@ -5,22 +5,22 @@ from numba import njit, prange
 from copy import deepcopy
 from scipy.special import sici
 
-from SSLimPy.cosmology.cosmology import cosmo_functions
+from SSLimPy.cosmology.cosmology import CosmoFunctions
 from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
-class halomodel:
+class HaloModel:
     """Computation of Halo model ingredients used to compute the nonlinear power spectrum"""
 
     def __init__(
         self,
-        Cosmo: cosmo_functions,
+        cosmo: CosmoFunctions,
         halopars: dict = dict(),
     ):
-        self.cosmology = Cosmo
+        self.cosmology = cosmo
         self.haloparams = deepcopy(halopars)
         self._set_halo_defaults()
 
@@ -43,6 +43,8 @@ class halomodel:
             self.haloparams["nR"],
         ).to(u.Mpc)
         self.M = (4 * np.pi / 3 * self.rho_tracer * self.R**3).to(u.Msun)
+        self.Mmin = min(self.M)
+        self.Mmax = max(self.M)
 
         if cfg.settings["k_kind"] == "log":
             k_edge = np.geomspace(
@@ -70,12 +72,12 @@ class halomodel:
         # !Without corrections for non-Gaussianity!
         # bias function
         self.delta_crit = 1.686
-        self._b_of_M = getattr(self._bias_function, self.astroparams["bias_model"])
+        self._b_of_M = getattr(self._bias_function, self.haloparams["bias_model"])
         # use halobias to compute the bias with all corrections
 
         # halo mass function
         self._dn_dM_of_M = getattr(
-            self._halo_mass_function, self.astroparams["hmf_model"]
+            self._halo_mass_function, self.haloparams["hmf_model"]
         )
         # use halomassfunction to compute the bias with all corrections
         self.concentration_lut = self._create_concentration_lookuptable()
@@ -111,7 +113,7 @@ class halomodel:
         Initialise computation of bias function.
         Raises error if  model given by bias_model does not exist.
         """
-        bias_name = self.astroparams["bias_model"]
+        bias_name = self.haloparams["bias_model"]
         self._bias_function = cb.coevolution_bias(self)
         if not hasattr(self._bias_function, bias_name):
             raise ValueError(bias_name + " not found in bias_fitting_functions.py")
@@ -129,7 +131,7 @@ class halomodel:
                 4
                 * np.pi
                 * (kinter[:, None] / (2 * np.pi)) ** 3
-                * self.matpow(kinter, z, nonlinear=False, tracer=self.tracer)
+                * self.cosmology.matpow(kinter, z, nonlinear=False, tracer=self.tracer)
             )
             .to(1)
             .value
@@ -184,13 +186,15 @@ class halomodel:
         c = np.zeros_like(arg)
         for iM, G_z_and_x in enumerate(G):
             for iz, G_x in enumerate(G_z_and_x):
-                c[iM, iz] = C[iz] * linear_interpolate(G_x, x, arg[iM, iz])
+                c[iM, iz] = C[iz] * linear_interpolate(
+                    G_x, x, np.atleast_1d(arg[iM, iz])
+                )
 
         return c
 
     def _compute_sigma(self, R, z, ingrnd, tracer="matter", moment=0):
         """Computes sigma if specifically asked for value not present in LUT"""
-        R = np.atleast_1d(R.to(u.Mpc))
+        R = np.atleast_1d(R.to(u.Mpc).value)
         z = np.atleast_1d(z).astype(float)
         # Save shapes
         Rs = R.shape
@@ -223,11 +227,12 @@ class halomodel:
         sigma = np.empty((*R.shape, *z.shape))
         for iR, Ri in enumerate(R):
             for iz, zi in enumerate(z):
+                r = np.squeeze(Ri).item()
                 sigma[iR, iz] = adaptive_mesh_integral(
                     0,
                     1,
                     ingrnd,
-                    Ri,
+                    r,
                     kinter.value,
                     Dkinter[:, iz],
                     self.haloparams["alpha_iSigma"],
@@ -292,7 +297,7 @@ class halomodel:
             self.cosmology.growth_rate(k, z, tracer=tracer),
             (*k.shape, *z.shape),
         )
-        s8 = self.sigma8_of_z(z, tracer=tracer)
+        s8 = np.reshape(self.sigma8_of_z(z, tracer=tracer), z.shape)
         return f * s8[None, :]
 
     def dsigmaR_of_z(self, R, z, tracer="matter"):
@@ -302,7 +307,7 @@ class halomodel:
             return np.squeeze(dsigma)
         else:
             sig = np.sqrt(
-                self._compute_sigma(R, z, dsigma_integrand, tracer=tracer, moment=0.0)
+                self._compute_sigma(R, z, sigma_integrand, tracer=tracer, moment=0.0)
             )
             dsig = self._compute_sigma(
                 R, z, dsigma_integrand, tracer=tracer, moment=0.0
@@ -329,7 +334,9 @@ class halomodel:
 
     def sigmaV_of_z(self, z, tracer="matter", moment=0):
         """Real space variance of velocity dispercion field Theta."""
-        R = 0.0  # Only appears like this in the code but could be easily added as an option
+        R = np.atleast_1d(
+            0.0 * u.Mpc
+        )  # Only appears like this in the code but could be easily added as an option
         sv = np.sqrt(
             self._compute_sigma(R, z, sigmav_integrand, tracer=tracer, moment=moment)
         )
@@ -342,7 +349,7 @@ class halomodel:
         rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
         R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
 
-        return self.cosmology.sigmaR_of_z(R, z, tracer)
+        return self.sigmaR_of_z(R, z, tracer)
 
     def dsigmaM_dM(self, M, z, tracer="matter"):
         """
@@ -353,8 +360,9 @@ class halomodel:
         rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
         R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
 
+        np.reshape(self.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape)).unit
         dsigma = (
-            np.reshape(self.cosmology.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape))
+            np.reshape(self.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape))
             * (R / (3 * M))[:, None]
         )
         return np.squeeze(dsigma)
@@ -377,7 +385,7 @@ class halomodel:
 
         vM = np.atleast_1d(self.haloparams["v_of_M"](Mvec))
         Hz = np.atleast_1d(self.cosmology.Hubble(zvec))
-        sv = vM / self.cosmology.celeritas * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
+        sv = vM / self.cosmology.CELERITAS * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
 
         return np.squeeze(sv)
 
@@ -459,7 +467,7 @@ class halomodel:
         R_NFW = (3.0 * M / (4.0 * np.pi * Delta * rho_crit)) ** (1.0 / 3.0)
 
         # get characteristic radius
-        c = self.concentration(M, z)[None, :, :]
+        c = np.reshape(self.concentration(M, z), (*M.shape, *z.shape))[None, :, :]
         r_s = R_NFW[None, :, None] / c
         gc = np.log(1 + c) - c / (1.0 + c)
         # argument: k*rs
@@ -653,7 +661,7 @@ class halomodel:
         bias = np.reshape(self._b_of_M(M, z, self.delta_crit), (*M.shape, *z.shape))
 
         f1 = (
-            (self.cosmology.Hubble(0, physical=True) / (self.cosmology.celeritas * k))
+            (self.cosmology.Hubble(0, physical=True) / (self.cosmology.CELERITAS * k))
             .to(1)
             .value
         )

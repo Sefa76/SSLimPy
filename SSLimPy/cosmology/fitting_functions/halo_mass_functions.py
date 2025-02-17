@@ -19,7 +19,7 @@ class halo_mass_functions:
 
         # Units and Redshifts
         self.Mpch = halomodel.Mpch
-        self.Msunh = halomodel.Mpch
+        self.Msunh = halomodel.Msunh
 
         # SigmaM functions
         self.sigmaM = partial(self.halomodel.sigmaM, tracer=self.halomodel.tracer)
