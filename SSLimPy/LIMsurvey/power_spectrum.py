@@ -47,6 +47,9 @@ class PowerSpectra:
         self.mu = (self.mu_edge[:-1] + self.mu_edge[1:]) / 2.0
         self.dmu = np.diff(self.mu)
 
+        self.compute_power_spectra()
+        self.compute_power_spectra_moments()
+
     ###############
     # De-Wiggling #
     ###############

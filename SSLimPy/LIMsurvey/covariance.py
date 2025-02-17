@@ -2,7 +2,6 @@ import itertools
 from numba import njit, prange
 import numpy as np
 from SSLimPy.LIMsurvey import power_spectrum
-from astropy import constants as c
 from astropy import units as u
 from scipy.integrate import trapezoid
 from scipy.special import legendre, roots_legendre
@@ -33,7 +32,7 @@ class Covariance:
             * self.survey_specs.obsparams["Omega_field"].to(u.sr).value
             / (2 * self.survey_specs.obsparams["nD"] * self.survey_specs.obsparams["tobs"])
         )
-        F2 = c.c / self.survey_specs.obsparams["nu"]
+        F2 = self.cosmology.CELERITAS / self.survey_specs.obsparams["nu"]
         F3 = (
             self.cosmology.comoving(self.z) ** 2
             * (1 + self.z) ** 2
