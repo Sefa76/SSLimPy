@@ -315,7 +315,7 @@ class AstroFunctions:
 
         # Independent of k
         L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
-        dndM = np.reshape(self.halomodel.halomassfunction(M, z),(*M.shape, *z.shape))
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
 
         # Dependent on k
         normhaloprofile = []
@@ -362,33 +362,35 @@ class AstroFunctions:
         return self.CLT(z) ** p * self.Lhalo(z, *args, p=p)
 
     def T_one_halo(self, k, z, mu=None):
-        """Directly computes the one-halo power spectrum.
-        """
+        """Directly computes the one-halo power spectrum."""
         M = self.M.to(u.Msun)
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
 
-        dndM = np.reshape(self.halomodel.halomassfunction(M, z),(*M.shape, *z.shape))
-        L_of_M = np.reshape(self.massluminosityfunction(M, z)**2, (*M.shape, *z.shape))
-        U2 = np.reshape(self.halomodel.ft_NFW(k, M, z)**2, (*k.shape, *M.shape, *z.shape))
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
+        L_of_M = np.reshape(
+            self.massluminosityfunction(M, z) ** 2, (*M.shape, *z.shape)
+        )
+        U2 = np.reshape(
+            self.halomodel.ft_NFW(k, M, z) ** 2, (*k.shape, *M.shape, *z.shape)
+        )
         Fv = 1
         if self.halomodel.haloparams["v_of_M"]:
             Fv = np.reshape(
-                self.halomodel.broadening_FT(k, mu, M, z)**2,
+                self.halomodel.broadening_FT(k, mu, M, z) ** 2,
                 (*k.shape, *mu.shape, *M.shape, *z.shape),
             )
-        I1 = (
-            M[None, None, :, None]
-            * L_of_M[None, None, :, :]
-            * dndM[None, None, :, :]
+        I1 = M[None, None, :, None] * L_of_M[None, None, :, :] * dndM[None, None, :, :]
+        I2 = I1 * U2[:, None, :, :] * Fv
+        Uavg = (
+            (
+                np.trapz(I2, np.log(M.value), axis=-2)
+                / np.trapz(I1, np.log(M.value), axis=-2)
+            )
+            .to(1)
+            .value
         )
-        I2 = (
-            I1
-            * U2[:, None, :, :]
-            * Fv
-        )
-        Uavg = (np.trapz(I2, np.log(M.value), axis=-2) / np.trapz(I1, np.log(M.value), axis=-2)).to(1).value
         return np.squeeze(self.Tavg(z, p=2) * Uavg)
 
     def bhalo(self, k, z, mu=None):
@@ -412,7 +414,9 @@ class AstroFunctions:
 
         I1 = L * dndM * M[:, None]
         I2 = I1 * Fv * U[:, None, :, :] * b[:, None, :, :]
-        bmean = (np.trapz(I2, np.log(M.value)) / np.trapz(I1, np.log(M.value))).to(1).value
+        bmean = (
+            (np.trapz(I2, np.log(M.value)) / np.trapz(I1, np.log(M.value))).to(1).value
+        )
 
         return self.Tavg(z, p=1) * bmean
 

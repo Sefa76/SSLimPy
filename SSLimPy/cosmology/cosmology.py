@@ -150,10 +150,7 @@ class BoltzmannCode:
             mnu = classpars.pop("mnu")
             classpars["T_ncdm"] = (4.0 / 11.0) ** (1.0 / 3.0) * g_factor ** (1.0 / 4.0)
             classpars["Omega_ncdm"] = (
-                mnu
-                * g_factor ** (0.75)
-                / BoltzmannCode.NEUTRINO_MASS_FAC
-                / h**2
+                mnu * g_factor ** (0.75) / BoltzmannCode.NEUTRINO_MASS_FAC / h**2
             )
         elif "Omeganu" in classpars:
             classpars["Omega_ncdm"] = classpars.pop("Omeganu")
@@ -202,7 +199,12 @@ class BoltzmannCode:
 
         h2 = (cambpars["H0"] / 100) ** 2
         if "mnu" in cambpars:
-            Onu = cambpars["mnu"] / BoltzmannCode.NEUTRINO_MASS_FAC * (g_factor) ** 0.75 / h2
+            Onu = (
+                cambpars["mnu"]
+                / BoltzmannCode.NEUTRINO_MASS_FAC
+                * (g_factor) ** 0.75
+                / h2
+            )
             onuh2 = Onu * h2
             cambpars["omnuh2"] = onuh2
         elif "Omeganu" in cambpars:
@@ -877,13 +879,15 @@ class CosmoFunctions:
             axis=0,
         )
 
-        if len(z)==1:
+        if len(z) == 1:
             logki = np.log(k.to(u.Mpc**-1).value)
-            P_nw = uP * np.exp(linear_interpolate(log_kgrid_loc, pow_sg[:,0], logki))
+            P_nw = uP * np.exp(linear_interpolate(log_kgrid_loc, pow_sg[:, 0], logki))
         else:
             logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()), len(z.flatten()))
             zj = np.tile(z.flatten(), len(k.flatten()))
-            P_nw = uP * np.exp(bilinear_interpolate(log_kgrid_loc, z, pow_sg, logki, zj))
+            P_nw = uP * np.exp(
+                bilinear_interpolate(log_kgrid_loc, z, pow_sg, logki, zj)
+            )
 
         P_nw = np.reshape(P_nw, (*k.shape, *z.shape))
         return P_nw

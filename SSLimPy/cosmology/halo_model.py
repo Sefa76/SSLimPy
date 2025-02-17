@@ -186,7 +186,9 @@ class HaloModel:
         c = np.zeros_like(arg)
         for iM, G_z_and_x in enumerate(G):
             for iz, G_x in enumerate(G_z_and_x):
-                c[iM, iz] = C[iz] * linear_interpolate(G_x, x, np.atleast_1d(arg[iM, iz]))
+                c[iM, iz] = C[iz] * linear_interpolate(
+                    G_x, x, np.atleast_1d(arg[iM, iz])
+                )
 
         return c
 
@@ -307,7 +309,9 @@ class HaloModel:
             sig = np.sqrt(
                 self._compute_sigma(R, z, sigma_integrand, tracer=tracer, moment=0.0)
             )
-            dsig = self._compute_sigma(R, z, dsigma_integrand, tracer=tracer, moment=0.0)
+            dsig = self._compute_sigma(
+                R, z, dsigma_integrand, tracer=tracer, moment=0.0
+            )
             return dsig / (2 * sig) * u.Mpc**-1
 
     def n_eff_of_z(self, R, z, tracer="matter"):
@@ -318,7 +322,9 @@ class HaloModel:
             n_eff = -2 * R[:, None] * sigma_dic["dsigma"] / sigma_dic["sigma"] - 3.0
         else:
             sig = self._compute_sigma(R, z, sigma_integrand, tracer=tracer, moment=0.0)
-            dsig = self._compute_sigma(R, z, dsigma_integrand, tracer=tracer, moment=0.0)
+            dsig = self._compute_sigma(
+                R, z, dsigma_integrand, tracer=tracer, moment=0.0
+            )
             n_eff = -R[:, None] * dsig / sig - 3.0
 
         ns = self.cosmology.cosmopars["ns"]
@@ -328,7 +334,9 @@ class HaloModel:
 
     def sigmaV_of_z(self, z, tracer="matter", moment=0):
         """Real space variance of velocity dispercion field Theta."""
-        R = np.atleast_1d(0.0 * u.Mpc)  # Only appears like this in the code but could be easily added as an option
+        R = np.atleast_1d(
+            0.0 * u.Mpc
+        )  # Only appears like this in the code but could be easily added as an option
         sv = np.sqrt(
             self._compute_sigma(R, z, sigmav_integrand, tracer=tracer, moment=moment)
         )
@@ -353,7 +361,8 @@ class HaloModel:
         R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
 
         np.reshape(self.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape)).unit
-        dsigma = (np.reshape(self.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape))
+        dsigma = (
+            np.reshape(self.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape))
             * (R / (3 * M))[:, None]
         )
         return np.squeeze(dsigma)
