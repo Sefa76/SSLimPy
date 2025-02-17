@@ -195,7 +195,7 @@ def initialize_fiducialhalomodel():
     global fiducialhalomodel
 
     fiducialhalomodel = halo_model.HaloModel(
-        Cosmo= fiducialcosmo,
+        cosmo= fiducialcosmo,
         halopars= fiducialhaloparams,
     )
 
@@ -213,6 +213,7 @@ def initialize_fiducialastro():
     global fiducialastro
 
     fiducialastro = astro.AstroFunctions(
-        Halomodel= fiducialhalomodel,
+        halomodel= fiducialhalomodel,
+        survey_specs= fiducialspecs,
         astropars= fiducialastroparams
     )

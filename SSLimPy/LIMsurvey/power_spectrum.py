@@ -233,7 +233,7 @@ class PowerSpectra:
         else:
             Biasterm = (
                 restore_shape(self.astro.bhalo(k, z, mu=mu), k, mu, z)
-                * self.halomodel.sigma8_of_z(z, tracer=self.tracer)[None, None, :]
+                * np.reshape(self.halomodel.sigma8_of_z(z, tracer=self.tracer), z.shape)[None, None, :]
             )
         return np.squeeze(Biasterm)
 
@@ -390,12 +390,7 @@ class PowerSpectra:
             Ps = Pshot[None, None, :]
         else:
             if cfg.settings["halo_model_PS"]:
-                Ps = np.empty((*k.shape, *mu.shape, *z.shape))
-                for imu, mui in enumerate(mu):
-                    for ik, ki in enumerate(k):
-                        L2 = np.reshape(self.astro.Thalo(z, ki, ki, mui, -mui), z.shape)
-                        Ps[ik, imu, :] = L2.value
-                Ps = Ps * L2.unit
+                Ps = self.astro.T_one_halo(k, z, mu=mu)
             else:
                 Ps = self.astro.Tavg(z, p=2)
         return np.squeeze(Ps)
@@ -438,7 +433,10 @@ class PowerSpectra:
                 z,
             )
             if cfg.settings["nonlinearRSD"]:
-                rsd = rsd * self.fingers_of_god(k, mu, z, BAOpars=self.BAOpars)
+                rsd = rsd * np.reshape(
+                    self.fingers_of_god(k, mu, z, BAOpars=self.BAOpars),
+                    (*k.shape, *mu.shape, *z.shape),
+                )
         else:
             rsd = restore_shape(
                 self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),

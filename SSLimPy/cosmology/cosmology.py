@@ -849,7 +849,6 @@ class CosmoFunctions:
             wavenumbers given by the input array `k`.
         """
         z = np.atleast_1d(z)
-        h_over_Mpc = self.h() / u.Mpc
 
         # wave number grids
         kmin_loc = self.settings["savgol_internalkmin"]  # 1/Mpc
@@ -878,9 +877,13 @@ class CosmoFunctions:
             axis=0,
         )
 
-        logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()), len(z.flatten()))
-        zj = np.tile(z.flatten(), len(k.flatten()))
-        P_nw = uP * np.exp(bilinear_interpolate(log_kgrid_loc, z, pow_sg, logki, zj))
+        if len(z)==1:
+            logki = np.log(k.to(u.Mpc**-1).value)
+            P_nw = uP * np.exp(linear_interpolate(log_kgrid_loc, pow_sg[:,0], logki))
+        else:
+            logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()), len(z.flatten()))
+            zj = np.tile(z.flatten(), len(k.flatten()))
+            P_nw = uP * np.exp(bilinear_interpolate(log_kgrid_loc, z, pow_sg, logki, zj))
 
         P_nw = np.reshape(P_nw, (*k.shape, *z.shape))
         return P_nw

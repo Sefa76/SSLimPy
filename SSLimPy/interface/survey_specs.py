@@ -113,9 +113,9 @@ class SurveySpecifications:
         Wsurvey = Wperp * Wparr
         Vsurvey = (
             simpson(
-                q[:, None] ** 3
-                * simpson(np.abs(Wsurvey) ** 2 / (2 * np.pi) ** 2, muq, axis=1),
-                np.log(q.value),
+                y=q[:, None] ** 3
+                * simpson(y=np.abs(Wsurvey) ** 2 / (2 * np.pi) ** 2,x=muq, axis=1),
+                x=np.log(q.value),
                 axis=0,
             )
             * (Sfield * Lparr).unit
