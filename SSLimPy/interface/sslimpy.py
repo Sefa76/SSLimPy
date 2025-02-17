@@ -6,7 +6,7 @@ from numpy import atleast_1d
 
 sys.path.append("../")
 import SSLimPy.interface.config as cfg
-import SSLimPy.interface.updater as updater
+from SSLimPy.interface import updater
 
 class sslimpy:
     def __init__(

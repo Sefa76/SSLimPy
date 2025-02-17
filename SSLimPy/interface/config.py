@@ -149,15 +149,6 @@ def init(
     global fiducialcosmoparams
     fiducialcosmoparams = cosmopars
 
-    global fiducialhaloparams
-    fiducialhaloparams = halopars
-
-    global fiducialspecparams
-    fiducialspecparams = obspars_dict
-
-    global fiducialastroparams
-    fiducialastroparams = astropars
-
     # seperate the nuiscance-like cosmology parameters
     # add new ones here
     global nuiscance_like_params_names
@@ -171,6 +162,15 @@ def init(
 
     global fiducialfullcosmoparams
     fiducialfullcosmoparams = {**fiducialcosmoparams, **fiducialnuiscancelikeparams}
+
+    global fiducialhaloparams
+    fiducialhaloparams = halopars
+
+    global fiducialspecparams
+    fiducialspecparams = obspars_dict
+
+    global fiducialastroparams
+    fiducialastroparams = astropars
 
     initialize_fiducialcosmo()
     initialize_fiducialhalomodel()
