@@ -258,7 +258,10 @@ class AstroFunctions:
                 Lpbar *= np.exp(0.5 * p * (p - 1) * (sig_SFR / alpha * log10) ** 2)
         else:
             L = self.L
-            haloluminosity = self.haloluminosityfunction(L, z)
+            haloluminosity = np.reshape(
+                self.haloluminosityfunction(L, z),
+                (*L.shape, *z.shape),
+            )
             Lpbar = np.trapz(
                 L[:, None] ** (p + 1) * haloluminosity, np.log(L.value), axis=0
             )
@@ -415,10 +418,10 @@ class AstroFunctions:
         I1 = L * dndM * M[:, None]
         I2 = I1 * Fv * U[:, None, :, :] * b[:, None, :, :]
         bmean = (
-            (np.trapz(I2, np.log(M.value)) / np.trapz(I1, np.log(M.value))).to(1).value
+            (np.trapz(I2, np.log(M.value), axis=-2) / np.trapz(I1, np.log(M.value), axis=-2)).to(1).value
         )
 
-        return self.Tavg(z, p=1) * bmean
+        return np.squeeze(self.Tavg(z, p=1) * bmean)
 
     def recap_astro(self):
         print("Astronomical Parameters:")
