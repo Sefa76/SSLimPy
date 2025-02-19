@@ -244,7 +244,7 @@ class AstroFunctions:
             dndM = np.reshape(
                 self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape)
             )
-            Lpbar = np.trapz(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(u.Lsun)
+            Lpbar = np.trapz(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(u.Lsun**p * u.Mpc**-3)
 
             # Add L scatter
             Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)

@@ -453,7 +453,25 @@ class HaloModel:
         )
         return np.squeeze(c)
 
-    def ft_NFW(self, k, M, z):
+    def concentration_Bullock(self, M, z):
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+
+        growthnu = self.delta_crit / np.reshape(
+            self.sigmaM(0.01 * M, z, tracer=self.tracer),
+            (*M.shape, *z.shape)
+        ) * self.cosmology.growth_factor(1e-3*u.Mpc**-1, z, tracer=self.tracer)
+        gs = growthnu.shape
+        growthnu = growthnu.flatten()
+
+        growth = self.cosmology.growth_factor(1e-3*u.Mpc**-1, self.z, tracer=self.tracer)
+        zf = np.reshape(linear_interpolate(growth, self.z, growthnu), gs)
+        for im in range(len(M)):
+            zf[im, :] = np.maximum(zf[im, :], z)
+        c = 5.196 * (1 + zf) / (1 + z[None, :])
+        return np.squeeze(c)
+
+    def ft_NFW(self, k, M, z, bloating=False, concB=False):
         """
         Fourier transform of NFW profile, for computing one-halo term
         """
@@ -467,11 +485,24 @@ class HaloModel:
         R_NFW = (3.0 * M / (4.0 * np.pi * Delta * rho_crit)) ** (1.0 / 3.0)
 
         # get characteristic radius
-        c = np.reshape(self.concentration(M, z), (*M.shape, *z.shape))[None, :, :]
+        if concB:
+            c = np.reshape(self.concentration_Bullock(M, z), (*M.shape, *z.shape))[None, :, :]
+        else:
+            c = np.reshape(self.concentration(M, z), (*M.shape, *z.shape))[None, :, :]
         r_s = R_NFW[None, :, None] / c
         gc = np.log(1 + c) - c / (1.0 + c)
         # argument: k*rs
         x = (k[:, None, None] * r_s).to(1).value
+
+        if bloating:
+            nu  = self.delta_crit / np.reshape(
+                self.sigmaM(M, z, tracer=self.tracer),
+                (*M.shape, *z.shape)
+            )
+            eta = 0.1281 * np.reshape(
+                self.sigma8_of_z(z, tracer=self.tracer), z.shape,
+            )**-0.3644
+            x = x * nu[None, :, :]**eta[None, None, :]
 
         si_x, ci_x = sici(x)
         si_cx, ci_cx = sici((1.0 + c) * x)
@@ -679,6 +710,123 @@ class HaloModel:
         delta_b = (bias_of_M_and_z - 1) * f2 * f1_of_k / Tk_of_k_and_z
         return np.squeeze(delta_b)
 
+    ##################################
+    # real space halo power spectrum #
+    ##################################
+
+    def P1h(self, k, z, mu=None, bloating=False, concB=False):
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        M = self.M.to(u.Msun)
+        z = np.atleast_1d(z)
+
+        dndM = np.reshape(self.halomassfunction(M, z),
+                          (*M.shape, *z.shape),
+        )
+
+        fac = self.M[:, None] / self.rho_tracer
+        W = (
+            np.reshape(
+                self.ft_NFW(k, M, z, bloating=bloating, concB=concB),
+                (*k.shape, *M.shape, *z.shape),
+             ) * fac
+        ).to(u.Mpc**3)
+
+        Fv = 1
+        if self.haloparams["v_of_M"]:
+            Fv = np.reshape(
+                self.broadening_FT(k, mu, M, z),
+                (*k.shape, *mu.shape, *M.shape, *z.shape)
+            )
+        Intgrnd = (
+            dndM[None, None, :, :]
+            * W[:, None, :, :]**2
+            * Fv**2
+        )
+        P1h = np.trapz(Intgrnd * M[None, None, :, None], np.log(M.value), axis=-2)
+        return P1h
+
+    def PQnl(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        P = np.reshape(self.cosmology.matpow(k, z, tracer="clustering"),
+                       (*k.shape, *z.shape),
+        )
+        Pnw = np.reshape(self.cosmology.nonwiggle_pow(k, z, tracer="clustering"),
+                         (*k.shape, *z.shape),
+        )
+        gd = np.exp(-(k[:, None]* self.sigmaV_of_z(z, tracer="matter", moment=0)).to(1).value)
+        return P * gd + Pnw * (1 - gd)
+    
+    def Cclust(self, k, z, mu=None):
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        M = self.M.to(u.Msun)
+        z = np.atleast_1d(z)
+
+        dndM = np.reshape(self.halomassfunction(M, z),
+                          (*M.shape, *z.shape),
+        )
+
+        fac = self.M[:, None] / self.rho_tracer
+        W = (
+            np.reshape(
+                self.ft_NFW(k, M, z),
+                (*k.shape, *M.shape, *z.shape),
+             ) * fac
+        ).to(u.Mpc**3)      
+
+        Fv = 1
+        if self.haloparams["v_of_M"]:
+            Fv = np.reshape(
+                self.broadening_FT(k, mu, M, z),
+                (*k.shape, *mu.shape, *M.shape, *z.shape)
+            )
+        
+        b = restore_shape(self.halobias(M, z, k=k), k, M, z)
+        
+        Intgrnd = (
+            dndM[None, None, :, :]
+            * W[:, None, :, :]
+            * Fv
+            * b[:, None, :, :]
+        )
+        clust = np.trapz(Intgrnd * M[None, None, :, None], np.log(M.value), axis=-2)
+        return np.squeeze(clust)
+
+    def P_halo(self, k, z, mu=None, bloating=False, P2h_sup= False, concB=False):
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        z = np.atleast_1d(z)
+
+        P1h = restore_shape(self.P1h(k, z, mu=mu, bloating=bloating, concB=concB), k, mu, z)
+        # Cclust = restore_shape(self.Cclust(k, z, mu=mu), k, mu, z)
+        Cclust = 1
+        if P2h_sup:
+            nd = 2.853
+            f = np.reshape(
+                0.2696 * self.sigma8_of_z(z, tracer=self.tracer)**0.9403, z.shape
+            )
+            kd = np.reshape(
+                0.05699 * self.Mpch**-1 * self.sigma8_of_z(z, tracer=self.tracer)**-1.089,
+                z.shape
+            )
+            x = ((k[:,None]/kd[None,:]).to(1).value)**nd
+            Cclust = Cclust * (1- f* x/(1+x))[:, None, :]
+
+        PQnl = np.reshape(self.PQnl(k, z), (*k.shape, *z.shape))
+        P2h = PQnl[:, None, :] * Cclust
+
+        M_nl = self.mass_non_linear(z)
+        R_nl = (3.0 * M_nl / (4.0 * np.pi * self.rho_tracer)) ** (1.0 / 3.0)
+        alpha_smooth = np.reshape(1.875 * (1.603)**self.n_eff_of_z(R_nl, z, tracer="clustering"), z.shape)
+
+        PtD = 4 * np.pi* (k / (2 * np.pi))**3
+        PtD = PtD[:, None, None]
+        P = 1 / PtD * ((PtD * P2h)**alpha_smooth + (PtD * P1h)**alpha_smooth)**(1/alpha_smooth) 
+
+        return np.squeeze(P)
 
 ##############
 # Numba Part #
