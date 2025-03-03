@@ -105,6 +105,14 @@ def smooth_dW(x):
 ##################
 
 
+@njit
+def any_close_to_zero(values):
+    for value in values:
+        if np.isclose(value, 0):
+            return True
+    return False
+
+
 @njit(
     "(float64, float64, float64, float64, float64, float64)",
     fastmath=True,

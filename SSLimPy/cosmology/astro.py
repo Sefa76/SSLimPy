@@ -294,7 +294,7 @@ class AstroFunctions:
 
         I1 = np.trapz(itgrnd1, np.log(M.value), axis=0)
         I2 = np.trapz(itgrnd2, np.log(M.value), axis=0)
-        avgbL = I1 / I2
+        avgbL = np.squeeze(I1 / I2)
         return avgbL.to(1).value
 
     ##################

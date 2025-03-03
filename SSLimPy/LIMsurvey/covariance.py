@@ -109,24 +109,24 @@ class nonGuassianCov:
         I1 = np.empty((kl, wl))
         indexmenge = range(wl)
         for imu1 in indexmenge:
-            Ii = self.powerSpectrum.reduced_halo_temperature_moments(
-                z, k, mu[imu1], moment=1
+            Ii = self.astro.Lhalo(
+                z, k, mu[imu1], p=1
             )
             I1[:, imu1] = Ii.value
 
-        Lmb1 = self.astro.bavghalo("b1", z, 1)
-        Lmb2 = self.astro.bavghalo("b2", z, 1)
-        LmbG2 = self.astro.bavghalo("bG2", z, 1)
-        Lmb3 = self.astro.bavghalo("b3", z, 1)
-        LmbdG2 = self.astro.bavghalo("bdG2", z, 1)
-        LmbG3 = self.astro.bavghalo("bG3", z, 1)
-        LmbDG2 = self.astro.bavghalo("bDG2", z, 1)
+        Lmb1 = self.astro.bavg("b1", z, 1)
+        Lmb2 = self.astro.bavg("b2", z, 1)
+        LmbG2 = self.astro.bavg("bG2", z, 1)
+        Lmb3 = self.astro.bavg("b3", z, 1)
+        LmbdG2 = self.astro.bavg("bdG2", z, 1)
+        LmbG3 = self.astro.bavg("bG3", z, 1)
+        LmbDG2 = self.astro.bavg("bDG2", z, 1)
         f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer)
 
         k, Pk = k.value, Pk.value
 
         result = _integrate_4h(
-            Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, xi, w, k, Pk, I1
+            Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f.item(), xi, w, k, Pk, I1
         )
 
         return result
