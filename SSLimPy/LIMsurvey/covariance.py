@@ -109,7 +109,7 @@ class nonGuassianCov:
         I1 = np.empty((kl, wl))
         indexmenge = range(wl)
         for imu1 in indexmenge:
-            Ii = self.astro.Lhalo(
+            Ii = self.astro.Thalo(
                 z, k, mu[imu1], p=1
             )
             I1[:, imu1] = Ii.value
@@ -137,20 +137,17 @@ class nonGuassianCov:
         Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
 
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
-        mu = xi * np.pi
+        mu = np.pi * xi
 
-        #########################
-        # Precompute Halo terms #
-        #########################
         kl = len(k)
         wl = len(w)
 
-        # compute I1 for v_of_M models (We cant compute fNL models)
-        indexmenge = range(wl)
+        # compute I1 for v_of_M models
         I1 = np.empty((kl, wl))
+        indexmenge = range(wl)
         for imu1 in indexmenge:
-            Ii = self.powerSpectrum.halo_temperature_moments(
-                z, k, mu[imu1], bias_order=1, moment=1
+            Ii = self.astro.Thalo(
+                z, k, mu[imu1], p=1
             )
             I1[:, imu1] = Ii.value
 
@@ -160,14 +157,22 @@ class nonGuassianCov:
             imu1,
             imu2,
         ) in indexmenge:
-            Iij = self.powerSpectrum.halo_temperature_moments(
-                z, k, k, mu[imu1], mu[imu2], bias_order=1, moment=2
+            Iij = self.astro.Thalo(
+                z, k, k, mu[imu1], mu[imu2], p=2
             )
             I2[:, :, imu1, imu2] = Iij.value
 
+        Lmb1 = self.astro.bavg("b1", z, 1)
+        Lmb2 = self.astro.bavg("b2", z, 1)
+        LmbG2 = self.astro.bavg("bG2", z, 1)
+        L2mb1 = self.astro.bavg("b1", z, 2)
+        L2mb2 = self.astro.bavg("b2", z, 2)
+        L2mbG2 = self.astro.bavg("bG2", z, 2)
+        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer)
+
         k, Pk = k.value, Pk.value
 
-        result = _integrate_3h(k, xi, w, Pk, I1, I2)
+        result = _integrate_3h(Lmb1, Lmb2, LmbG2, L2mb1, L2mb2, L2mbG2, f.item(), xi, w, k, Pk, I1, I2)
 
         return result
 
@@ -177,64 +182,58 @@ class nonGuassianCov:
         Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
 
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
-        mu = xi * np.pi
+        mu = np.pi * xi
 
-        #########################
-        # Precompute Halo terms #
-        #########################
         kl = len(k)
         wl = len(w)
 
-        # compute I1 for v_of_M models (We cant compute fNL models)
-        indexmenge = range(wl)
+        # compute I1 for v_of_M models
         I1 = np.empty((kl, wl))
+        indexmenge = range(wl)
         for imu1 in indexmenge:
-            Ii = self.powerSpectrum.halo_temperature_moments(
-                z, k, mu[imu1], bias_order=1, moment=1
+            Ii = self.astro.Thalo(
+                z, k, mu[imu1], p=1
             )
             I1[:, imu1] = Ii.value
 
         indexmenge = itertools.product(range(wl), repeat=2)
         I2 = np.empty((kl, kl, wl, wl))
+        I3 = np.empty((kl, kl, wl, wl))
+
         for (
             imu1,
             imu2,
         ) in indexmenge:
-            Iij = self.powerSpectrum.halo_temperature_moments(
-                z, k, k, mu[imu1], mu[imu2], bias_order=1, moment=2
+            Iij = self.astro.Thalo(
+                z, k, k, mu[imu1], mu[imu2], p=2
             )
             I2[:, :, imu1, imu2] = Iij.value
 
-        indexmenge = itertools.product(range(wl), repeat=2)
-        I3 = np.empty((kl, kl, wl, wl))
-        for (
-            imu1,
-            imu2,
-        ) in indexmenge:
             # the third argument is allways the negative of the first
             for ik, ki in enumerate(k):
-                Iijk = self.powerSpectrum.halo_temperature_moments(
-                    z, ki, k, ki, mu[imu1], mu[imu2], -mu[imu1], bias_order=1, moment=3
+                Iijk = self.astro.Thalo(
+                    z, ki, k, ki, mu[imu1], mu[imu2], -mu[imu1], p=3
                 )
                 I3[ik, :, imu1, imu2] = Iijk.value
 
+        Lmb1 = self.astro.bavg("b1", z, 1)
+        L2mb1 = self.astro.bavg("b1", z, 2)
+        L3mb1 = self.astro.bavg("b1", z, 3)
+        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer)
+
         k, Pk = k.value, Pk.value
 
-        result = _integrate_2h(k, xi, w, Pk, I1, I2, I3)
+        result = _integrate_2h(Lmb1, L2mb1, L3mb1, f.item(), xi, w,k, Pk, I1, I2, I3)
 
         return result
 
     def integrate_1h(self):
         k = self.k
         z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
 
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
-        mu = xi * np.pi
+        mu = np.pi * xi
 
-        #########################
-        # Precompute Halo terms #
-        #########################
         kl = len(k)
         wl = len(w)
 
@@ -246,7 +245,7 @@ class nonGuassianCov:
             imu2,
         ) in indexmengemu:
             for ik1, ik2 in indexmengek:
-                Iij = self.powerSpectrum.halo_temperature_moments(
+                Iij = self.astro.Thalo(
                     z,
                     k[ik1],
                     k[ik2],
@@ -256,12 +255,20 @@ class nonGuassianCov:
                     mu[imu2],
                     -mu[imu1],
                     -mu[imu2],
-                    bias_order=1,
-                    moment=4,
+                    p=4,
                 )
                 I4[ik1, ik2, imu1, imu2] = Iij.value
 
-        result = np.sum(np.sum(I4 / 4 * w, axis=-1) * w, axis=-1)
+        result = np.empty((kl, kl, 3, 3))
+        result[:,:, 0, 0] = np.sum(np.pi * w * legendre_0(mu) * np.sum(np.pi * w * legendre_0(mu) * I4))
+        result[:,:, 0, 1] = np.sum(np.pi * w * legendre_2(mu) * np.sum(np.pi * w * legendre_0(mu) * I4))
+        result[:,:, 0, 2] = np.sum(np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_0(mu) * I4))
+        result[:,:, 1, 0] = result[:,:, 0, 1]
+        result[:,:, 1, 1] = np.sum(np.pi * w * legendre_2(mu) * np.sum(np.pi * w * legendre_2(mu) * I4))
+        result[:,:, 1, 2] = np.sum(np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_2(mu) * I4))
+        result[:,:, 2, 0] = result[:,:, 0, 2]
+        result[:,:, 2, 1] = result[:,:, 1, 2]
+        result[:,:, 2, 2] = np.sum(np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_4(mu) * I4))
         return result
 
 
