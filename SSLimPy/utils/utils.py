@@ -1,6 +1,7 @@
 from numba import njit
 import numpy as np
 
+
 ##################
 # Helper Functions
 ##################
@@ -30,7 +31,7 @@ def lognormal(x, mu, sigma):
 def restore_shape(A, *args):
     """
     Extremely dangerous function to reshape squeezed arrays into arrays with boradcastable shapes
-    This assumes that the output shape has lenghs corresponding to input 
+    This assumes that the output shape has lenghs corresponding to input
     and is sqeezed in order of the input
     """
     A = np.atleast_1d(A)
@@ -54,6 +55,7 @@ def restore_shape(A, *args):
     A = A.reshape(new_shape_A)
     return A
 
+
 #####################
 # Special Functions #
 #####################
@@ -75,6 +77,16 @@ def legendre_4(mu):
 
 
 @njit
+def get_legendre(ell, mu):
+    if ell==0:
+        return legendre_0(mu)
+    if ell==2:
+        return legendre_2(mu)
+    if ell==4:
+        return legendre_4(mu)
+    
+
+@njit
 def smooth_W(x):
     lx = len(x)
     W = np.empty(lx)
@@ -82,7 +94,7 @@ def smooth_W(x):
         if xi < 1e-3:
             W[ix] = 1.0 - 1.0 / 10.0 * xi**2
         else:
-            W[ix] = 3.0 / xi**3.0 * (np.sin(xi) - xi * np.cos(xi))
+            W[ix] = 3.0 / xi**3 * (np.sin(xi) - xi * np.cos(xi))
     return W
 
 
@@ -94,7 +106,7 @@ def smooth_dW(x):
         if xi < 1e-3:
             dW[ix] = -1.0 / 5.0 * xi - 1.0 / 70.0 * xi**3
         else:
-            dW[ix] = 3.0 / xi**2.0 * np.sin(xi) - 9 / xi**4 * (
+            dW[ix] = 3.0 / xi**2 * np.sin(xi) - 9 / xi**4 * (
                 np.sin(xi) - xi * np.cos(xi)
             )
     return dW
@@ -115,7 +127,6 @@ def any_close_to_zero(values):
 
 @njit(
     "(float64, float64, float64, float64, float64, float64)",
-    fastmath=True,
 )
 def scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
 
@@ -134,7 +145,6 @@ def scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
 
 @njit(
     "(float64, float64, float64, float64, float64, float64)",
-    fastmath=True,
 )
 def addVectors(
     k1,
@@ -146,35 +156,33 @@ def addVectors(
 ):
     k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
     radicant = k1**2 + 2 * k1pk2 + k2**2
+
     if np.isclose(radicant, 0):
-        k12 = 0
-        mu12 = 0
-        phi12 = 0
+        return 0.0, 0.0, 0.0
+    
+    k12 = np.sqrt(radicant)
+    mu12 = (k1 * mu1 + k2 * mu2) / k12
+    mu12 = min(np.abs(mu12), 1.0) * np.sign(mu12)
+
+    if np.isclose(np.abs(mu12), 1):
+        return k12, mu12, 0
+    
+    s1s = max(0, 1 - mu1**2)
+    s2s = max(0, 1 - mu2**2)
+
+    x = k1 * np.sqrt(s1s) * np.cos(ph1) + k2 * np.sqrt(s2s) * np.cos(ph2)
+    y = k1 * np.sqrt(s1s) * np.sin(ph1) + k2 * np.sqrt(s2s) * np.sin(ph2)
+
+    if np.isclose(x, 0):
+        phi12 = np.pi if np.sign(y) == 1 else -np.pi
     else:
-        k12 = np.sqrt(radicant)
-        mu12 = (k1 * mu1 + k2 * mu2) / k12
-        if np.isclose(np.abs(mu12), 1):
-            phi12 = 0
-        else:
-            # Yes this sometimes fails
-            s1s = 1 - mu1**2
-            if np.isclose(s1s, 0):
-                s1s = 0
-            s2s = 1 - mu2**2
-            if np.isclose(s2s, 0):
-                s2s = 0
-
-            x = k1 * np.sqrt(s1s) * np.cos(ph1) + k2 * np.sqrt(s2s) * np.cos(ph2)
-            y = k1 * np.sqrt(s1s) * np.sin(ph1) + k2 * np.sqrt(s2s) * np.sin(ph2)
-
-            phi12 = np.arctan2(y, x)
+        phi12 = np.arctan2(y, x)
 
     return k12, mu12, phi12
 
 
 @njit(
     "(float64[:], float64[:], float64[:])",
-    fastmath=True,
 )
 def linear_interpolate(xi, yi, x):
     xl = yi.size
@@ -201,7 +209,6 @@ def linear_interpolate(xi, yi, x):
 
 @njit(
     "(float64[:], float64[:], float64[:,:], float64[:], float64[:])",
-    fastmath=True,
 )
 def bilinear_interpolate(xi, yj, zij, x, y):
     # Check input sizes
@@ -243,3 +250,61 @@ def bilinear_interpolate(xi, yj, zij, x, y):
             + Q22 * (x[i] - x1[i]) * (y[i] - y1[i])
         ) / ((x2[i] - x1[i]) * (y2[i] - y1[i]))
     return results
+
+
+#####################
+# Spline Integrator #
+#####################
+
+
+@njit
+def adaptive_mesh_integral(a, b, integrand, args=(), eps=1e-2):
+    """Adaptation of implementation of HMCode2020 by Alexander Mead"""
+    if a == b:
+        return 0
+
+    # Define the minimum and maximum number of iterations
+    jmin = 5  # Minimum iterations to avoid premature convergence
+    jmax = 20  # Maximum iterations before timeout
+
+    # Initialize sum variables for integration
+    sum_2n = 0.0
+    sum_n = 0.0
+    sum_old = 0.0
+    sum_new = 0.0
+
+    for j in range(1, jmax + 1):
+        n = 1 + 2 ** (j - 1)
+        dx = (b - a) / (n - 1)
+        if j == 1:
+            t = np.array([a, b])
+            f = np.empty_like(t)
+            for it, ti in enumerate(t):
+                f[it] = integrand(ti, *args)
+            sum_2n = np.sum(0.5 * f * dx)
+            sum_new = sum_2n
+        else:
+            t = a + (b - a) * (np.arange(2, n, 2) - 1) / (n - 1)
+            f = np.empty_like(t)
+            for it, ti in enumerate(t):
+                f[it] = integrand(ti, *args)
+
+            sum_2n = sum_n / 2 + np.sum(f * dx)
+            sum_new = (4 * sum_2n - sum_n) / 3
+            # print(sum_new, sum_old)
+
+        if j >= jmin:
+            if sum_old != 0.0:
+                if abs(1.0 - sum_new / sum_old) < eps:
+                    return sum_new
+            elif sum_new == 0.0:
+                return 0.0
+        if j == jmax:
+            # print(*args)
+            print("INTEGRATE: Integration timed out")
+            return sum_new
+        else:
+            sum_old = sum_new
+            sum_n = sum_2n
+            sum_2n = 0.0
+    return sum_new

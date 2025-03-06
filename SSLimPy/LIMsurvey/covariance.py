@@ -6,7 +6,7 @@ from astropy import units as u
 from scipy.integrate import trapezoid
 from scipy.special import legendre, roots_legendre
 from SSLimPy.interface import config as cfg
-from SSLimPy.LIMsurvey.higher_order import _integrate_2h, _integrate_3h, _integrate_4h
+from SSLimPy.LIMsurvey.higher_order import *
 from SSLimPy.utils.utils import *
 
 
@@ -30,7 +30,11 @@ class Covariance:
         F1 = (
             self.survey_specs.obsparams["Tsys_NEFD"] ** 2
             * self.survey_specs.obsparams["Omega_field"].to(u.sr).value
-            / (2 * self.survey_specs.obsparams["nD"] * self.survey_specs.obsparams["tobs"])
+            / (
+                2
+                * self.survey_specs.obsparams["nD"]
+                * self.survey_specs.obsparams["tobs"]
+            )
         )
         F2 = self.cosmology.CELERITAS / self.survey_specs.obsparams["nu"]
         F3 = (
@@ -94,13 +98,14 @@ class nonGuassianCov:
         self.z = power_spectrum.z
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
-    def integrate_4h(self):
+    def integrate_4h(self, args: dict = dict(), eps=1e-2):
         k = self.k
         z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
+        Pk = self.cosmo.matpow(k, z, nonlinear=False, tracer=self.tracer)
 
-        xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
-        mu = np.pi * xi
+        xi, wi = roots_legendre(cfg.settings["nnodes_legendre"])
+        mu = xi
+        w = wi
 
         kl = len(k)
         wl = len(w)
@@ -109,32 +114,54 @@ class nonGuassianCov:
         I1 = np.empty((kl, wl))
         indexmenge = range(wl)
         for imu1 in indexmenge:
-            Ii = self.astro.Thalo(
-                z, k, mu[imu1], p=1
-            )
-            I1[:, imu1] = Ii.value
+            I1[:, imu1] = self.astro.Thalo(z, k, mu[imu1], p=1).value
+        I1 = I1 / I1[0, :] # Normaisation
+        # I1 = np.ones((kl, wl))
+        hI = I1[:, None, :, None] ** 2 * I1[None, :, None, :] ** 2
 
-        Lmb1 = self.astro.bavg("b1", z, 1)
-        Lmb2 = self.astro.bavg("b2", z, 1)
-        LmbG2 = self.astro.bavg("bG2", z, 1)
-        Lmb3 = self.astro.bavg("b3", z, 1)
-        LmbdG2 = self.astro.bavg("bdG2", z, 1)
-        LmbG3 = self.astro.bavg("bG3", z, 1)
-        LmbDG2 = self.astro.bavg("bDG2", z, 1)
-        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer)
-
-        k, Pk = k.value, Pk.value
-
-        result = _integrate_4h(
-            Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f.item(), xi, w, k, Pk, I1
+        Lmb1 = args.get("b1", self.astro.bavg("b1", z, 1))
+        Lmb2 = args.get("b2", self.astro.bavg("b2", z, 1))
+        LmbG2 = args.get("bG2", self.astro.bavg("bG2", z, 1))
+        Lmb3 = args.get("b3", self.astro.bavg("b3", z, 1))
+        LmbdG2 = args.get("bdG2", self.astro.bavg("bdG2", z, 1))
+        LmbG3 = args.get("bG3", self.astro.bavg("bG3", z, 1))
+        LmbDG2 = args.get("bDG2", self.astro.bavg("bDG2", z, 1))
+        f = args.get(
+            "f", self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer).item()
         )
+        sigma_parr = args.get(
+            "sigma_parr",
+            self.powerSpectrum.survey_specs.sigma_parr(self.z, self.powerSpectrum.nu)
+            .to(u.Mpc)
+            .value,
+        )
+        sigma_perp = args.get(
+            "sigma_perp",
+            self.powerSpectrum.survey_specs.sigma_perp(self.z).to(u.Mpc).value,
+        )
+        k, Pk = k.to(u.Mpc**-1).value, Pk.to(u.Mpc**3).value
 
+        args = (
+            Lmb1,
+            Lmb2,
+            LmbG2,
+            Lmb3,
+            LmbdG2,
+            LmbG3,
+            LmbDG2,
+            f,
+            sigma_parr,
+            sigma_perp,
+            k,
+            Pk,
+        )
+        result = integrate(integrand_4h, k, xi, w, hI, args=args, eps=eps)
         return result
 
     def integrate_3h(self):
         k = self.k
         z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
+        Pk = self.cosmo.matpow(k, z, nonlinear=False, tracer=self.tracer)
 
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
         mu = np.pi * xi
@@ -146,21 +173,16 @@ class nonGuassianCov:
         I1 = np.empty((kl, wl))
         indexmenge = range(wl)
         for imu1 in indexmenge:
-            Ii = self.astro.Thalo(
-                z, k, mu[imu1], p=1
-            )
-            I1[:, imu1] = Ii.value
+            I1[:, imu1] = self.astro.Thalo(z, k, mu[imu1], p=1).value
 
-        indexmenge = itertools.product(range(wl), repeat=2)
         I2 = np.empty((kl, kl, wl, wl))
-        for (
-            imu1,
-            imu2,
-        ) in indexmenge:
-            Iij = self.astro.Thalo(
+        indexmenge = itertools.product(range(wl), repeat=2)
+        for imu1, imu2 in indexmenge:
+            I2[:, :, imu1, imu2] = self.astro.Thalo(
                 z, k, k, mu[imu1], mu[imu2], p=2
-            )
-            I2[:, :, imu1, imu2] = Iij.value
+            ).value
+
+        hI = I2 * I1[:, None, :, None] * I1[None, :, None, :]
 
         Lmb1 = self.astro.bavg("b1", z, 1)
         Lmb2 = self.astro.bavg("b2", z, 1)
@@ -168,18 +190,41 @@ class nonGuassianCov:
         L2mb1 = self.astro.bavg("b1", z, 2)
         L2mb2 = self.astro.bavg("b2", z, 2)
         L2mbG2 = self.astro.bavg("bG2", z, 2)
-        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer)
+        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer).item()
+        sigma_parr = (
+            self.powerSpectrum.survey_specs.sigma_parr(self.z, self.powerSpectrum.nu)
+            .to(u.Mpc)
+            .value
+        )
+        sigma_perp = self.powerSpectrum.survey_specs.sigma_perp(self.z).to(u.Mpc).value
+        k, Pk = k.to(u.Mpc**-1).value, Pk.to(u.Mpc**3).value
 
-        k, Pk = k.value, Pk.value
-
-        result = _integrate_3h(Lmb1, Lmb2, LmbG2, L2mb1, L2mb2, L2mbG2, f.item(), xi, w, k, Pk, I1, I2)
-
+        result = integrate(
+            integrand_3h,
+            k,
+            xi,
+            w,
+            hI,
+            args=(
+                Lmb1,
+                Lmb2,
+                LmbG2,
+                L2mb1,
+                L2mb2,
+                L2mbG2,
+                f,
+                sigma_parr,
+                sigma_perp,
+                k,
+                Pk,
+            ),
+        )
         return result
 
     def integrate_2h(self):
         k = self.k
         z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear="False", tracer=self.tracer)
+        Pk = self.cosmo.matpow(k, z, nonlinear=False, tracer=self.tracer)
 
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
         mu = np.pi * xi
@@ -191,40 +236,73 @@ class nonGuassianCov:
         I1 = np.empty((kl, wl))
         indexmenge = range(wl)
         for imu1 in indexmenge:
-            Ii = self.astro.Thalo(
-                z, k, mu[imu1], p=1
-            )
-            I1[:, imu1] = Ii.value
+            I1[:, imu1] = self.astro.Thalo(z, k, mu[imu1], p=1).value
 
-        indexmenge = itertools.product(range(wl), repeat=2)
         I2 = np.empty((kl, kl, wl, wl))
         I3 = np.empty((kl, kl, wl, wl))
-
-        for (
-            imu1,
-            imu2,
-        ) in indexmenge:
-            Iij = self.astro.Thalo(
+        indexmenge = itertools.product(range(wl), repeat=2)
+        for imu1, imu2 in indexmenge:
+            I2[:, :, imu1, imu2] = self.astro.Thalo(
                 z, k, k, mu[imu1], mu[imu2], p=2
-            )
-            I2[:, :, imu1, imu2] = Iij.value
-
-            # the third argument is allways the negative of the first
-            for ik, ki in enumerate(k):
-                Iijk = self.astro.Thalo(
-                    z, ki, k, ki, mu[imu1], mu[imu2], -mu[imu1], p=3
-                )
-                I3[ik, :, imu1, imu2] = Iijk.value
+            ).value
+            I3[:, :, imu1, imu2] = self.astro.Thalo(
+                z, k, k, mu[imu1], mu[imu2], p=2, scale=(2, 1)
+            ).value
 
         Lmb1 = self.astro.bavg("b1", z, 1)
         L2mb1 = self.astro.bavg("b1", z, 2)
         L3mb1 = self.astro.bavg("b1", z, 3)
-        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer)
+        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer).item()
+        sigma_parr = (
+            self.powerSpectrum.survey_specs.sigma_parr(self.z, self.powerSpectrum.nu)
+            .to(u.Mpc)
+            .value
+        )
+        sigma_perp = self.powerSpectrum.survey_specs.sigma_perp(self.z).to(u.Mpc).value
+        k, Pk = k.to(u.Mpc**-1).value, Pk.to(u.Mpc**3).value
 
-        k, Pk = k.value, Pk.value
+        T2h_31 = np.zeros(kl, kl, 3, 3)
+        for ik1 in range(kl):
+            for ik2 in range(ik1, kl):
+                hIT = np.transpose(I3, (1, 0, 3, 2))  # k2, k1, mu2, mu1
+                Th31 = isotropized_2h_31(
+                    k[ik1],
+                    xi,
+                    Lmb1,
+                    L3mb1,
+                    f,
+                    sigma_parr,
+                    sigma_perp,
+                    I1[ik1, :],
+                    hIT[ik2, ik1, :, :],
+                    k,
+                    Pk,
+                ) + isotropized_2h_31(
+                    k[ik2],
+                    xi,
+                    Lmb1,
+                    L3mb1,
+                    f,
+                    sigma_parr,
+                    sigma_perp,
+                    I1[ik2, :],
+                    I3[ik1, ik2, :, :],
+                    k,
+                    Pk,
+                )
+                T2h_31[ik1, ik2, :, :] = compute_multipole_matrix(xi, w, Th31, 1.0)
+        T2h_31 += np.transpose(T2h_31, (1, 0, 3, 2))
 
-        result = _integrate_2h(Lmb1, L2mb1, L3mb1, f.item(), xi, w,k, Pk, I1, I2, I3)
+        T2h_22 = integrate(
+            integrand_2h_22,
+            k,
+            xi,
+            w,
+            I2**2,
+            args=(L2mb1, f, sigma_parr, sigma_perp, k, Pk),
+        )
 
+        result = T2h_22 + T2h_31
         return result
 
     def integrate_1h(self):
@@ -260,15 +338,27 @@ class nonGuassianCov:
                 I4[ik1, ik2, imu1, imu2] = Iij.value
 
         result = np.empty((kl, kl, 3, 3))
-        result[:,:, 0, 0] = np.sum(np.pi * w * legendre_0(mu) * np.sum(np.pi * w * legendre_0(mu) * I4))
-        result[:,:, 0, 1] = np.sum(np.pi * w * legendre_2(mu) * np.sum(np.pi * w * legendre_0(mu) * I4))
-        result[:,:, 0, 2] = np.sum(np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_0(mu) * I4))
-        result[:,:, 1, 0] = result[:,:, 0, 1]
-        result[:,:, 1, 1] = np.sum(np.pi * w * legendre_2(mu) * np.sum(np.pi * w * legendre_2(mu) * I4))
-        result[:,:, 1, 2] = np.sum(np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_2(mu) * I4))
-        result[:,:, 2, 0] = result[:,:, 0, 2]
-        result[:,:, 2, 1] = result[:,:, 1, 2]
-        result[:,:, 2, 2] = np.sum(np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_4(mu) * I4))
+        result[:, :, 0, 0] = np.sum(
+            np.pi * w * legendre_0(mu) * np.sum(np.pi * w * legendre_0(mu) * I4)
+        )
+        result[:, :, 0, 1] = np.sum(
+            np.pi * w * legendre_2(mu) * np.sum(np.pi * w * legendre_0(mu) * I4)
+        )
+        result[:, :, 0, 2] = np.sum(
+            np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_0(mu) * I4)
+        )
+        result[:, :, 1, 0] = result[:, :, 0, 1]
+        result[:, :, 1, 1] = np.sum(
+            np.pi * w * legendre_2(mu) * np.sum(np.pi * w * legendre_2(mu) * I4)
+        )
+        result[:, :, 1, 2] = np.sum(
+            np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_2(mu) * I4)
+        )
+        result[:, :, 2, 0] = result[:, :, 0, 2]
+        result[:, :, 2, 1] = result[:, :, 1, 2]
+        result[:, :, 2, 2] = np.sum(
+            np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_4(mu) * I4)
+        )
         return result
 
 

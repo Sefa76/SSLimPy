@@ -37,12 +37,12 @@ class SurveySpecifications:
     def sigma_parr(self, z, nu_obs):
         x = (self.obsparams["dnu"] / nu_obs).to(1).value
         y = (1 + z) / self.cosmology.Hubble(z)
-        return x * y
+        return np.squeeze(x * y)
 
     def sigma_perp(self, z):
         x = self.obsparams["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
         y = self.cosmology.angdist(z) * (1 + z)
-        return x * y
+        return np.squeeze(x * y)
 
     def F_parr(self, k, mu, z, nu_obs):
         k = np.atleast_1d(k)

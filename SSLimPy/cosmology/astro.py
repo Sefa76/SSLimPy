@@ -301,7 +301,7 @@ class AstroFunctions:
     # Halo integrals #
     ##################
 
-    def Lhalo(self, z, *args, p=1):
+    def Lhalo(self, z, *args, p=1, scale=()):
         """Luminosity weight higher order halo profiles for n-halo terms
         Computes the mean halo profile weight with some power of the luminosity.
         this shows up for example in the halo shot noise,
@@ -316,6 +316,11 @@ class AstroFunctions:
         else:
             kd = [np.atleast_1d(args[ik]) for ik in range(p)]
 
+        if scale:
+            alpha = np.array([*scale])
+        else:
+            alpha = np.ones(p)
+
         # Independent of k
         L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
         dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
@@ -329,7 +334,7 @@ class AstroFunctions:
             )
             U = np.expand_dims(U, (*range(ik), *range(ik + 1, p)))
             U = np.expand_dims(U, (*range(p, 2 * p),))
-            normhaloprofile.append(U)
+            normhaloprofile.append(np.power(U * L_of_M, alpha[ik]))
 
         # Dependent on k and mu
         Fv = np.ones((p,))
@@ -350,19 +355,19 @@ class AstroFunctions:
                     F,
                     (*range(p, p + ik), *range(p + ik + 1, 2 * p)),
                 )
-                Fv.append(F)
+                Fv.append(np.power(F, alpha[ik]))
 
         # Construct the integrand
-        I1 = dndM * L_of_M**p * M[:, None]
-        I2 = I1
+        I1 = dndM * L_of_M**np.sum(alpha) * M[:, None]
+        I2 = dndM * M[:, None]
         for ik in range(p):
             I2 = I2 * Fv[ik] * normhaloprofile[ik]
         logM = np.log(M.value)
         Umean = (np.trapz(I2, logM, axis=-2) / np.trapz(I1, logM, axis=-2)).to(1).value
         return np.squeeze(self.Lavg(z, p=p) * Umean)
 
-    def Thalo(self, z, *args, p=1):
-        return self.CLT(z) ** p * self.Lhalo(z, *args, p=p)
+    def Thalo(self, z, *args, p=1, scale=()):
+        return self.CLT(z) ** p * self.Lhalo(z, *args, p=p, scale=scale)
 
     def T_one_halo(self, k, z, mu=None):
         """Directly computes the one-halo power spectrum."""
