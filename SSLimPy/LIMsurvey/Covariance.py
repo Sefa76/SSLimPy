@@ -20,15 +20,30 @@ class Covariance:
         self.cosmology = powerspectrum.fiducialcosmo
         self.powerspectrum = powerspectrum
         self.k = self.powerspectrum.k
-        dk = self.powerspectrum.dk
-        self.dk = np.append(dk, dk[-1])
+        self.dk = self.powerspectrum.dk
         self.mu = self.powerspectrum.mu
         self.z = self.powerspectrum.z
 
     def Nmodes(self):
         Vk = 4 * np.pi * self.k**2 * self.dk
-        _, Vw = self.powerspectrum.Wsurvey(self.k,self.mu)
-        return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi)**3)
+        #_, Vw = self.powerspectrum.Wsurvey(self.k,self.mu)
+        ## WE'RE USING HERE THE ANALYTIC VOLUME, DOESN'T MATCH THE ONE IN WSURVEY
+        ## TO DO: CHECK THIS 
+        
+        # Calculate dz from deltanu
+        nu = self.powerspectrum.nu
+        nuObs = self.powerspectrum.nuObs
+        Delta_nu = self.powerspectrum.Delta_nu
+        z = (nu / nuObs - 1).to(1).value
+        z_min = (nu / (nuObs + Delta_nu / 2) - 1).to(1).value
+        z_max = (nu / (nuObs - Delta_nu / 2) - 1).to(1).value
+
+        # Construct W_survey (now just a cylinder)
+        Sfield = self.powerspectrum.Sfield(z, cfg.obspars["Omega_field"])
+        Lparr = self.powerspectrum.Lfield(z_min, z_max)
+        Vw = Sfield * Lparr
+        #return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi)**3)
+        return Vk[:, None] * Vw / (2 * (2 * np.pi)**3)
 
     def Detector_noise(self):
         F1 = (

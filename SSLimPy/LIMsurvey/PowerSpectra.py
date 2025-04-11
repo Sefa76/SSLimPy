@@ -59,7 +59,7 @@ class PowerSpectra:
                 cfg.settings["kmin"], cfg.settings["kmax"], cfg.settings["nk"]+1
             )
         self.k = (self.k_edge[:-1] + self.k_edge[1:]) / 2.0
-        self.dk = np.diff(self.k)
+        self.dk = np.diff(self.k_edge)
         self.mu_edge = np.linspace(-1, 1, cfg.settings["nmu"]+1)
         self.mu = (self.mu_edge[:-1] + self.mu_edge[1:]) / 2.0
         self.dmu = np.diff(self.mu)
