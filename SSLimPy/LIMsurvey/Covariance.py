@@ -70,25 +70,25 @@ class Covariance:
         # compute the C_ell covaraiance
         cov_00 = trapezoid(
             legendre(0)(self.mu)[None,:,None]**2
-            * sigma, axis=1) * (1 / 2)
+            * sigma, x = self.mu, axis=1) * (1 / 2)
         cov_20 = trapezoid(
             legendre(0)(self.mu)[None,:,None]
             * legendre(2)(self.mu)[None,:,None]
-            * sigma, axis=1) * (5 / 2)
+            * sigma, x = self.mu, axis=1) * (5 / 2)
         cov_40 = trapezoid(
             legendre(0)(self.mu)[None,:,None]
             * legendre(4)(self.mu)[None,:,None]
-            * sigma, axis=1) * (9 / 2)
+            * sigma, x = self.mu, axis=1) * (9 / 2)
         cov_22 = trapezoid(
             legendre(2)(self.mu)[None,:,None]**2
-            * sigma, axis=1) * (25 / 2)
+            * sigma, x = self.mu, axis=1) * (25 / 2)
         cov_42 = trapezoid(
             legendre(2)(self.mu)[None,:,None]
             * legendre(4)(self.mu)[None,:,None]
-            * sigma, axis=1) * (45 / 2)
+            * sigma, x = self.mu, axis=1) * (45 / 2)
         cov_44 = trapezoid(
             legendre(4)(self.mu)[None,:,None]**2
-            * sigma, axis=1) * (81 / 2)
+            * sigma, x = self.mu, axis=1) * (81 / 2)
 
         # construct the covariance
         nk = np.uint16(len(self.k))
