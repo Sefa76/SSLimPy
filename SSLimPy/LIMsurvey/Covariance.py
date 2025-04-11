@@ -49,7 +49,7 @@ class Covariance:
         F1 = (
             cfg.obspars["Tsys_NEFD"]**2
             * cfg.obspars["Omega_field"].to(u.sr).value
-            / (2 * cfg.obspars["nD"]
+            / (cfg.obspars["nD"]
                * cfg.obspars["tobs"]
             )
         )
