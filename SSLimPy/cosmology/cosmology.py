@@ -16,7 +16,7 @@ from SSLimPy.utils.utils import *
 
 
 class BoltzmannCode:
-    N_EFF = 3.043
+    N_EFF = 3.044
     NEUTRINO_MASS_FAC = 94.07
 
     def __init__(self, cosmopars, code="camb"):
@@ -103,7 +103,7 @@ class BoltzmannCode:
 
         # Set default value for Neff if it is not found in cosmopars
         if not any(par in self.cosmopars for par in ["N_ur", "Neff"]):
-            self.cosmopars["Neff"] = 3.043
+            self.cosmopars["Neff"] = 3.044
 
         # Set default value for gamma, if it is not found in cosmopars
         # gamma is not used in many places, therefore not needed to add back in cosmopars
@@ -165,46 +165,46 @@ class BoltzmannCode:
             )
 
         return classpars
-
     # Basis Conversion for Camb
     def basechange_camb(self, cosmopars, camb):
-        shareDeltaNeff = cfg.settings["share_delta_neff"]
-
         # transforms cosmopars into cosmopars that can be read by CAMB
         cambpars = deepcopy(cosmopars)
         if "h" in cambpars:
-            h = cambpars.pop("h")
-            h2 = h**2
-            cambpars["H0"] = h * 100
+            cambpars["H0"] = cambpars.pop("h") * 100
+        if "H0" in cambpars:
+            self.h_now = cambpars["H0"] / 100
         if "Omegab" in cambpars:
-            cambpars["ombh2"] = cambpars.pop("Omegab") * h2
+            cambpars["ombh2"] = cambpars.pop("Omegab") * (cambpars["H0"] / 100) ** 2
         if "Omegak" in cambpars:
             cambpars["omk"] = cambpars.pop("Omegak")
         if "w0" in cambpars:
             cambpars["w"] = cambpars.pop("w0")
+        if "logAs" in cambpars:
+            cambpars["As"] = np.exp(cambpars.pop("logAs")) * 1.0e-10
 
-        if "alpha_s" in cambpars:
-            cambpars["nrun"] = cambpars.pop("alpha_s")
-
+        shareDeltaNeff = cfg.settings["share_delta_neff"]
+        cambpars["share_delta_neff"] = shareDeltaNeff
+        fidNeff = self.N_EFF
         if "Neff" in cambpars:
             Neff = cambpars.pop("Neff")
-            cambpars["num_nu_massless"] = Neff - BoltzmannCode.N_EFF / 3
+            if shareDeltaNeff:
+                cambpars["num_nu_massless"] = Neff - cambpars["num_nu_massive"]
+            else:
+                cambpars["num_nu_massless"] = Neff - fidNeff / 3
+
         else:
             Neff = cambpars["num_nu_massive"] + cambpars["num_nu_massless"]
 
         if shareDeltaNeff:
             g_factor = Neff / 3
         else:
-            g_factor = BoltzmannCode.N_EFF / 3
+            g_factor = fidNeff / 3
 
-        h2 = (cambpars["H0"] / 100) ** 2
+        neutrino_mass_fac = self.NEUTRINO_MASS_FAC
+        h2 = self.h_now**2
+
         if "mnu" in cambpars:
-            Onu = (
-                cambpars["mnu"]
-                / BoltzmannCode.NEUTRINO_MASS_FAC
-                * (g_factor) ** 0.75
-                / h2
-            )
+            Onu = cambpars["mnu"] / neutrino_mass_fac * (g_factor) ** 0.75 / h2
             onuh2 = Onu * h2
             cambpars["omnuh2"] = onuh2
         elif "Omeganu" in cambpars:
@@ -212,21 +212,29 @@ class BoltzmannCode:
             onuh2 = cambpars["omnuh2"]
         elif "omnuh2" in cambpars:
             onuh2 = cambpars["omnuh2"]
+
         if "Omegam" in cambpars:  # TO BE GENERALIZED
             cambpars["omch2"] = cambpars.pop("Omegam") * h2 - cambpars["ombh2"] - onuh2
 
+        if "alpha_s" in cambpars:
+            cambpars["nrun"] = cambpars.pop("alpha_s")
+
         rescaleAs = False
         if "sigma8" in cambpars:
-            insigma8 = cambpars.pop("sigma8")
-            cambpars["As"] = 2.1e-9
+            insigma8 = cambpars["sigma8"]
+            cambpars["As"] = self.settings.get("rescale_ini_As", 2.1e-9)
+            cambpars.pop("sigma8")
             rescaleAs = True
 
         try:
-            camb.set_params(**cambpars)
+            camb.set_params(**cambpars) 
         except camb.CAMBUnknownArgumentError as argument:
-            print("Remove parameter from cambparams: ", str(argument))
+            print("Remove parameter from cambparams: " + str(argument))
+            raise argument
 
-        if rescaleAs == True:
+        self.extrap_kmax = cambpars.pop("extrap_kmax", 100)
+
+        if rescaleAs:
             cambpars["As"] = self.rescale_LP(cambpars, camb, insigma8)
 
         return cambpars

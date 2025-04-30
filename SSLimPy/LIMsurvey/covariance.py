@@ -16,8 +16,7 @@ class Covariance:
         self.survey_specs = power_spectrum.survey_specs
         self.power_spectrum = power_spectrum
         self.k = self.power_spectrum.k
-        dk = self.power_spectrum.dk
-        self.dk = np.append(dk, dk[-1])
+        self.dk = self.power_spectrum.dk
         self.mu = self.power_spectrum.mu
         self.z = self.power_spectrum.z
 
@@ -94,14 +93,19 @@ class nonGuassianCov:
         self.astro = power_spectrum.astro
         self.powerSpectrum = power_spectrum
         self.k = power_spectrum.k
+        self.kgrid = power_spectrum.k_numerics
         self.mu = power_spectrum.mu
         self.z = power_spectrum.z
         self.tracer = cfg.settings["TracerPowerSpectrum"]
 
-    def integrate_4h(self, args: dict = dict(), eps=1e-2):
+    def integrate_4h(self, args: dict = dict(), z=None, eps=1e-2):
         k = self.k
-        z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear=False, tracer=self.tracer)
+        if z is None:
+            z = self.z
+
+        kgrid = self.kgrid
+        Pkgrid = self.cosmo.matpow(kgrid, z, nonlinear=False, tracer=self.tracer)
+        kgrid, Pkgrid = kgrid.to(u.Mpc**-1).value, Pkgrid.to(u.Mpc**3).value
 
         xi, wi = roots_legendre(cfg.settings["nnodes_legendre"])
         mu = xi
@@ -137,10 +141,10 @@ class nonGuassianCov:
         )
         sigma_perp = args.get(
             "sigma_perp",
-            self.powerSpectrum.survey_specs.sigma_perp(self.z).to(u.Mpc).value,
+            self.powerSpectrum.survey_specs.sigma_perp(self.z)
+            .to(u.Mpc)
+            .value,
         )
-        k, Pk = k.to(u.Mpc**-1).value, Pk.to(u.Mpc**3).value
-
         args = (
             Lmb1,
             Lmb2,
@@ -152,16 +156,21 @@ class nonGuassianCov:
             f,
             sigma_parr,
             sigma_perp,
-            k,
-            Pk,
+            kgrid,
+            Pkgrid,
         )
+
+        k = k.to(u.Mpc**-1).value
         result = integrate(integrand_4h, k, xi, w, hI, args=args, eps=eps)
         return result
 
     def integrate_3h(self):
         k = self.k
         z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear=False, tracer=self.tracer)
+
+        kgrid = self.kgrid
+        Pkgrid = self.cosmo.matpow(kgrid, z, nonlinear=False, tracer=self.tracer)
+        kgrid, Pkgrid = kgrid.to(u.Mpc**-1).value, Pkgrid.to(u.Mpc**3).value
 
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
         mu = np.pi * xi
@@ -197,7 +206,21 @@ class nonGuassianCov:
             .value
         )
         sigma_perp = self.powerSpectrum.survey_specs.sigma_perp(self.z).to(u.Mpc).value
-        k, Pk = k.to(u.Mpc**-1).value, Pk.to(u.Mpc**3).value
+        args = (
+            Lmb1,
+            Lmb2,
+            LmbG2,
+            L2mb1,
+            L2mb2,
+            L2mbG2,
+            f,
+            sigma_parr,
+            sigma_perp,
+            kgrid,
+            Pkgrid,
+        ),
+
+        k = k.to(u.Mpc**-1).value
 
         result = integrate(
             integrand_3h,
@@ -205,26 +228,17 @@ class nonGuassianCov:
             xi,
             w,
             hI,
-            args=(
-                Lmb1,
-                Lmb2,
-                LmbG2,
-                L2mb1,
-                L2mb2,
-                L2mbG2,
-                f,
-                sigma_parr,
-                sigma_perp,
-                k,
-                Pk,
-            ),
+            args=args
         )
         return result
 
     def integrate_2h(self):
         k = self.k
         z = self.z
-        Pk = self.cosmo.matpow(k, z, nonlinear=False, tracer=self.tracer)
+
+        kgrid = self.kgrid
+        Pkgrid = self.cosmo.matpow(kgrid, z, nonlinear=False, tracer=self.tracer)
+        kgrid, Pkgrid = kgrid.to(u.Mpc**-1).value, Pkgrid.to(u.Mpc**3).value
 
         xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
         mu = np.pi * xi
@@ -259,7 +273,7 @@ class nonGuassianCov:
             .value
         )
         sigma_perp = self.powerSpectrum.survey_specs.sigma_perp(self.z).to(u.Mpc).value
-        k, Pk = k.to(u.Mpc**-1).value, Pk.to(u.Mpc**3).value
+        k = k.to(u.Mpc**-1).value
 
         T2h_31 = np.zeros(kl, kl, 3, 3)
         for ik1 in range(kl):
@@ -275,8 +289,8 @@ class nonGuassianCov:
                     sigma_perp,
                     I1[ik1, :],
                     hIT[ik2, ik1, :, :],
-                    k,
-                    Pk,
+                    kgrid,
+                    Pkgrid,
                 ) + isotropized_2h_31(
                     k[ik2],
                     xi,
@@ -287,8 +301,8 @@ class nonGuassianCov:
                     sigma_perp,
                     I1[ik2, :],
                     I3[ik1, ik2, :, :],
-                    k,
-                    Pk,
+                    kgrid,
+                    Pkgrid,
                 )
                 T2h_31[ik1, ik2, :, :] = compute_multipole_matrix(xi, w, Th31, 1.0)
         T2h_31 += np.transpose(T2h_31, (1, 0, 3, 2))
@@ -299,7 +313,7 @@ class nonGuassianCov:
             xi,
             w,
             I2**2,
-            args=(L2mb1, f, sigma_parr, sigma_perp, k, Pk),
+            args=(L2mb1, f, sigma_parr, sigma_perp, kgrid, Pkgrid),
         )
 
         result = T2h_22 + T2h_31

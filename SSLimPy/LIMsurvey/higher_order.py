@@ -53,7 +53,7 @@ def Galileon3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
 def vF2(k1, mu1, ph1, k2, mu2, ph2):
     """Symmetrised F2 kernel"""
     k, _, _ = addVectors(k1, mu1, ph1, k2, mu2, ph2)
-    if np.isclose(k, 0):
+    if np.isclose(k, 0, atol=1e-12):
         return 0
     else:
         k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
@@ -69,7 +69,7 @@ def vF2(k1, mu1, ph1, k2, mu2, ph2):
 def vG2(k1, mu1, ph1, k2, mu2, ph2):
     """Symmetrised G2 kernel"""
     k, _, _ = addVectors(k1, mu1, ph1, k2, mu2, ph2)
-    if np.isclose(k, 0):
+    if np.isclose(k, 0, atol=1e-12):
         return 0
     else:
         k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
@@ -100,7 +100,7 @@ def _F3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     q2, muq2, phq2 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
     T11 = 7 * alpha(q1, muq1, phq1, q2, muq2, phq2) * vF2(k2, mu2, ph2, k3, mu3, ph3)
     T12 = 0
-    if not np.isclose(q2, 0.0):
+    if not np.isclose(q2, 0.0, atol=1e-12):
         T12 = (
             2
             * beta(q1, muq1, phq1, q2, muq2, phq2)  # divergeces with 1/q2
@@ -112,7 +112,7 @@ def _F3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     q1, muq1, phq1 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     q2, muq2, phq2 = k3, mu3, ph3
     T2 = 0
-    if not np.isclose(q1, 0.0):
+    if not np.isclose(q1, 0.0, atol=1e-12):
         T2 = vG2(k1, mu1, ph1, k2, mu2, ph2) * (  # vanishes with q1^2
             7 * alpha(q1, muq1, phq1, q2, muq2, phq2)  # divergeces with 1/q1
             + 2 * beta(q1, muq1, phq1, q2, muq2, phq2)  # divergeces with 1/q1
@@ -158,7 +158,7 @@ def _G3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     q2, muq2, phq2 = addVectors(k2, mu2, ph2, k3, mu3, ph3)
     T11 = 3 * alpha(q1, muq1, phq1, q2, muq2, phq2) * vF2(k2, mu2, ph2, k3, mu3, ph3)
     T12 = 0
-    if not np.isclose(q2, 0.0):
+    if not np.isclose(q2, 0.0, atol=1e-12):
         T12 = (
             6
             * beta(q1, muq1, phq1, q2, muq2, phq2)  # divergeces with 1/q2
@@ -170,7 +170,7 @@ def _G3(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3):
     q1, muq1, phq1 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
     q2, muq2, phq2 = k3, mu3, ph3
     T2 = 0
-    if not np.isclose(q1, 0.0):
+    if not np.isclose(q1, 0.0, atol=1e-12):
         T2 = vG2(k1, mu1, ph1, k2, mu2, ph2) * (  # vanishes with q1^2
             3 * alpha(q1, muq1, phq1, q2, muq2, phq2)  # divergeces with 1/q1
             + 6 * beta(q1, muq1, phq1, q2, muq2, phq2)  # divergeces with 1/q1
@@ -268,7 +268,7 @@ def _Z3_symetrised_23(
     )
     z3 += vparr**2 / 2 * mb1 * mu2 / k2 * mu3 / k3
     z3 += vparr**3 / 6 * mu1 / k1 * mu2 / k2 * mu3 / k3
-    if not np.isclose(k23, 0):
+    if not np.isclose(k23, 0, atol=1e-12):
         z3 += mb2 * vF2(k2, mu2, ph2, k3, mu3, ph3)
         z3 += (
             2
@@ -385,21 +385,21 @@ def BispectrumLO(
 
     # Compute over all permutations of F2 diagrams
     T = 0
-    if not np.isclose(k1, 0) and not np.isclose(k2, 0):
+    if not np.isclose(k1, 0, atol=1e-12) and not np.isclose(k2, 0, atol=1e-12):
         Z11 = vZ1(Lmb1_1, f, k1, mu1, ph1)
         Z12 = vZ1(Lmb1_1, f, k2, mu2, ph2)
         Z21 = vZ2(
             Lmb1_2, Lmb2_2, LmbG2_2, f, k1, -mu1, ph1 + np.pi, k2, -mu2, ph2 + np.pi
         )
         T += 2 * vP[0] * vP[1] * Z11 * Z12 * Z21
-    if not np.isclose(k1, 0) and not np.isclose(k3, 0):
+    if not np.isclose(k1, 0, atol=1e-12) and not np.isclose(k3, 0, atol=1e-12):
         Z11 = vZ1(Lmb1_2, f, k3, mu3, ph3)
         Z12 = vZ1(Lmb1_1, f, k1, mu1, ph1)
         Z21 = vZ2(
             Lmb1_1, Lmb2_1, LmbG2_1, f, k3, -mu3, ph3 + np.pi, k1, -mu1, ph1 + np.pi
         )
         T += 2 * vP[2] * vP[0] * Z11 * Z12 * Z21
-    if not np.isclose(k2, 0) and not np.isclose(k3, 0):
+    if not np.isclose(k2, 0, atol=1e-12) and not np.isclose(k3, 0, atol=1e-12):
         Z11 = vZ1(Lmb1_1, f, k2, mu2, ph2)
         Z12 = vZ1(Lmb1_2, f, k3, mu3, ph3)
         Z21 = vZ2(
@@ -469,7 +469,7 @@ def TrispectrumL0(
 
     T1 = 0
     # Compute over all permutations of the 1122 diagrams
-    if not np.isclose(k12, 0):
+    if not np.isclose(k12, 0, atol=1e-12):
         Z21 = vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k12, mu12, ph12)
         Z22 = vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k12, mu12, ph12)
         Z23 = vZ2(Lmb1, Lmb2, LmbG2, f, k3, -mu3, ph3 + np.pi, k34, mu34, ph34)
@@ -480,7 +480,7 @@ def TrispectrumL0(
         T1 += 4 * Z12 * Z13 * Z22 * Z23 * vP[1] * vP[2] * vP[4]
         T1 += 4 * Z12 * Z14 * Z22 * Z24 * vP[1] * vP[3] * vP[4]
 
-    if not np.isclose(k13, 0):
+    if not np.isclose(k13, 0, atol=1e-12):
         Z21 = vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k13, mu13, ph13)
         Z22 = vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k24, mu24, ph24)
         Z23 = vZ2(Lmb1, Lmb2, LmbG2, f, k3, -mu3, ph3 + np.pi, k13, mu13, ph13)
@@ -491,7 +491,7 @@ def TrispectrumL0(
         T1 += 4 * Z12 * Z13 * Z22 * Z23 * vP[1] * vP[2] * vP[5]
         T1 += 4 * Z13 * Z14 * Z23 * Z24 * vP[2] * vP[3] * vP[5]
 
-    if not np.isclose(k14, 0):
+    if not np.isclose(k14, 0, atol=1e-12):
         Z21 = vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k14, mu14, ph14)
         Z22 = vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k23, mu23, ph23)
         Z23 = vZ2(Lmb1, Lmb2, LmbG2, f, k3, -mu3, ph3 + np.pi, k23, mu23, ph23)
@@ -504,7 +504,7 @@ def TrispectrumL0(
 
     T2 = 0
     # Compute over all permutations of the 1113 diagrams
-    if not any_close_to_zero([k2, k3, k4]):
+    if not any_close_to_zero([k2, k3, k4], atol=1e-12):
         Z31 = vZ3(
             Lmb1,
             Lmb2,
@@ -526,7 +526,7 @@ def TrispectrumL0(
         )
         T2 += 6 * Z31 * vP[1] * vP[2] * vP[3]
 
-    if not any_close_to_zero([k3, k4, k1]):
+    if not any_close_to_zero([k3, k4, k1], atol=1e-12):
         Z32 = vZ3(
             Lmb1,
             Lmb2,
@@ -548,7 +548,7 @@ def TrispectrumL0(
         )
         T2 += 6 * Z32 * vP[0] * vP[2] * vP[3]
 
-    if not any_close_to_zero([k4, k1, k2]):
+    if not any_close_to_zero([k4, k1, k2], atol=1e-12):
         Z33 = vZ3(
             Lmb1,
             Lmb2,
@@ -570,7 +570,7 @@ def TrispectrumL0(
         )
         T2 += 6 * Z33 * vP[0] * vP[1] * vP[3]
 
-    if not any_close_to_zero([k1, k2, k3]):
+    if not any_close_to_zero([k1, k2, k3], atol=1e-12):
         Z34 = vZ3(
             Lmb1,
             Lmb2,
@@ -619,7 +619,7 @@ def collapsed_Trispectrum_LO(
 
     A = 0
     X = 0
-    if not np.isclose(k12, 0):
+    if not np.isclose(k12, 0, atol=1e-12):
         A = (
             8 * vPk[0]**2 * vZ1(Lmb1, f, k1, mu1, ph1)**2
             * vPk[2] * vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k12, mu12, ph12)**2
@@ -642,8 +642,8 @@ def collapsed_Trispectrum_LO(
         * vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k2, mu2, ph2, k1, -mu2, ph2 + np.pi, k1, mu1, ph1)
     )
     return (
-        # A
-        # + X
+        A
+        + X
         + Star
     )
 
@@ -670,7 +670,7 @@ def integrand_2h_22(
     hTs = 0
 
     k13, mu13, ph13 = addVectors(k1, mu1, Dphi, k2, mu2, 0.0)
-    if not np.isclose(k13, 0):
+    if not np.isclose(k13, 0, atol=1e-12):
         Wres = np.exp(
             -2 * k13**2 * (sigma_par**2 * mu13**2 + sigma_perp**2 * (1 - mu13**2))
         )

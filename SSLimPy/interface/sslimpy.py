@@ -53,7 +53,7 @@ class sslimpy:
             self.recap_options()
         ##################
 
-    def compute(self, cosmopars, halopars, obspars, astropars, BAOpars=dict(), output=None):
+    def compute(self, cosmopars, halopars, obspars, astropars, BAOpars=dict(), pobs_settings=dict(), output=None):
         """Main interface to compute the different SSLimPy outputs
 
         Inputs the different SSLimPy output options.
@@ -64,25 +64,25 @@ class sslimpy:
         outputdict = {}
 
         if "Power spectrum" in output:
-            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, outputdict)
+            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
 
         if "Covariance" in output:
-            self._compute_cov(cosmopars, halopars, astropars, obspars, BAOpars, outputdict)
+            self._compute_cov(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
         return outputdict
 
-    def _compute_ps(self, cosmopars, halopars, astropars, obspars, BAOpars, outputdict):
+    def _compute_ps(self, cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict):
         from SSLimPy.LIMsurvey.power_spectrum import PowerSpectra
         self.curent_astro = updater.update_astro(
             self.curent_astro, cosmopars, halopars, astropars, obspars,
         )
-        outputdict["Power spectrum"] = PowerSpectra(self.curent_astro, BAOpars)
+        outputdict["Power spectrum"] = PowerSpectra(self.curent_astro, BAOpars, pobs_settings)
 
-    def _compute_cov(self, cosmopars, halopars, astropars, obspars, BAOpars, outputdict):
+    def _compute_cov(self, cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict):
         from SSLimPy.LIMsurvey.covariance import Covariance
         if "Power spectrum" in outputdict:
             pass
         else:
-            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, outputdict)
+            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
         outputdict["Covariance"] = Covariance(outputdict["Power spectrum"])
 
 

@@ -62,7 +62,6 @@ def init(
     settings.setdefault("zmin", 0)
     settings.setdefault("zmax", 5)
     settings.setdefault("nz", 32)
-    settings.setdefault("nmu", 128)
     settings.setdefault("downsample_conv_q", 1)
     settings.setdefault("downsample_conv_muq", 8)
     settings.setdefault("nnodes_legendre", 9)

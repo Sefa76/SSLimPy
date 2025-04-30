@@ -13,7 +13,7 @@ from SSLimPy.utils.utils import *
 
 class PowerSpectra:
 
-    def __init__(self, astro: AstroFunctions, BAOpars=dict()):
+    def __init__(self, astro: AstroFunctions, BAOpars=dict(), settings=dict()):
         self.cosmology = astro.cosmology
         self.halomodel = astro.halomodel
         # Nu enters into the Mass-Luminosity and Luminosity-Temperature relations
@@ -40,15 +40,33 @@ class PowerSpectra:
         self.M = astro.M
         self.L = astro.L
 
-        self.k = self.halomodel.k
-        self.dk = np.diff(self.k)
-
-        self.mu_edge = np.linspace(-1, 1, cfg.settings["nmu"] + 1)
-        self.mu = (self.mu_edge[:-1] + self.mu_edge[1:]) / 2.0
-        self.dmu = np.diff(self.mu)
+        self.set_survey_kspace(settings)
 
         self.compute_power_spectra()
         self.compute_power_spectra_moments()
+
+    def set_survey_kspace(self, settings):
+        """Constructs the kspace for the survey
+        Defaults back to config if not passed
+        """
+        k_kind = settings.get("k_kind", cfg.settings["k_kind"])
+        nk = settings.get("nk", cfg.settings["nk"])
+        kmin = settings.get("kmin", cfg.settings["kmin"])
+        kmax = settings.get("kmax", cfg.settings["kmax"])
+
+        if k_kind == "log":
+            k_edge = np.geomspace(kmin, kmax, nk).to(u.Mpc**-1)
+        else:
+            k_edge = np.linspace(kmin, kmax, nk).to(u.Mpc**-1)
+        self.k = (k_edge[1:] + k_edge[:-1]) / 2.0
+        self.dk = np.diff(k_edge)
+        self.k_numerics = self.halomodel.k
+
+        nmu = settings.get("nmu", 128)
+
+        mu_edge = np.linspace(-1, 1, nmu + 1)
+        self.mu = (mu_edge[:-1] + mu_edge[1:]) / 2.0
+        self.dmu = np.diff(mu_edge)
 
     ###############
     # De-Wiggling #
@@ -399,19 +417,19 @@ class PowerSpectra:
         """This function computes the full shape observed power spectrum
         with (nearly) fully vectorized function
         """
-        # grid quantities
-        k = copy(self.k)
+        # Compute everything on grid quantities
+        k = copy(self.k_numerics)
         mu = copy(self.mu)
         z = copy(self.z)
-        outputshape = (*k.shape, *mu.shape, *z.shape)
+        gridshape = (*k.shape, *mu.shape, *z.shape)
         if cfg.settings["verbosity"] > 1:
-            print("requested Pk shape:", outputshape)
+            print("requested Pk shape:", gridshape)
             tstart = time()
 
         if cfg.settings["QNLpowerspectrum"]:
             # Obtain the normalized dewiggled power spectrum
             Pk = np.reshape(
-                self.dewiggled_pdd(k, mu, z, BAOpars=self.BAOpars), outputshape
+                self.dewiggled_pdd(k, mu, z, BAOpars=self.BAOpars), gridshape
             )
         else:
             # Use linear power spectrum
@@ -462,8 +480,11 @@ class PowerSpectra:
         Pk_ref = rsd * Pk + Ps
         uP = Pk_ref.unit
         logPk_ref = np.log(Pk_ref.value)
-
         logk = np.log(k.to(u.Mpc**-1).value)
+
+        #kompute using survey k's
+        k = self.k
+        outputshape = (*k.shape, *mu.shape, *z.shape)
         Pk_Obs = np.empty(outputshape)
 
         # Apply AP effect

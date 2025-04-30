@@ -118,9 +118,9 @@ def smooth_dW(x):
 
 
 @njit
-def any_close_to_zero(values):
+def any_close_to_zero(values, atol=1e-8):
     for value in values:
-        if np.isclose(value, 0):
+        if np.isclose(value, 0, atol=atol):
             return True
     return False
 
@@ -155,12 +155,12 @@ def addVectors(
     ph2,
 ):
     k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
-    radicant = k1**2 + 2 * k1pk2 + k2**2
+    radicant = max(0.0, k1**2 + 2 * k1pk2 + k2**2)
 
-    if np.isclose(radicant, 0):
+    k12 = np.sqrt(radicant)
+    if np.isclose(k12, 0, atol=1e-12):
         return 0.0, 0.0, 0.0
     
-    k12 = np.sqrt(radicant)
     mu12 = (k1 * mu1 + k2 * mu2) / k12
     mu12 = min(np.abs(mu12), 1.0) * np.sign(mu12)
 
