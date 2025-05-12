@@ -639,7 +639,7 @@ def collapsed_Trispectrum_LO(
         * vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k1, mu1, ph1, k1, -mu1, ph1 + np.pi, k2, mu2, ph2)
         + 12 * vZ1(Lmb1, f, k2, mu2, ph2)**2 * vPk[1]**2
         * vZ1(Lmb1, f, k1, mu1, ph1) * vPk[0]
-        * vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k2, mu2, ph2, k1, -mu2, ph2 + np.pi, k1, mu1, ph1)
+        * vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k2, mu2, ph2, k2, -mu2, ph2 + np.pi, k1, mu1, ph1)
     )
     return (
         A

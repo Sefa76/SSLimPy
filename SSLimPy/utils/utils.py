@@ -258,14 +258,10 @@ def bilinear_interpolate(xi, yj, zij, x, y):
 
 
 @njit
-def adaptive_mesh_integral(a, b, integrand, args=(), eps=1e-2):
+def adaptive_mesh_integral(a, b, integrand, args=(), eps=1e-2, jmin=5, jmax=20):
     """Adaptation of implementation of HMCode2020 by Alexander Mead"""
     if a == b:
         return 0
-
-    # Define the minimum and maximum number of iterations
-    jmin = 5  # Minimum iterations to avoid premature convergence
-    jmax = 20  # Maximum iterations before timeout
 
     # Initialize sum variables for integration
     sum_2n = 0.0
