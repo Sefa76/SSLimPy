@@ -1,12 +1,16 @@
 import itertools
-from numba import njit, prange
+
 import numpy as np
-from SSLimPy.LIMsurvey import power_spectrum
 from astropy import units as u
+from numba import njit, prange
 from scipy.integrate import trapezoid
+from scipy.optimize import curve_fit
 from scipy.special import legendre, roots_legendre
+
 from SSLimPy.interface import config as cfg
+from SSLimPy.LIMsurvey import power_spectrum
 from SSLimPy.LIMsurvey.higher_order import *
+from SSLimPy.utils.fft_log import FFTLog
 from SSLimPy.utils.utils import *
 
 

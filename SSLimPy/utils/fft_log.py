@@ -36,7 +36,7 @@ class FFTLog:
         return self.gamma, self.C
 
     def __call__(self, x_eval):
-        x_eval = np.atleast_1d(x_eval)
+        x_eval = np.asarray(np.atleast_1d(x_eval), dtype=complex)
         approx = np.zeros_like(x_eval, dtype=complex)
         for i, gammai in enumerate(self.gamma):
             approx += self.C[i] * x_eval**(gammai)
