@@ -6,45 +6,55 @@ import numpy as np
 ###
 
 
-def star(k1, k2, b1, b2, bG2, b3, bdG2, bG3, bDG2):
+# 4 Halo terms
+def T3111_kernel(k1, k2, b1, b2, bG2, b3, bdG2, bG3, bDG2):
     k1 = np.asarray(k1, dtype=complex)
     k2 = np.asarray(k2, dtype=complex)
 
-    return -(
-        4 
-        * k1
-        * k2
-        * (
-            3 * (7 * b1 - 12 * bDG2 + 224 * bG3) * np.power(k1, 6)
-            - 2
+    return (
+        -(
+            4
+            * k1
+            * k2
             * (
-                25 * b1
-                + 6 * (68 * b2 + 21 * b3 - 56 * bdG2 - 11 * bDG2 - 98 * bG2 + 84 * bG3)
+                3 * (7 * b1 - 12 * bDG2 + 224 * bG3) * np.power(k1, 6)
+                - 2
+                * (
+                    25 * b1
+                    + 6
+                    * (68 * b2 + 21 * b3 - 56 * bdG2 - 11 * bDG2 - 98 * bG2 + 84 * bG3)
+                )
+                * np.power(k1, 4)
+                * np.power(k2, 2)
+                + (79 * b1 + 132 * bDG2 + 504 * bG2 + 336 * bG3)
+                * np.power(k1, 2)
+                * np.power(k2, 4)
+                - 6 * (b1 + 6 * bDG2) * np.power(k2, 6)
             )
-            * np.power(k1, 4)
-            * np.power(k2, 2)
-            + (79 * b1 + 132 * bDG2 + 504 * bG2 + 336 * bG3)
-            * np.power(k1, 2)
-            * np.power(k2, 4)
-            - 6 * (b1 + 6 * bDG2) * np.power(k2, 6)
+            + 3
+            * np.power(k1 - k2, 2)
+            * np.power(k1 + k2, 2)
+            * (
+                (7 * b1 - 12 * bDG2) * np.power(k1, 4)
+                + (-5 * b1 + 24 * (bDG2 + 7 * bG2)) * np.power(k1, 2) * np.power(k2, 2)
+                - 2 * (b1 + 6 * bDG2) * np.power(k2, 4)
+            )
+            * (np.log(np.power((k1 - k2) / (k1 + k2), 2)))
         )
-        + 3
-        * np.power(k1 - k2, 2)
-        * np.power(k1 + k2, 2)
-        * (
-            (7 * b1 - 12 * bDG2) * np.power(k1, 4)
-            + (-5 * b1 + 24 * (bDG2 + 7 * bG2)) * np.power(k1, 2) * np.power(k2, 2)
-            - 2 * (b1 + 6 * bDG2) * np.power(k2, 4)
-        )
-        * (np.log(np.power((k1 - k2) / (k1 + k2), 2)))
-    ) * b1**3 / (6048 * np.power(k1, 5) * np.power(k2, 3))
+        * b1**3
+        / (6048 * np.power(k1, 5) * np.power(k2, 3))
+    )
 
 
-def star_lim(b1, b2, bG2, b3, bdG2, bG3, bDG2):
-    return b1**3 * (-11 * b1 + 204 * b2 + 63 * b3 - 168 * bdG2 - 48 * bDG2 - 420 * bG2) / 378.0
+def T3111_squeezed(b1, b2, bG2, b3, bdG2, bG3, bDG2):
+    return (
+        b1**3
+        * (-11 * b1 + 204 * b2 + 63 * b3 - 168 * bdG2 - 48 * bDG2 - 420 * bG2)
+        / 378.0
+    )
 
 
-def snake_A(k1, k2, b1, b2, bG2, an):
+def T2211_A_kernel(k1, k2, b1, b2, bG2, an):
     k1 = np.asarray(k1, dtype=complex)
     k2 = np.asarray(k2, dtype=complex)
 
@@ -253,7 +263,7 @@ def snake_A(k1, k2, b1, b2, bG2, an):
     ) / (392.0 * (-2 + an) * an * (2 + an) * (4 + an) * (6 + an) * np.power(k1, 5) * k2)
 
 
-def snake_A_lim(k1, b1, b2, bG2, an):
+def T2211_A_squeezed(k1, b1, b2, bG2, an):
     k1 = np.asarray(k1, dtype=complex)
 
     return (
@@ -273,7 +283,7 @@ def snake_A_lim(k1, b1, b2, bG2, an):
     ) / (49.0 * (2 + an) * (4 + an) * (6 + an))
 
 
-def snake_X(k1, k2, b1, b2, bG2, an):
+def T2211_X_kernel(k1, k2, b1, b2, bG2, an):
     k1 = np.asarray(k1, dtype=complex)
     k2 = np.asarray(k2, dtype=complex)
 
@@ -458,7 +468,7 @@ def snake_X(k1, k2, b1, b2, bG2, an):
     )
 
 
-def snake_X_lim(k1, b1, b2, bG2, an):
+def T2211_X_squeezed(k1, b1, b2, bG2, an):
     k1 = np.asarray(k1, dtype=complex)
 
     return (
@@ -476,3 +486,79 @@ def snake_X_lim(k1, b1, b2, bG2, an):
         )
         * np.power(k1, an)
     ) / (49.0 * (2 + an) * (4 + an) * (6 + an))
+
+# 3 Halo terms
+
+def T211_A_kernel(Lb1, L2b1, L2b2, L2bG2):
+    return ((34 * L2b1 + 21 * L2b2 - 28 * L2bG2) * np.power(Lb1, 2)) / 21.0
+
+
+def T211_X_kernel(k1, k2, Lb1, Lb2, LbG2, L2b1, an):
+    k1 = np.asarray(k1, dtype=complex)
+    k2 = np.asarray(k2, dtype=complex)
+
+    return -(
+        np.power((k1 + k2) / (np.power(k1, 3) * k2 + k1 * np.power(k2, 3)), an)
+        * L2b1
+        * Lb1
+        * (
+            np.power(k1 * k2 * (np.power(k1, 2) + np.power(k2, 2)), an)
+            * (
+                np.power(k1, 2)
+                * np.power(k2, 2)
+                * (
+                    (-12 - 5 * an + 7 * np.power(an, 2)) * Lb1
+                    - 7 * (np.power(an, 2) * Lb2 + 4 * an * (Lb2 - 2 * LbG2) - 8 * LbG2)
+                )
+                - 2
+                * an
+                * np.power(k1, 3)
+                * k2
+                * (10 * Lb1 + 7 * (4 + an) * Lb2 - 14 * LbG2)
+                + an * k1 * np.power(k2, 3) * ((8 + 7 * an) * Lb1 + 28 * LbG2)
+                - np.power(k2, 4) * ((8 + 7 * an) * Lb1 + 28 * LbG2)
+                + np.power(k1, 4)
+                * (20 * Lb1 - 7 * (4 * an * Lb2 + np.power(an, 2) * Lb2 + 4 * LbG2))
+            )
+            - (k1 - k2)
+            * np.power((k1 * k2 * (np.power(k1, 2) + np.power(k2, 2))) / (k1 + k2), an)
+            * (
+                (1 + an) * k1 * np.power(k2, 2) * ((8 + 7 * an) * Lb1 + 28 * LbG2)
+                + np.power(k2, 3) * ((8 + 7 * an) * Lb1 + 28 * LbG2)
+                + np.power(k1, 3)
+                * (20 * Lb1 - 7 * (4 * an * Lb2 + np.power(an, 2) * Lb2 + 4 * LbG2))
+                + np.power(k1, 2)
+                * k2
+                * (
+                    20 * (1 + an) * Lb1
+                    + 7
+                    * (4 * an * Lb2 + np.power(an, 2) * Lb2 - 4 * LbG2 - 4 * an * LbG2)
+                )
+            )
+            * np.power(np.abs(k1 - k2), an)
+        )
+    ) / (14 * an * (2 + an) * (4 + an) * np.power(k1, 3) * k2)
+
+
+def T211_X_squeezed(k1, Lb1, Lb2, LbG2, L2b1, an):
+    k1 = np.asarray(k1, dtype=complex)
+
+    return -(
+        np.power(2, an)
+        * np.power(k1, an)
+        * L2b1
+        * Lb1
+        * ((-12 + 7 * an) * Lb1 - 14 * (4 + an) * Lb2 + 56 * LbG2)
+    ) / (7 * (2 + an) * (4 + an))
+
+# 2 Halo terms
+
+def T22_kernel(k1, k2, b1, an):
+    k1 = np.asarray(k1, dtype=complex)
+    k2 = np.asarray(k2, dtype=complex)
+
+    return (
+        np.power(b1, 2)
+        / (2 * k1 * k2 * (an + 2))
+        * (np.power(k1 + k2, an + 2) - np.power(np.abs(k1 - k2), an + 2))
+    )

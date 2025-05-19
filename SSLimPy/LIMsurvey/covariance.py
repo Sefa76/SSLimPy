@@ -10,6 +10,7 @@ from scipy.special import legendre, roots_legendre
 from SSLimPy.interface import config as cfg
 from SSLimPy.LIMsurvey import power_spectrum
 from SSLimPy.LIMsurvey.higher_order import *
+from SSLimPy.LIMsurvey import ingredients_T0
 from SSLimPy.utils.fft_log import FFTLog
 from SSLimPy.utils.utils import *
 
@@ -96,289 +97,208 @@ class nonGuassianCov:
         self.cosmo = power_spectrum.cosmology
         self.astro = power_spectrum.astro
         self.powerSpectrum = power_spectrum
+        self.tracer = cfg.settings["TracerPowerSpectrum"]
         self.k = power_spectrum.k
-        self.kgrid = power_spectrum.k_numerics
         self.mu = power_spectrum.mu
         self.z = power_spectrum.z
-        self.tracer = cfg.settings["TracerPowerSpectrum"]
 
-    def integrate_4h(self, args: dict = dict(), z=None, eps=1e-2):
+        # Get power spectra on grids for numerical computations
+        # TODO: For now only works for scale-independent growth
+        self.kgrid = power_spectrum.k_numerics.to(u.Mpc**-1)
+        self.Pgrid = self.cosmo.matpow(self.kgrid, 0.0, nonlinear=False, tracer=self.tracer).to(u.Mpc**3)
+        self.Pk = self.cosmo.matpow(self.k, 0.0, nonlinear=False, tracer=self.tracer).to(u.Mpc**3)
+
+        # FFTlog Approximation
+        kminebs = np.min(self.kgrid).to(u.Mpc**-1).value / cfg.settings["Log-extrap"]
+        kmaxebs = np.max(self.kgrid).to(u.Mpc**-1).value * cfg.settings["Log-extrap"]
+
+        def extrap_pk(k, kgrid, Pkgrid):
+            logk = np.log(k)
+            logkgrid = np.log(kgrid)
+            logPkgrid = np.log(Pkgrid)
+            logPk = linear_interpolate(logkgrid, logPkgrid, logk)
+            return np.exp(logPk)
+
+        def p_rec(k, q):
+            tf = FFTLog(extrap_pk, kminebs, kmaxebs,
+                                    cfg.settings("LogN_modes"), q,
+                                    kgrid=self.kgrid.value, Pkgrid=self.Pgrid.value,
+                                    )
+            return tf(k).real
+
+        #find good numerical bias
+        q, _= curve_fit(p_rec, self.k.value, self.P.value, p0=[0.3], sigma=self.Pk.value)
+        q = q[0]
+        self.fftLog_Pofk = FFTLog(extrap_pk, kminebs, kmaxebs,
+                                  cfg.settings("LogN_modes"), q,
+                                  kgrid=self.kgrid.value, Pkgrid=self.Pgrid.value,
+                                  )
+
+
+    def integrate_4h(self, args: dict = dict(), z=None):
+        k = self.k
+        if z is None:
+            z = self.z
+        z = np.atleast_1d(z)
+        D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
+
+        I1 = restore_shape(self.astro.Thalo(z, k, p=1).value, k, z)
+        #This is the normalisation found in pyCCL, Not necessarily true for LIM
+        I1 = I1 / I1.value[0, :]
+
+        b1_L1 = np.atleast_1d(args.get("b1", self.astro.bavg("b1", z, 1)))
+        b2_L1 = np.atleast_1d(args.get("b2", self.astro.bavg("b2", z, 1)))
+        bG2_L1 = np.atleast_1d(args.get("bG2", self.astro.bavg("bG2", z, 1)))
+        b3_L1 = np.atleast_1d(args.get("b3", self.astro.bavg("b3", z, 1)))
+        bdG2_L1 = np.atleast_1d(args.get("bdG2", self.astro.bavg("bdG2", z, 1)))
+        bG3_L1 = np.atleast_1d(args.get("bG3", self.astro.bavg("bG3", z, 1)))
+        bDG2_L1 = np.atleast_1d(args.get("bDG2", self.astro.bavg("bDG2", z, 1)))
+
+        kl = len(k)
+        zl = len(z)
+
+        # 3111 Terms
+        kernel_4h_3111 = np.empty((kl, kl, zl))
+        for iz, zi in enumerate(z):
+            kernel_4h_3111_iz = ingredients_T0.T3111_kernel(k[:,None], k[None, :], b1_L1[iz], b2_L1[iz], bG2_L1[iz], b3_L1[iz], bdG2_L1[iz], bG3_L1[iz], bDG2_L1[iz])
+            squeezed_4h_3111_iz = ingredients_T0.T3111_squeezed(b1_L1[iz], b2_L1[iz], bG2_L1[iz], b3_L1[iz], bdG2_L1[iz], bG3_L1[iz], bDG2_L1[iz])
+            np.fill_diagonal(kernel_4h_3111_iz, squeezed_4h_3111_iz)
+            kernel_4h_3111[:, :, iz] = kernel_4h_3111_iz
+        T_3111 = 12 * self.Pk[:, None, None]**2 * self.Pk[None, :, None] * kernel_4h_3111_iz * D[None, None, :]**6
+        T_3111 += np.transpose(T_3111, (1,0,2))
+
+        # 2211 Terms
+        gamma, coef = self.fftLog_Pofk.get_power_and_coef()
+
+        kernel_4h_2211_A = np.empty((kl, kl, zl)) * u.Mpc**3
+        kernel_4h_2211_X = np.empty((kl, kl, zl)) * u.Mpc**3
+        for iz, zi in enumerate(z):
+            kernel_4h_2211_A_iz = 0.0
+            squeezed_4h_2211_A_iz = 0.0
+            kernel_4h_2211_X_iz = 0.0
+            squeezed_4h_2211_X_iz = 0.0
+            for gammai, coefi in zip(gamma, coef):
+                kernel_4h_2211_A_iz += coefi * ingredients_T0.T2211_A_kernel(k[:,None], k[None,:], b1_L1[iz], b2_L1[iz], bG2_L1[iz], gammai)
+                squeezed_4h_2211_A_iz += coefi * ingredients_T0.T2211_A_squeezed(k, b1_L1[iz], b2_L1[iz], bG2_L1[iz], gammai)
+                kernel_4h_2211_X_iz += coefi * ingredients_T0.T2211_X_kernel(k[:,None], k[None,:], b1_L1[iz], b2_L1[iz], bG2_L1[iz], gammai)
+                squeezed_4h_2211_X_iz += coefi * ingredients_T0.T2211_X_squeezed(k, b1_L1[iz], b2_L1[iz], bG2_L1[iz], gammai)
+            np.fill_diagonal(kernel_4h_2211_A_iz, squeezed_4h_2211_A_iz)
+            np.fill_diagonal(kernel_4h_2211_X_iz, squeezed_4h_2211_X_iz)
+            kernel_4h_2211_A[:,:,iz] = kernel_4h_2211_A_iz.real * u.Mpc**3
+            kernel_4h_2211_X[:,:,iz] = kernel_4h_2211_X_iz.real * u.Mpc**3
+
+        T_2211_A = 8 * self.Pk[:, None, None]**2 * kernel_4h_2211_A * D[None, None, :]**6
+        T_2211_A += np.transpose(T_2211_A, (1,0,2))
+        T_2211_X = 16 * self.Pk[:, None, None] * self.Pk[None, :, None] * kernel_4h_2211_X * D[None, None, :]**6
+
+        T_4h = I1[:, None, :]**2 * I1[None, :, :]**2 * (T_3111 + T_2211_X + T_2211_A)
+        return T_4h
+
+    def integrate_3h(self, z=None):
+        k = self.k
+        if z is None:
+            z = self.z
+        z = np.atleast_1d(z)
+        D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
+
+        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
+        I2 = restore_shape(self.astro.Thalo(z, k, k, p=1), k, k, z)
+
+        #This is the normalisation found in pyCCL, Not necessarily true for LIM
+        I1 *= 1 / I1.value[0, :]
+        I2 *= 1 / I1.value[0, :]**2
+
+        b1_L1 =   np.atleast_1d(self.astro.bavg("b1", z, 1))
+        b2_L1 =   np.atleast_1d(self.astro.bavg("b2", z, 1))
+        bG2_L1 =  np.atleast_1d(self.astro.bavg("bG2", z, 1))
+        b1_L2 =  np.atleast_1d(self.astro.bavg("b1", z, 2))
+        b2_L2 =  np.atleast_1d(self.astro.bavg("b2", z, 2))
+        bG2_L2 = np.atleast_1d(self.astro.bavg("bG2", z, 2))
+
+        kl = len(k)
+        zl = len(z)
+
+        kernel_3h_211_A = ingredients_T0.T211_A_kernel(b1_L1, b1_L2, b2_L2, bG2_L2)
+        T_211_A = kernel_3h_211_A * self.Pk[:, None, None] * self.Pk[None, :, None] * D[None, None, :]**4
+
+        gamma, coef = self.fftLog_Pofk.get_power_and_coef()
+
+        kernel_3h_221_X = np.empty((kl, kl, zl)) * u.Mpc**3
+        for iz, zi in enumerate(z):
+            kernel_3h_211_X_iz = 0.0
+            squeezed_3h_211_X_iz = 0.0 
+            for gammai, coefi in zip(gamma, coef):
+                kernel_3h_211_X_iz += coefi * ingredients_T0.T211_X_kernel(k[:,None], k[None, :], b1_L1[iz], b2_L1[iz], bG2_L1[iz], b1_L2[iz], gammai)
+                squeezed_3h_211_X_iz += coefi * ingredients_T0.T211_X_squeezed(k, b1_L1[iz], b2_L1[iz], bG2_L1[iz], b1_L2[iz], gammai)
+            np.fill_diagonal(kernel_3h_211_X_iz, squeezed_3h_211_X_iz)
+            kernel_3h_221_X[:, :, iz] = kernel_3h_211_X_iz.real * u.Mpc**3
+        T_211_X =  kernel_3h_221_X * self.Pk[:, None, None] * D[None, None, :]**4
+        T_211_X += np.transpose(T_211_X, (1, 0, 2))
+
+        T_3h = 4 * I2 * I1[:, None, :] * I1[None, :, :] * (T_211_A + T_211_X)
+        return T_3h
+
+    def integrate_2h(self, z=None):
+        k = self.k
+        if z is None:
+            z = self.z
+        z = np.atleast_1d(z)
+        D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
+
+        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
+        I2 = restore_shape(self.astro.Thalo(z, k, k, p=1), k, k, z)
+        I3 = restore_shape(self.astro.Thalo(z, k, k, p=1, scale=(2,1)), k, k, z)
+
+        #This is the normalisation found in pyCCL, Not necessarily true for LIM
+        I1 *= 1 / I1.value[0, :]
+        I2 *= 1 / I1.value[0, :]**2
+        I3 *= 1 / I1.value[0, :]**3
+
+        b1_L1 = np.atleast_1d(self.astro.bavg("b1", z, 1))
+        b1_L2 = np.atleast_1d(self.astro.bavg("b1", z, 2))
+        b1_L3 = np.atleast_1d(self.astro.bavg("b1", z, 3))
+
+        kl = len(k)
+        zl = len(z)
+
+        kernel_2h_31 = np.empty(kl, iz)
+        for iz, zi in enumerate(z):
+            kernel_2h_31[:, iz] = (
+                vZ1(b1_L1[iz], 0.0, 0.0, 0.0, 0.0)
+                * vZ1(b1_L3[iz], 0.0, 0.0, 0.0, 0.0)
+            )
+        T_31 = 2 * self.Pk[None, :, None] * kernel_2h_31 * D[None, None, :]**2
+
+        gamma, coef = self.fftLog_Pofk.get_power_and_coef()
+
+        kernel_2h_22 = np.empty((kl, kl, zl)) * u.Mpc**3
+        for iz, zi in enumerate(z):
+            kernel_2h_22_iz = 0.0
+            for gammai, coefi in zip(gamma, coef):
+                kernel_2h_22_iz += coefi * ingredients_T0.T22_kernel(k[:,None], k[None,:], b1_L2, gammai)
+            kernel_2h_22[:,:,iz] = kernel_2h_22_iz.real * u.Mpc**3
+        T_22 = 2 * kernel_2h_22 * D[None, None, :]**2
+
+        T_2h = (T_22 * I2**2
+                + T_31 * I1[None, :, :] * I3
+                + np.transpose(T_31 * I1[None, :, :] * I3, (1, 0, 2))
+        )
+        return T_2h
+
+    def integrate_1h(self, z=None):
         k = self.k
         if z is None:
             z = self.z
 
-        kgrid = self.kgrid
-        Pkgrid = self.cosmo.matpow(kgrid, z, nonlinear=False, tracer=self.tracer)
-        kgrid, Pkgrid = kgrid.to(u.Mpc**-1).value, Pkgrid.to(u.Mpc**3).value
+        I1 = restore_shape(self.astro.Thalo(z, k, p=1).value, k, z)
+        I4 = restore_shape(self.astro.Thalo(z, k, k, p=2, scale=(2,2)), k, k, z)
 
-        xi, wi = roots_legendre(cfg.settings["nnodes_legendre"])
-        mu = xi
-        w = wi
+        #This is the normalisation found in pyCCL, Not necessarily true for LIM
+        I4 *= 1 / I1.value[0, :]**4
 
-        kl = len(k)
-        wl = len(w)
+        T_1h = I4
 
-        # compute I1 for v_of_M models
-        I1 = np.empty((kl, wl))
-        indexmenge = range(wl)
-        for imu1 in indexmenge:
-            I1[:, imu1] = self.astro.Thalo(z, k, mu[imu1], p=1).value
-        I1 = I1 / I1[0, :] # Normaisation
-        # I1 = np.ones((kl, wl))
-        hI = I1[:, None, :, None] ** 2 * I1[None, :, None, :] ** 2
-
-        Lmb1 = args.get("b1", self.astro.bavg("b1", z, 1))
-        Lmb2 = args.get("b2", self.astro.bavg("b2", z, 1))
-        LmbG2 = args.get("bG2", self.astro.bavg("bG2", z, 1))
-        Lmb3 = args.get("b3", self.astro.bavg("b3", z, 1))
-        LmbdG2 = args.get("bdG2", self.astro.bavg("bdG2", z, 1))
-        LmbG3 = args.get("bG3", self.astro.bavg("bG3", z, 1))
-        LmbDG2 = args.get("bDG2", self.astro.bavg("bDG2", z, 1))
-        f = args.get(
-            "f", self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer).item()
-        )
-        sigma_parr = args.get(
-            "sigma_parr",
-            self.powerSpectrum.survey_specs.sigma_parr(self.z, self.powerSpectrum.nu)
-            .to(u.Mpc)
-            .value,
-        )
-        sigma_perp = args.get(
-            "sigma_perp",
-            self.powerSpectrum.survey_specs.sigma_perp(self.z)
-            .to(u.Mpc)
-            .value,
-        )
-        args = (
-            Lmb1,
-            Lmb2,
-            LmbG2,
-            Lmb3,
-            LmbdG2,
-            LmbG3,
-            LmbDG2,
-            f,
-            sigma_parr,
-            sigma_perp,
-            kgrid,
-            Pkgrid,
-        )
-
-        k = k.to(u.Mpc**-1).value
-        result = integrate(integrand_4h, k, xi, w, hI, args=args, eps=eps)
-        return result
-
-    def integrate_3h(self):
-        k = self.k
-        z = self.z
-
-        kgrid = self.kgrid
-        Pkgrid = self.cosmo.matpow(kgrid, z, nonlinear=False, tracer=self.tracer)
-        kgrid, Pkgrid = kgrid.to(u.Mpc**-1).value, Pkgrid.to(u.Mpc**3).value
-
-        xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
-        mu = np.pi * xi
-
-        kl = len(k)
-        wl = len(w)
-
-        # compute I1 for v_of_M models
-        I1 = np.empty((kl, wl))
-        indexmenge = range(wl)
-        for imu1 in indexmenge:
-            I1[:, imu1] = self.astro.Thalo(z, k, mu[imu1], p=1).value
-
-        I2 = np.empty((kl, kl, wl, wl))
-        indexmenge = itertools.product(range(wl), repeat=2)
-        for imu1, imu2 in indexmenge:
-            I2[:, :, imu1, imu2] = self.astro.Thalo(
-                z, k, k, mu[imu1], mu[imu2], p=2
-            ).value
-
-        hI = I2 * I1[:, None, :, None] * I1[None, :, None, :]
-
-        Lmb1 = self.astro.bavg("b1", z, 1)
-        Lmb2 = self.astro.bavg("b2", z, 1)
-        LmbG2 = self.astro.bavg("bG2", z, 1)
-        L2mb1 = self.astro.bavg("b1", z, 2)
-        L2mb2 = self.astro.bavg("b2", z, 2)
-        L2mbG2 = self.astro.bavg("bG2", z, 2)
-        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer).item()
-        sigma_parr = (
-            self.powerSpectrum.survey_specs.sigma_parr(self.z, self.powerSpectrum.nu)
-            .to(u.Mpc)
-            .value
-        )
-        sigma_perp = self.powerSpectrum.survey_specs.sigma_perp(self.z).to(u.Mpc).value
-        args = (
-            Lmb1,
-            Lmb2,
-            LmbG2,
-            L2mb1,
-            L2mb2,
-            L2mbG2,
-            f,
-            sigma_parr,
-            sigma_perp,
-            kgrid,
-            Pkgrid,
-        ),
-
-        k = k.to(u.Mpc**-1).value
-
-        result = integrate(
-            integrand_3h,
-            k,
-            xi,
-            w,
-            hI,
-            args=args
-        )
-        return result
-
-    def integrate_2h(self):
-        k = self.k
-        z = self.z
-
-        kgrid = self.kgrid
-        Pkgrid = self.cosmo.matpow(kgrid, z, nonlinear=False, tracer=self.tracer)
-        kgrid, Pkgrid = kgrid.to(u.Mpc**-1).value, Pkgrid.to(u.Mpc**3).value
-
-        xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
-        mu = np.pi * xi
-
-        kl = len(k)
-        wl = len(w)
-
-        # compute I1 for v_of_M models
-        I1 = np.empty((kl, wl))
-        indexmenge = range(wl)
-        for imu1 in indexmenge:
-            I1[:, imu1] = self.astro.Thalo(z, k, mu[imu1], p=1).value
-
-        I2 = np.empty((kl, kl, wl, wl))
-        I3 = np.empty((kl, kl, wl, wl))
-        indexmenge = itertools.product(range(wl), repeat=2)
-        for imu1, imu2 in indexmenge:
-            I2[:, :, imu1, imu2] = self.astro.Thalo(
-                z, k, k, mu[imu1], mu[imu2], p=2
-            ).value
-            I3[:, :, imu1, imu2] = self.astro.Thalo(
-                z, k, k, mu[imu1], mu[imu2], p=2, scale=(2, 1)
-            ).value
-
-        Lmb1 = self.astro.bavg("b1", z, 1)
-        L2mb1 = self.astro.bavg("b1", z, 2)
-        L3mb1 = self.astro.bavg("b1", z, 3)
-        f = self.cosmo.growth_rate(1e-3 * u.Mpc**-1, z, tracer=self.tracer).item()
-        sigma_parr = (
-            self.powerSpectrum.survey_specs.sigma_parr(self.z, self.powerSpectrum.nu)
-            .to(u.Mpc)
-            .value
-        )
-        sigma_perp = self.powerSpectrum.survey_specs.sigma_perp(self.z).to(u.Mpc).value
-        k = k.to(u.Mpc**-1).value
-
-        T2h_31 = np.zeros(kl, kl, 3, 3)
-        for ik1 in range(kl):
-            for ik2 in range(ik1, kl):
-                hIT = np.transpose(I3, (1, 0, 3, 2))  # k2, k1, mu2, mu1
-                Th31 = isotropized_2h_31(
-                    k[ik1],
-                    xi,
-                    Lmb1,
-                    L3mb1,
-                    f,
-                    sigma_parr,
-                    sigma_perp,
-                    I1[ik1, :],
-                    hIT[ik2, ik1, :, :],
-                    kgrid,
-                    Pkgrid,
-                ) + isotropized_2h_31(
-                    k[ik2],
-                    xi,
-                    Lmb1,
-                    L3mb1,
-                    f,
-                    sigma_parr,
-                    sigma_perp,
-                    I1[ik2, :],
-                    I3[ik1, ik2, :, :],
-                    kgrid,
-                    Pkgrid,
-                )
-                T2h_31[ik1, ik2, :, :] = compute_multipole_matrix(xi, w, Th31, 1.0)
-        T2h_31 += np.transpose(T2h_31, (1, 0, 3, 2))
-
-        T2h_22 = integrate(
-            integrand_2h_22,
-            k,
-            xi,
-            w,
-            I2**2,
-            args=(L2mb1, f, sigma_parr, sigma_perp, kgrid, Pkgrid),
-        )
-
-        result = T2h_22 + T2h_31
-        return result
-
-    def integrate_1h(self):
-        k = self.k
-        z = self.z
-
-        xi, w = roots_legendre(cfg.settings["nnodes_legendre"])
-        mu = np.pi * xi
-
-        kl = len(k)
-        wl = len(w)
-
-        indexmengemu = itertools.product(range(wl), repeat=2)
-        indexmengek = itertools.product(range(kl), repeat=2)
-        I4 = np.empty((kl, kl, wl, wl))
-        for (
-            imu1,
-            imu2,
-        ) in indexmengemu:
-            for ik1, ik2 in indexmengek:
-                Iij = self.astro.Thalo(
-                    z,
-                    k[ik1],
-                    k[ik2],
-                    k[ik1],
-                    k[ik2],
-                    mu[imu1],
-                    mu[imu2],
-                    -mu[imu1],
-                    -mu[imu2],
-                    p=4,
-                )
-                I4[ik1, ik2, imu1, imu2] = Iij.value
-
-        result = np.empty((kl, kl, 3, 3))
-        result[:, :, 0, 0] = np.sum(
-            np.pi * w * legendre_0(mu) * np.sum(np.pi * w * legendre_0(mu) * I4)
-        )
-        result[:, :, 0, 1] = np.sum(
-            np.pi * w * legendre_2(mu) * np.sum(np.pi * w * legendre_0(mu) * I4)
-        )
-        result[:, :, 0, 2] = np.sum(
-            np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_0(mu) * I4)
-        )
-        result[:, :, 1, 0] = result[:, :, 0, 1]
-        result[:, :, 1, 1] = np.sum(
-            np.pi * w * legendre_2(mu) * np.sum(np.pi * w * legendre_2(mu) * I4)
-        )
-        result[:, :, 1, 2] = np.sum(
-            np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_2(mu) * I4)
-        )
-        result[:, :, 2, 0] = result[:, :, 0, 2]
-        result[:, :, 2, 1] = result[:, :, 1, 2]
-        result[:, :, 2, 2] = np.sum(
-            np.pi * w * legendre_4(mu) * np.sum(np.pi * w * legendre_4(mu) * I4)
-        )
-        return result
-
+        return T_1h
 
 ##############
 # Numba part #

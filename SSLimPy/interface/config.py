@@ -80,6 +80,11 @@ def init(
     settings.setdefault("Smooth_resolution", True)
     settings.setdefault("Smooth_window", False)
 
+    # Pk FFTlog approximation
+    settings.setdefault("Log-extrap", 10)
+    settings.setdefault("LogN_modes", 10)
+
+
     # VID numerics
     settings.setdefault("Tmin_VID", 1e-2 * u.uK)
     settings.setdefault("Tmax_VID", 100 * u.uK)
