@@ -1,319 +1,99 @@
-import sys
-import types
-from copy import deepcopy
-
-import astropy.constants as c
 import astropy.units as u
+import astropy.constants as c
 import numpy as np
-from scipy.interpolate import RectBivariateSpline, interp1d
 
-sys.path.append("../")
-from SSLimPy.cosmology.fitting_functions import bias_fitting_functions as bf
-from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
+from copy import deepcopy
+from scipy.interpolate import RectBivariateSpline
+
+from SSLimPy.cosmology.halo_model import HaloModel
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
+from SSLimPy.interface.survey_specs import SurveySpecifications
 from SSLimPy.interface import config as cfg
+from SSLimPy.utils.utils import *
 
 
-class astro_functions:
-    def __init__(self, cosmopars=dict(), astropars=dict(), cosmology = None):
+class AstroFunctions:
+    def __init__(
+        self,
+        halomodel: HaloModel,
+        survey_specs: SurveySpecifications,
+        astropars: dict = dict(),
+    ):
+        self.halomodel = halomodel
+        self.cosmology = halomodel.cosmology
+        self.survey_specs = survey_specs
+
+        # Units
+        self.hubble = halomodel.hubble
+        self.Mpch = halomodel.Mpch
+        self.Msunh = halomodel.Msunh
 
         self.astroparams = deepcopy(astropars)
-        self.set_astrophysics_defaults()
-        self.astrotracer = cfg.settings["astro_tracer"]
+        self._set_astrophysics_defaults()
+        self.model_type = self.astroparams["model_type"]
+        self.model_name = self.astroparams["model_name"]
+        self.model_par = self.astroparams["model_par"]
+        self.nu = self.survey_specs.obsparams["nu"]
+        self.nuObs = self.survey_specs.obsparams["nuObs"]
+        self.sigma_scatter = self.astroparams["sigma_scatter"]
+        self.fduty = self.astroparams["fduty"]
 
         ### TEXT VOMIT ###
         if cfg.settings["verbosity"] > 1:
             self.recap_astro()
         ##################
-        if cosmology:
-            self.cosmopars = cosmology.fullcosmoparams
-            self.cosmology = cosmology
-        else:
-            from SSLimPy.interface import updater
-            self.cosmopars = cosmopars
-            self.cosmology = updater.update_cosmo(cfg.fiducialcosmo,cosmopars)
-
-        # Current units
-        self.hubble = self.cosmology.h()
-        self.Mpch = u.Mpc / self.hubble
-        self.Msunh = u.Msun / self.hubble
-        self.rho_crit = 2.77536627e11 * (self.Msunh * self.Mpch**-3).to(
-            u.Msun * u.Mpc**-3
-        )  # Msun/Mpc^3
 
         # Internal samples for computations
-        self.M = np.geomspace(
-            self.astroparams["Mmin"], self.astroparams["Mmax"], self.astroparams["nM"]
-        )
+        self.M = self.halomodel.M
         self.L = np.geomspace(
             self.astroparams["Lmin"], self.astroparams["Lmax"], self.astroparams["nL"]
         )
-        # find the redshifts for fequencies asked for:
-        self.nu = cfg.obspars["nu"]
-        self.nuObs = cfg.obspars["nuObs"]
-
-        self.sigmaM, self.dsigmaM_dM = self.create_sigmaM_funcs()
 
         # Check passed models
-        self.init_model()
-        self.init_halo_mass_function()
-        self.init_bias_function()
+        self._init_model()
 
-        # bias function
-        # !Without Corrections for nongaussianity!
-        self.delta_crit = 1.686
-        self._b_of_M = getattr(self._bias_function, self.astroparams["bias_model"])
-        # use halobias to compute the bias with all corrections
+        # mass luminosity function
+        self.massluminosityfunction = self._create_mass_luminosity()
 
-        # halo mass function
-        # !Without Corrections for nongaussianity!
-        self._dn_dM_of_M = getattr(
-            self._halo_mass_function, self.astroparams["hmf_model"]
+        # halo luminosity function
+        self.haloluminosityfunction = self._create_luminosty_function()
+
+    def _set_astrophysics_defaults(self):
+        """
+        Fills up default values in the astropars dictionary if the values are not found.
+
+        Parameters:
+            self (object): The instance of the class.
+
+        Returns:
+            None
+        """
+        self.astroparams.setdefault("model_type", "LF")
+        self.astroparams.setdefault("model_name", "SchCut")
+        self.astroparams.setdefault(
+            "model_par",
+            {
+                "phistar": 9.6e-11 * u.Lsun**-1 * u.Mpc**-3,
+                "Lstar": 2.1e6 * u.Lsun,
+                "alpha": -1.87,
+                "Lmin": 5000 * u.Lsun,
+            },
         )
-        # use halomassfunction to compute the bias with all corrections
+        self.astroparams.setdefault("Lmin", 10 * u.Lsun)
+        self.astroparams.setdefault("Lmax", 1e8 * u.Lsun)
+        self.astroparams.setdefault("nL", 5000)
+        self.astroparams.setdefault("sigma_scatter", 0)
+        self.astroparams.setdefault("fduty", 1)
 
-        # mass luminosty function
-        self.massluminosityfunction = self.create_mass_luminosity()
-
-        # halo luminostiy function
-        self.haloluminosityfunction = self.create_luminosty_function()
-
-    ###################
-    # Astro Functions #
-    ###################
-
-    def mass_non_linear(self, z, delta_crit=1.686):
-        """
-        Get (roughly) the mass corresponding to the nonlinear scale in units of Msun h
-        """
-        sigmaM_z = self.sigmaM(self.M, z)
-        mass_non_linear = self.M[np.argmin(np.power(sigmaM_z - delta_crit, 2), axis=0)]
-
-        return mass_non_linear.to(self.Msunh)
-
-    def halobias(self, M, z, k=None):
-        """
-        This function is a wrapper to obtain the halo bias with all correction and as a function of standard inputs
-        """
-        k = np.atleast_1d(k)
-        M = np.atleast_1d(M)
-        z = np.atleast_1d(z)
-
-        bh = self._b_of_M(M, z, self.delta_crit)
-
-        if "f_NL" in self.cosmology.fullcosmoparams:
-            Delta_b = np.reshape(self.Delta_b(k, M, z), (*k.shape, *M.shape, *z.shape))
-            bh = bh[None, :, :] + Delta_b
-
-        return np.squeeze(bh)
-
-    def halomassfunction(self, M, z):
-        """
-        This function is a wrapper to obtain the halo mass function with all correction and as a function of standard inputs
-        """
-        M = np.atleast_1d(M).to(self.Msunh)
-        z = np.atleast_1d(z)
-
-        rho_input = (
-            2.77536627e11
-            * self.cosmology.Omega(0, self.astrotracer)
-            * (self.Msunh * self.Mpch**-3)
-        )
-
-        dndM = np.reshape(self._dn_dM_of_M(M, rho_input, z), (*M.shape, *z.shape))
-
-        if "f_NL" in self.cosmology.fullcosmoparams:
-            Delta_HMF = np.reshape(self.Delta_HMF(M, z), (*M.shape, *z.shape))
-            dndm *= 1 + Delta_HMF
-
-        return np.squeeze(dndM).to(u.Mpc**-3 * u.Msun**-1)
-
-    def sigmav_broadening(self, M, z):
-        """ Computes the physical scale of the line broadening due to
-        galactic rotation curves.
-        """
-        Mvec = np.atleast_1d(M)[:, None]
-        zvec = np.atleast_1d(z)[None, :]
-
-        vM = np.atleast_1d(self.astroparams["v_of_M"](Mvec))
-        Hz = np.atleast_1d(self.cosmology.Hubble(zvec))
-        sv = vM/self.cosmology.celeritas * (1 + zvec) / Hz / np.sqrt(8 * np.log(2))
-
-        return np.squeeze(sv)
-
-    def broadening_FT(self, k, mu, M, z):
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        M = np.atleast_1d(M)
-        z = np.atleast_1d(z)
-
-        sv = np.reshape(self.sigmav_broadening(M,z),(1, 1, *M.shape, *z.shape))
-        fac = np.exp(-1 / 2 * np.power(k[:, None, None, None] *
-                                       mu[None, :, None, None] *
-                                       sv,
-                                       2)
-                     )
-        return np.squeeze(fac)
-
-    def bavg(self, z, k=None, mu=None):
-        '''
-        Average luminosity-weighted bias for the given cosmology and line
-        model.  ASSUMED TO BE WEIGHED LINEARLY BY MASS FOR 'LF' MODELS
-
-        Includes the effects of f_NL though the wrapping functions in astro
-        '''
-        # Integrands for mass-averaging
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        M = self.M.to(self.Msunh)
-        z = np.atleast_1d(z)
-
-        LofM = np.reshape(self.massluminosityfunction(M,z),(*M.shape,*z.shape))
-        dndM = np.reshape(self.halomassfunction(M,z),(*M.shape,*z.shape))
-        bh = self.restore_shape(self.halobias(M,z,k=k),k,M,z)
-
-        Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
-        if self.astroparams["v_of_M"]:
-           Fv = np.reshape(self.broadening_FT(k, mu, M, z),
-                           (*k.shape, *mu.shape, *M.shape, *z.shape))
-
-        itgrnd1 = Fv * LofM[None, None, :, :] * dndM[None, None, :, :] * bh[:, None, :, :]
-        itgrnd2 = Fv * LofM[None, None, :, :] * dndM[None, None, :, :]
-
-        I1 = np.trapz(itgrnd1,M,axis=2)
-        I2 = np.trapz(itgrnd2,M,axis=2)
-        b_line =  I1/I2
-        return np.squeeze(b_line.to(1).value)
-
-    def nbar(self, z):
-        '''
-        Mean number density of galaxies, computed from the luminosity function
-        in 'LF' models and from the mass function in 'ML' models
-        '''
-        model_type = self.astroparams["model_type"]
-        if model_type =='LF':
-            dndL  = self.haloluminosityfunction(self.L,z)
-            nbar = np.trapz(dndL,self.L,axis=0)
-        else:
-            dndM = self.halomassfunction(self.M,z)
-            nbar = np.trapz(dndM,self.M,axis=0)
-        return nbar
-
-    def CLT(self,z):
-        if cfg.settings["do_Jysr"]:
-            x = c.c / (4.0 * np.pi * self.nu * self.cosmology.Hubble(z,physical=True) * (1.0 * u.sr))
-            CLT = x.to(u.Jy * u.Mpc**3 / (u.Lsun * u.sr))
-        else:
-            x = c.c**3 * (1 + z) ** 2 / (8 * np.pi * c.k_B * self.nu**3 * self.cosmology.Hubble(z,physical=True))
-            CLT = x.to(u.uK * u.Mpc**3 / u.Lsun)
-        return CLT
-
-    def Lmoments(self, z, k=None, mu=None, moment=1):
-        '''
-        Sky-averaged luminosity density moments at nuObs from target line.
-        Has two cases for 'LF' and 'ML' models that where handeld in create_luminosty_function
-        '''
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        z = np.atleast_1d(z)
-        model_type = self.astroparams["model_type"]
-        if model_type == "LF":
-            if self.astroparams["v_of_M"]:
-                raise ValueError("Line width modelling only available for ML models")
-            else:
-                L = self.L
-                dndL = np.reshape(self.haloluminosityfunction(L,z),(*L.shape,*z.shape))
-                itgrnd1 = dndL * np.power(L,moment)[:,None]
-                Lmoment = np.trapz(itgrnd1,L,axis=0)
-        elif model_type == "ML":
-            M = self.M
-            dndM = np.reshape(self.halomassfunction(M,z),(1, 1, *M.shape, *z.shape))
-            L = np.reshape(self.massluminosityfunction(M,z),(1, 1, *M.shape, *z.shape))
-
-            Fv = np.ones((*k.shape, *mu.shape, *M.shape, *z.shape))
-            if self.astroparams["v_of_M"]:
-                Fv = np.reshape(self.broadening_FT(k, mu, M, z),
-                                (*k.shape, *mu.shape, *M.shape, *z.shape))
-
-            itgrnd = dndM * np.power(L* Fv, moment)
-            Lmoment = np.trapz(itgrnd, M, axis=2)
-
-            # Special case for Tony Li model- scatter does not preserve LCO
-            if self.astroparams["model_name"] == "TonyLi":
-                model_pars = self.astroparams["model_par"]
-                alpha = model_pars["alpha"]
-                sig_SFR = model_pars["sig_SFR"]
-                correction = np.exp((moment * alpha**-2 - alpha**-1)
-                                    * moment * sig_SFR**2 * np.log(10)**2
-                                    / 2)
-                Lmoment *= correction
-
-        return np.squeeze(Lmoment)
-
-    def Tmoments(self,z, k=None, mu=None, moment=1):
-        '''
-        Sky-averaged brightness temperature moments at nuObs from target line.
-        Else, you can directly input Tmean using TOY model
-        '''
-        return np.power(self.CLT(z),moment) * self.Lmoments(z, k=k, mu=mu, moment=moment)
-
-    #############################
-    # Additional Init Functions #
-    #############################
-
-    def create_sigmaM_funcs(self):
-        """
-        This function creates the interpolating functions for sigmaM and dsigamM
-        """
-        M_inter = self.M
-        z_inter = self.cosmology.results.zgrid
-
-        sigmaM = self._sigmaM_of_z(M_inter, z_inter)
-
-        # create interpolating functions
-        logM_in_Msun = np.log(M_inter.to(u.Msun).value)
-        logsigmaM = np.log(sigmaM)
-
-        inter_logsigmaM = RectBivariateSpline(logM_in_Msun, z_inter, logsigmaM)
-
-        # restore units
-        def sigmaM_of_M_and_z(M, z):
-            M = np.atleast_1d(M)
-            z = np.atleast_1d(z)
-            logM = np.log(M.to(u.Msun).value)
-            return np.squeeze(np.exp(inter_logsigmaM(logM, z)))
-
-        def dsigmaM_of_M_and_z(M, z):
-            M = np.atleast_1d(M.to(u.Msun))
-            z = np.atleast_1d(z)
-            sigmaM = np.reshape(sigmaM_of_M_and_z(M, z), (*M.shape, *z.shape))
-            logM = np.log(M.value)
-            return np.squeeze(
-                sigmaM / M[:, None] * inter_logsigmaM.partial_derivative(1, 0)(logM, z)
-            )
-
-        return sigmaM_of_M_and_z, dsigmaM_of_M_and_z
-
-    def _sigmaM_of_z(self, M, z):
-        """
-        Mass (or cdm+b) variance at target redshift. Used to create interpolated versions
-        """
-        tracer = self.astrotracer
-
-        rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
-        R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
-
-        return self.cosmology.sigmaR_of_z(R, z, tracer)
-
-    def init_model(self):
+    def _init_model(self):
         """
         Check if model given by model_name exists in the given model_type
         """
-        model_type = self.astroparams["model_type"]
+        model_type = self.model_type
         model_name = self.astroparams["model_name"]
-        self._luminosity_function = lf.luminosity_functions(self)
-        self._mass_luminosity_function = ml.mass_luminosity(self)
+        self._luminosity_function = lf.luminosity_functions(self, self.model_par)
+        self._mass_luminosity_function = ml.mass_luminosity(self, self.model_par)
 
         if model_type == "ML" and not hasattr(
             self._mass_luminosity_function, model_name
@@ -339,51 +119,32 @@ class astro_functions:
             else:
                 raise ValueError(model_name + " not found in luminosity_functions.py")
 
-    def init_bias_function(self):
-        """
-        Initialise computation of bias function if model given by bias_model exists in the given model_type
-        """
-        bias_name = self.astroparams["bias_model"]
-        self._bias_function = bf.bias_fittinig_functions(self)
-        if not hasattr(self._bias_function, bias_name):
-            raise ValueError(bias_name + " not found in bias_fitting_functions.py")
-
-    def init_halo_mass_function(self):
-        """
-        Initialise computation of halo mass function if model given by hmf_model exists in the given model_type
-        """
-        hmf_model = self.astroparams["hmf_model"]
-        self._halo_mass_function = HMF.halo_mass_functions(self)
-
-        if not hasattr(self._halo_mass_function, hmf_model):
-            raise ValueError(hmf_model + " not found in halo_mass_functions.py")
-
-    def create_mass_luminosity(self):
-        if "ML" in self.astroparams["model_type"]:
+    def _create_mass_luminosity(self):
+        if "ML" in self.model_type:
             L_of_M = getattr(
                 self._mass_luminosity_function, self.astroparams["model_name"]
             )
 
-        elif "LF" in self.astroparams["model_type"]:
+        elif "LF" in self.model_type:
             LF_par = {
                 "A": 2.0e-6,
                 "b": 1.0,
-                "Mcut_min": self.astroparams["Mmin"],
-                "Mcut_max": self.astroparams["Mmax"],
+                "Mcut_min": self.halomodel.Mmin,
+                "Mcut_max": self.halomodel.Mmax,
             }
             off_mass_luminosity = ml.mass_luminosity(self, LF_par)
             L_of_M = getattr(off_mass_luminosity, "MassPow")
 
-        # The Mass Luminosity functions L(M,z) are allready vectorized properly inside of the File
+        # The Mass Luminosity functions L(M,z) are already vectorized properly inside of the File
         return L_of_M
 
-    def create_luminosty_function(self):
+    def _create_luminosty_function(self):
         M = self.M
         z = self.cosmology.results.zgrid
         L = self.L
 
-        if "ML" in self.astroparams["model_type"]:
-            sigma = np.maximum(cfg.settings["sigma_scatter"], 0.05)
+        if "ML" in self.model_type:
+            sigma = np.maximum(self.sigma_scatter, 0.05)
             # Special case for Tony Li model- scatter does not preserve LCO
             if self.astroparams["model_name"] == "TonyLi":
                 alpha = self.model_par["alpha"]
@@ -393,11 +154,11 @@ class astro_functions:
             sigma_base_e = sigma * 2.302585
 
             dn_dM_of_M_and_z = np.reshape(
-                self.halomassfunction(M, z), (*M.shape, *z.shape)
+                self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape)
             )
             L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
 
-            flognorm = self.lognormal(
+            flognorm = lognormal(
                 L[None, :, None],
                 np.log(L_of_M.value)[:, None, :] - 0.5 * sigma_base_e**2.0,
                 sigma_base_e,
@@ -406,15 +167,15 @@ class astro_functions:
             CFL = flognorm * dn_dM_of_M_and_z[:, None, :]
             dn_dL_of_L = np.trapz(CFL, self.M, axis=0)
 
-        elif "LF" in self.astroparams["model_type"]:
+        elif "LF" in self.model_type:
             dn_dL_of_L_func = getattr(
                 self._luminosity_function, self.astroparams["model_name"]
             )
 
-            dn_dL_of_L = dn_dL_of_L_func(L)[:,None] * np.ones_like(z)[None, :]
+            dn_dL_of_L = dn_dL_of_L_func(L)[:, None] * np.ones_like(z)[None, :]
 
         logL = np.log(L.to(u.Lsun).value)
-        dn_dL_of_L[dn_dL_of_L.value == 0] = 1e-99*dn_dL_of_L.unit
+        dn_dL_of_L[dn_dL_of_L.value == 0] = 1e-99 * dn_dL_of_L.unit
         logLF = np.log(dn_dL_of_L.to(u.Mpc ** (-3) * u.Lsun ** (-1)).value)
         logLF_inter = RectBivariateSpline(logL, z, logLF)
 
@@ -428,290 +189,248 @@ class astro_functions:
 
         return HaloLuminosityFunction
 
-    #########################################
-    # f_NL corrections to HMF and halo bias #
-    #########################################
+    ###################
+    # Astro Functions #
+    ###################
 
-    def S3_dS3(self, M, z):
+    def nbar(self, z):
         """
-        The skewness and derivative with respect to mass of the skewness.
-        Used to calculate the correction to the HMF due to non-zero fnl,
-        as presented in 2009.01245.
+        Mean number density of galaxies, computed from the luminosity function
+        in 'LF' models and from the mass function in 'ML' models
+        """
+        model_type = self.model_type
+        if model_type == "LF":
+            dndL = self.haloluminosityfunction(self.L, z)
+            nbar = np.trapz(dndL, self.L, axis=0)
+        else:
+            dndM = self.halomodel.halomassfunction(self.M, z)
+            nbar = np.trapz(dndM, self.M, axis=0)
+        return nbar
 
-        Their parameter k_cut is equivalent to our klim, not to be confused
-        with the ncdm parameter. k_lim represents the cutoff in the skewness
-        integral, we opt for no cutoff and thus set it to a very small value.
-        This can be changed if necessary.
+    def CLT(self, z):
+        if cfg.settings["do_Jysr"]:
+            x = c.c / (
+                4.0
+                * np.pi
+                * self.nu
+                * self.cosmology.Hubble(z, physical=True)
+                * (1.0 * u.sr)
+            )
+            CLT = x.to(u.Jy * u.Mpc**3 / (u.Lsun * u.sr))
+        else:
+            x = (
+                c.c**3
+                * (1 + z) ** 2
+                / (
+                    8
+                    * np.pi
+                    * c.k_B
+                    * self.nu**3
+                    * self.cosmology.Hubble(z, physical=True)
+                )
+            )
+            CLT = x.to(u.uK * u.Mpc**3 / u.Lsun)
+        return CLT
+
+    def Lavg(self, z, p=1):
+        """Mean halo luminosity and higher powers."""
+        z = np.atleast_1d(z)
+        if "ML" in self.model_type:
+            log10 = np.log(10)
+            M = self.M
+            Lp = (
+                np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape)) ** p
+            )
+            dndM = np.reshape(
+                self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape)
+            )
+            Lpbar = np.trapz(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(u.Lsun**p * u.Mpc**-3)
+
+            # Add L scatter
+            Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)
+            if "TonyLi" == self.model_name:
+                # LCO is nolonger conserved
+                Lpbar *= np.exp(0.5 * p * (self.sigma_scatter * log10) ** 2)
+
+                alpha = self.model_par["alpha"]
+                sig_SFR = self.model_par["sig_SFR"]
+                # SFR scatter
+                Lpbar *= np.exp(0.5 * p * (p - 1) * (sig_SFR / alpha * log10) ** 2)
+        else:
+            L = self.L
+            haloluminosity = np.reshape(
+                self.haloluminosityfunction(L, z),
+                (*L.shape, *z.shape),
+            )
+            Lpbar = np.trapz(
+                L[:, None] ** (p + 1) * haloluminosity, np.log(L.value), axis=0
+            )
+
+        return Lpbar * self.fduty
+
+    def Tavg(self, z, p=1):
+        return self.CLT(z) ** p * self.Lavg(z, p=p)
+
+    def bavg(self, bstring, z, power, dc=1.6865):
         """
-        tracer = self.astrotracer
-        M = np.atleast_1d(M)
+        Average luminosity-weighted bias for higher order bias functions
+
+        Pass which bias you want as a string present in bias_coevolution
+        Will default back to use ST fitting function as halo mass function!
+        """
+        # Integrands for mass-averaging
+        M = self.M.to(self.Msunh)
         z = np.atleast_1d(z)
 
-        rhoM = self.rho_crit * self.cosmology.Omega(0, tracer=tracer)
-        R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
-
-        kmin = self.cosmology.results.kmin_pk
-        kmax = self.cosmology.results.kmax_pk
-        k = np.geomspace(kmin, kmax, 128) / u.Mpc
-        mu = np.linspace(-0.995, 0.995, 128)
-
-        # Why Numpy is just the best
-
-        #############################
-        # Indicies k1, k2, mu, M, z #
-        #############################
-
-        # funnctions of k1 or k2 only
-        P_phi = 9 / 25 * self.cosmology.primordial_scalar_pow(k)
-        k_1 = k[:, None, None, None, None]
-        k_2 = k[None, :, None, None, None]
-        P_1 = P_phi[:, None, None, None, None]
-        P_2 = P_phi[None, :, None, None, None]
-        # functions of k1 or k2 and M
-        tM = M[None, :]
-        tR = R[None, :]
-        tk = k[:, None]
-        j1 = self.j1(tR * tk)
-        dj1_dM = self.dj1(tR * tk) * (tk * tR) / (3 * tM)
-        j1_1 = j1[:, None, None, :, None]
-        j1_2 = j1[None, :, None, :, None]
-        dj1_dM_1 = dj1_dM[:, None, None, :, None]
-        dj1_dM_2 = dj1_dM[None, :, None, :, None]
-        # functions of k1 or k2 and z
-        Tm = (
-            -5
-            / 3
-            * np.reshape(
-                self.cosmology.Transfer(k, z, nonlinear=False, tracer=tracer),
-                (*k.shape, *z.shape),
-            )
-        )
-        Tm_1 = Tm[:, None, None, None, :]
-        Tm_2 = Tm[None, :, None, None, :]
-        # functions of k1, k2, and mu
-        tk_1 = k[:, None, None]
-        tk_2 = k[None, :, None]
-        tmu = mu[None, None, :]
-        k_12 = np.sqrt(np.power(tk_1, 2) + np.power(tk_2, 2) + 2 * tk_1 * tk_2 * tmu)
-        # functions of k1, k2, mu, and M
-        tR = R[None, :]
-        tk = k_12.flatten()[:, None]
-        kmask = np.where((tk > kmin) and (tk < kmask))
-        tx = tR * tk
-        j1_12 = np.zeros_like(tx)
-        dj1_dM_12 = np.zeros_like(tx)
-        j1_12[kmask, :] = self.j1(tx[kmask, :])
-        dj1_dM_12[kmask, :] = self.dj1(tx[kmask, :]) * tx[kmask, :] / (3 * tM)
-        j1_12 = np.reshape(j1_12, (len(k), len(k), len(mu), len(M)))[:, :, :, :, None]
-        dj1_dM_12 = np.reshape(dj1_dM_12, (len(k), len(k), len(mu), len(M)))[
-            :, :, :, :, None
-        ]
-        # functions of k1, k2, mu, and z
-        Tm_12 = np.zeros((len(tk), len(z)))
-        Tm_12[kmask, :] = (
-            -5
-            / 3
-            * np.reshape(
-                self.cosmology.Transfer(tk[kmask], z, nonlinear=False, tracer=tracer),
-                (*(tk[kmask].shape), *z.shape),
-            )
-        )
-        Tm_12 = np.reshape(Tm_12, (*k.shape, *k.shape, *mu.shape, *z.shape))[
-            :, :, :, None, :
-        ]
-
-        # Integrandts
-        W = j1_1 * j1_2 * j1_12
-        dW_dM = (
-            j1_1 * j1_2 * dj1_dM_12 + j1_1 * dj1_dM_2 * j1_12 + dj1_dM_1 * j1_2 * j1_12
+        LofM = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
+        dndM = self.halomodel._bias_function.sc_hmf(M, z, dc=dc)
+        b = np.reshape(
+            getattr(self.halomodel._bias_function, bstring)(M, z, dc=dc),
+            (*M.shape, *z.shape),
         )
 
-        integ_S3 = (
-            np.power(k_1, 2) * np.power(k_2, 2) * W * Tm_1 * Tm_2 * Tm_12 * P_1 * P_2
-        )
-        integ_dS3_dM = (
-            np.power(k_1, 2)
-            * np.power(k_2, 2)
-            * dW_dM
-            * Tm_1
-            * Tm_2
-            * Tm_12
-            * P_1
-            * P_2
-        )
+        itgrnd1 = M[:, None] * LofM**power * dndM * b
+        itgrnd2 = M[:, None] * LofM**power * dndM
 
-        # The integration
-        S3 = np.trapz(integ_S3, k, axis=0)
-        S3 = np.trapz(S3, k, axis=0)
-        S3 = np.trapz(S3, mu, axis=0)
-        dS3_dM = np.trapz(integ_dS3_dM, k, axis=0)
-        dS3_dM = np.trapz(dS3_dM, k, axis=0)
-        dS3_dM = np.trapz(dS3_dM, mu, axis=0)
+        I1 = np.trapz(itgrnd1, np.log(M.value), axis=0)
+        I2 = np.trapz(itgrnd2, np.log(M.value), axis=0)
+        avgbL = np.squeeze(I1 / I2)
+        return avgbL.to(1).value
 
-        fac = self.cosmology.fullcosmoparams["f_NL"] * 6 / 8 / np.pi**4
-        S3 = -1 * fac * np.squeeze(S3)
-        dS3_dm = -1 * fac * np.squeeze(dS3_dm)
-        return -S3, dS3_dm
+    ##################
+    # Halo integrals #
+    ##################
 
-    def kappa3_dkappa3(self, M, z):
+    def Lhalo(self, z, *args, p=1, scale=()):
+        """Luminosity weight higher order halo profiles for n-halo terms
+        Computes the mean halo profile weight with some power of the luminosity.
+        this shows up for example in the halo shot noise,
+        or when appoximating that the mean of higher order biases are
+        independent from the scale dependence of the halo profile
         """
-        Calculates kappa_3 its derivative with respect to halo mass M from 2009.01245
-        """
-        S3, dS3_dM = self.S3_dS3(M, z)
-        sigmaM = self.sigmaM(M, z)
-        dSigmaM = self.dsigmaM_dM(M, z)
-
-        kappa3 = S3 / sigmaM
-        dkappa3dM = (dS3_dM - 3 * S3 * dSigmaM / sigmaM) / (sigmaM**3)
-
-        return kappa3, dkappa3dM
-
-    def Delta_HMF(self, M, z):
-        """
-        The correction to the HMF due to non-zero f_NL, as presented in 2009.01245.
-        """
-        sigmaM = self.sigmaM(M, z)
-        dSigmaM = self.dsigmaM_dM(M, z)
-
-        nuc = 1.42 / sigmaM
-        dnuc_dM = -1.42 * dSigmaM / (sigmaM) ** 2
-
-        kappa3, dkappa3_dM = self.kappa3_dkappa3(M, z)
-
-        H2nuc = nuc**2 - 1
-        H3nuc = nuc**3 - 3 * nuc
-
-        F1pF0p = (kappa3 * H3nuc - H2nuc * dkappa3_dM / dnuc_dM) / 6
-
-        return F1pF0p
-
-    def Delta_b(self, k, M, z):
-        """
-        Scale dependent correction to the halo bias in presence of primordial non-gaussianity
-        """
-        tracer = self.astrotracer
-
-        M = np.atleast_1d(M)
+        M = self.M.to(u.Msun)
         z = np.atleast_1d(z)
+
+        if len(args) % p != 0:
+            raise ValueError("You have to pass wave-vectors for every p")
+        else:
+            kd = [np.atleast_1d(args[ik]) for ik in range(p)]
+
+        if scale:
+            alpha = np.array([*scale])
+        else:
+            alpha = np.ones(p)
+
+        # Independent of k
+        L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
+
+        # Dependent on k
+        normhaloprofile = []
+        for ik in range(p):
+            k = kd[ik]
+            U = np.reshape(
+                self.halomodel.ft_NFW(k, M, z), (*k.shape, *M.shape, *z.shape)
+            )
+            U = np.expand_dims(U, (*range(ik), *range(ik + 1, p)))
+            U = np.expand_dims(U, (*range(p, 2 * p),))
+            normhaloprofile.append(np.power(U * L_of_M, alpha[ik]))
+
+        # Dependent on k and mu
+        Fv = np.ones((p,))
+        if self.halomodel.haloparams["v_of_M"]:
+            Fv = []
+            for ik in range(p):
+                k = kd[ik]
+                mu = np.atleast_1d(args[p + ik])
+                F = np.reshape(
+                    self.halomodel.broadening_FT(k, mu, M, z),
+                    (*k.shape, *mu.shape, *M.shape, *z.shape),
+                )
+                F = np.expand_dims(
+                    F,
+                    (*range(ik), *range(ik + 1, p)),
+                )
+                F = np.expand_dims(
+                    F,
+                    (*range(p, p + ik), *range(p + ik + 1, 2 * p)),
+                )
+                Fv.append(np.power(F, alpha[ik]))
+
+        # Construct the integrand
+        I1 = dndM * L_of_M**np.sum(alpha) * M[:, None]
+        I2 = dndM * M[:, None]
+        for ik in range(p):
+            I2 = I2 * Fv[ik] * normhaloprofile[ik]
+        logM = np.log(M.value)
+        Umean = (np.trapz(I2, logM, axis=-2) / np.trapz(I1, logM, axis=-2)).to(1).value
+        return np.squeeze(self.Lavg(z, p=np.sum(alpha)) * Umean)
+
+    def Thalo(self, z, *args, p=1, scale=()):
+        if scale:
+            alpha = np.sum(scale)
+        else:
+            alpha = p
+        return self.CLT(z) ** alpha * self.Lhalo(z, *args, p=p, scale=scale)
+
+    def T_one_halo(self, k, z, mu=None):
+        """Directly computes the one-halo power spectrum."""
+        M = self.M.to(u.Msun)
         k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        z = np.atleast_1d(z)
 
-        Tk = np.reshape(self.cosmology.Transfer(k, z), (*k.shape, *z.shape))
-        bias = np.reshape(self._b_of_M(M, z, self.delta_crit), (*M.shape, *z.shape))
-
-        f1 = (self.cosmology.Hubble(0, physical=True) / (c.c * k)).to(1).value
-        f2 = (
-            3
-            * self.cosmology.Omega(0, tracer=tracer)
-            * self.cosmology.fullcosmoparams["f_NL"]
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
+        L_of_M = np.reshape(
+            self.massluminosityfunction(M, z) ** 2, (*M.shape, *z.shape)
         )
-
-        f1_of_k = f1[:, None, None]
-        Tk_of_k_and_z = Tk[:, None, :]
-        bias_of_M_and_z = bias[None, :, :]
-
-        # Compute non-Gaussian correction Delta_b
-        delta_b = (bias_of_M_and_z - 1) * f2 * f1_of_k / Tk_of_k_and_z
-        return np.squeeze(delta_b)
-
-    ##################
-    # Helper Functions
-    ##################
-    # To be Outsorced
-    def lognormal(self, x, mu, sigma):
-        """
-        Returns a lognormal PDF as function of x with mu and sigma
-        being the mean of log(x) and standard deviation of log(x), respectively
-        """
-        try:
-            return (
-                1
-                / x
-                / sigma
-                / (2.0 * np.pi) ** 0.5
-                * np.exp(-((np.log(x.value) - mu) ** 2) / 2.0 / sigma**2)
+        U2 = np.reshape(
+            self.halomodel.ft_NFW(k, M, z) ** 2, (*k.shape, *M.shape, *z.shape)
+        )
+        Fv = 1
+        if self.halomodel.haloparams["v_of_M"]:
+            Fv = np.reshape(
+                self.halomodel.broadening_FT(k, mu, M, z) ** 2,
+                (*k.shape, *mu.shape, *M.shape, *z.shape),
             )
-        except:
-            return (
-                1
-                / x
-                / sigma
-                / (2.0 * np.pi) ** 0.5
-                * np.exp(-((np.log(x) - mu) ** 2) / 2.0 / sigma**2)
+        I1 = M[None, None, :, None] * L_of_M[None, None, :, :] * dndM[None, None, :, :]
+        I2 = I1 * U2[:, None, :, :] * Fv
+        Uavg = (
+            (
+                np.trapz(I2, np.log(M.value), axis=-2)
+                / np.trapz(I1, np.log(M.value), axis=-2)
+            )
+            .to(1)
+            .value
+        )
+        return np.squeeze(self.Tavg(z, p=2) * Uavg)
+
+    def bhalo(self, k, z, mu=None):
+        """Mean Tb, factor in front of the clutstering part of the LIM-autopower spectrum"""
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+        mu = np.atleast_1d(mu)
+        M = self.M
+
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
+        L = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
+        b = restore_shape(self.halomodel.halobias(M, z, k=k), k, M, z)
+        U = restore_shape(self.halomodel.ft_NFW(k, M, z), k, M, z)
+
+        Fv = 1
+        if self.halomodel.haloparams["v_of_M"]:
+            Fv = np.reshape(
+                self.halomodel.broadening_FT(k, mu, M, z),
+                (*k.shape, *mu.shape, *M.shape, *z.shape),
             )
 
-    def j1(self, x):
-        W = 3 / np.power(x, 3) * (np.sin(x * u.rad) - x * np.cos(x * u.rad))
-        W[np.where(x < 0.01)] = 1 - np.power(x[np.where(x < 0.01)], 2) / 10
-
-        return W
-
-    def dj1(self, x):
-        dW = 3 / np.power(x, 2) * np.sin(x * u.rad) - 9 / np.power(x, 4) * (
-            np.sin(x * u.rad) - x * np.cos(x * u.rad)
+        I1 = L * dndM * M[:, None]
+        I2 = I1 * Fv * U[:, None, :, :] * b[:, None, :, :]
+        bmean = (
+            (np.trapz(I2, np.log(M.value), axis=-2) / np.trapz(I1, np.log(M.value), axis=-2)).to(1).value
         )
-        dW[np.where(x < 0.01)] = -x / 5 + np.power(x, 3) / 70
 
-        return dW
-
-    def restore_shape(self,A,*args):
-        """
-        Extremely dangerous function to reshape squeezed arrays into arrays with boradcastable shapes
-        Only use when there is other way as this assumes that the output shape has lenghs corresponding to input
-        And is sqeezed in order of the input
-        """
-        A = np.atleast_1d(A)
-        inputShape = A.shape
-        targetShape = ()
-        for arg in args:
-            targetShape = (*targetShape, *np.atleast_1d(arg).shape)
-
-        inputShape = np.array(inputShape)
-        targetShape= np.array(targetShape)
-
-        new_shape_A = []
-        j = 0
-        for i in range(len(targetShape)):
-            if j < len(inputShape) and inputShape[j] == targetShape[i]:
-                new_shape_A.append(inputShape[j])
-                j += 1
-            else:
-                new_shape_A.append(1)
-
-        A = A.reshape(new_shape_A)
-        return A
-
-    def set_astrophysics_defaults(self):
-        """
-        Fills up default values in the astropars dictionary if the values are not found.
-
-        Parameters:
-            self (object): The instance of the class.
-
-        Returns:
-            None
-        """
-        self.astroparams.setdefault("model_type", "LF")
-        self.astroparams.setdefault("model_name", "SchCut")
-        self.astroparams.setdefault(
-            "model_par",
-            {
-                "phistar": 9.6e-11 * u.Lsun**-1 * u.Mpc**-3,
-                "Lstar": 2.1e6 * u.Lsun,
-                "alpha": -1.87,
-                "Lmin": 5000 * u.Lsun,
-            },
-        )
-        self.astroparams.setdefault("hmf_model", "ST")
-        self.astroparams.setdefault("bias_model", "ST99")
-        self.astroparams.setdefault("bias_par", {})
-        self.astroparams.setdefault("Mmin", 1e9 * u.Msun)
-        self.astroparams.setdefault("Mmax", 1e15 * u.Msun)
-        self.astroparams.setdefault("nM", 500)
-        self.astroparams.setdefault("Lmin", 10 * u.Lsun)
-        self.astroparams.setdefault("Lmax", 1e8 * u.Lsun)
-        self.astroparams.setdefault("nL", 5000)
-        self.astroparams.setdefault("v_of_M", None)
-        self.astroparams.setdefault("line_incli", True)
+        return np.squeeze(self.Tavg(z, p=1) * bmean)
 
     def recap_astro(self):
         print("Astronomical Parameters:")

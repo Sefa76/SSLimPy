@@ -9,20 +9,23 @@ Takes inspiration from pylians
 """
 
 import numpy as np
-from scipy.interpolate import interp1d
+from functools import partial
 
 
 class halo_mass_functions:
-    def __init__(self, astro):
-        self.astro = astro
+    def __init__(self, halomodel):
+        self.halomodel = halomodel
+        self.cosmology = halomodel.cosmology
 
         # Units and Redshifts
-        self.Mpch = astro.Mpch
-        self.Msunh = astro.Msunh
+        self.Mpch = halomodel.Mpch
+        self.Msunh = halomodel.Msunh
 
         # SigmaM functions
-        self.sigmaM = astro.sigmaM
-        self.dsigmaM_dM = astro.dsigmaM_dM
+        self.sigmaM = partial(self.halomodel.sigmaM, tracer=self.halomodel.tracer)
+        self.dsigmaM_dM = partial(
+            self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer
+        )
 
     def ST(self, Mvec, rhoM, z):
         """
@@ -31,8 +34,10 @@ class halo_mass_functions:
         Mvec = np.atleast_1d(Mvec)
         z = np.atleast_1d(z)
 
-        sigmaM = np.reshape(self.sigmaM(Mvec, z),(*Mvec.shape,*z.shape))
-        dsigmaM_dM = np.reshape(self.dsigmaM_dM(Mvec, z).to(self.Msunh**-1),(*Mvec.shape,*z.shape))
+        sigmaM = np.reshape(self.sigmaM(Mvec, z), (*Mvec.shape, *z.shape))
+        dsigmaM_dM = np.reshape(
+            self.dsigmaM_dM(Mvec, z).to(self.Msunh**-1), (*Mvec.shape, *z.shape)
+        )
 
         deltac = 1.686
         nu = (deltac / sigmaM) ** 2.0
@@ -40,7 +45,7 @@ class halo_mass_functions:
 
         dndM = (
             -2
-            * (rhoM / Mvec)[:,None]
+            * (rhoM / Mvec)[:, None]
             * dsigmaM_dM
             / sigmaM
             * 0.3222
@@ -73,7 +78,7 @@ class halo_mass_functions:
 
         fs = A * ((b / sigmaM) ** (a) + 1.0) * np.exp(-c / sigmaM**2)
 
-        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:, None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return np.squeeze(dndM)
 
@@ -92,7 +97,7 @@ class halo_mass_functions:
         c = 1.036 * (1.0 + z_array) ** (-0.024)
 
         fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2)
-        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:, None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return np.squeeze(dndM)
 
@@ -109,7 +114,7 @@ class halo_mass_functions:
 
         fs = A * np.exp(-np.absolute(np.log(1.0 / sigmaM) + b) ** c)
 
-        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:, None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
@@ -126,7 +131,7 @@ class halo_mass_functions:
         dsigmaM_dM = self.dsigmaM_dM(Mvec, z).to(self.Msunh**-1)
 
         fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2)
-        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:, None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
@@ -135,12 +140,7 @@ class halo_mass_functions:
         Watson et al. halo mass function for delta=200. Can be changed
         """
         delta = 200.0
-        OmegaM = (
-            rhoM
-            / 2.77536627e11
-            * (self.Msunh * self.Mpch**-3).to(self.Msunh * self.Mpch**-3)
-        )
-
+        OmegaM = self.cosmology.Omega(0, "matter")
         A = 0.194
         a = 1.805
         b = 2.267
@@ -156,7 +156,7 @@ class halo_mass_functions:
         )
         fs = A * (sigmaM ** (-a) + b) * np.exp(-c / sigmaM**2) * factor
 
-        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:, None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
@@ -174,7 +174,7 @@ class halo_mass_functions:
 
         fs = A * ((b / sigmaM) ** a + 1.0) * np.exp(-c / sigmaM**2)
 
-        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:, None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM
 
@@ -187,6 +187,6 @@ class halo_mass_functions:
 
         fs = 0.265 * (1.675 / sigmaM + 1.0) ** 1.9 * np.exp(-1.4 / sigmaM**2)
 
-        dndM = -(rhoM / Mvec)[:,None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
+        dndM = -(rhoM / Mvec)[:, None] * dsigmaM_dM.to(self.Msunh**-1) * fs / sigmaM
 
         return dndM

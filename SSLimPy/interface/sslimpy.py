@@ -1,12 +1,8 @@
 import sys
-from warnings import warn
 from copy import copy
-
 from numpy import atleast_1d
-
-sys.path.append("../")
 import SSLimPy.interface.config as cfg
-import SSLimPy.interface.updater as updater
+from SSLimPy.interface import updater
 
 class sslimpy:
     def __init__(
@@ -18,20 +14,17 @@ class sslimpy:
         cosmopars = dict(),
         astropars = dict(),
         BAOpars = dict(),
-        freepars = dict(),
     ):
 
-        print("#--------------------------------------------------#")
+        print("  █████   █████  █       █            █████   █    █ ")
+        print(" █     █ █     █ █            █   █   █    █  █   █  ")
+        print(" █       █       █     ███   █ █ █ █  █    █   █ █   ")
+        print("  █████   █████  █       █   █  █  █  █████     █    ")
+        print("       █       █ █       █   █     █  █        █     ")
+        print(" █     █ █     █ █       █   █     █  █       █      ")
+        print("  █████   █████  █████ █████ █     █  █      █       ")
         print("")
-        print("  SSSSS   SSSSS  L       i            PPPP   y    y ")
-        print(" S     S S     S L            m   m   P    P y   y  ")
-        print(" S       S       L     iii   m m m m  P    P  y y   ")
-        print("  SSSSS   SSSSS  L       i   m  m  m  PPPP     y    ")
-        print("       S       S L       i   m     m  P        y    ")
-        print(" S     S S     S L       i   m     m  P       y     ")
-        print("  SSSSS   SSSSS  LLLLL iiiii m     m  P      y      ")
-        print("")
-        print("#--------------------------------------------------#")
+        print("#---------------------------------------------------#")
         sys.stdout.flush()
 
         cfg.init(settings_dict = settings_dict,
@@ -50,12 +43,9 @@ class sslimpy:
         self.fiducialastro = cfg.fiducialastro
         self.fiducialastroparams = cfg.fiducialastroparams
 
-        self.obspars = cfg.obspars
-        #self.vidpars = cfg.vidpars
         self.output = atleast_1d(cfg.settings["output"])
 
         ### save very fist cosmology ###
-        self.curent_cosmo = copy(self.fiducialcosmo)
         self.curent_astro = copy(self.fiducialastro)
 
         ### TEXT VOMIT ###
@@ -63,7 +53,7 @@ class sslimpy:
             self.recap_options()
         ##################
 
-    def compute(self, cosmopars, astropars, BAOpars, obspars=dict(), output=None):
+    def compute(self, cosmopars, halopars, obspars, astropars, BAOpars=dict(), pobs_settings=dict(), output=None):
         """Main interface to compute the different SSLimPy outputs
 
         Inputs the different SSLimPy output options.
@@ -73,49 +63,28 @@ class sslimpy:
             output = self.output
         outputdict = {}
 
-        for obs in output:
-            if obs=="Power spectrum":
-                if "Power spectrum" in outputdict:
-                    continue
-                self._compute_ps(cosmopars, astropars, BAOpars, obspars, outputdict)
-            elif obs=="Covariance":
-                if not "Power spectrum" in outputdict:
-                    self._compute_ps(cosmopars, astropars, BAOpars, obspars, outputdict)
+        if "Power spectrum" in output:
+            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
 
-                self._compute_cov(outputdict["Power spectrum"],
-                                  outputdict,
-                                  )
-            else:
-                warn("Output {} asked for not recognised \n Skiped".format(obs))
-
-        #print("Done!")
+        if "Covariance" in output:
+            self._compute_cov(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
         return outputdict
 
-    def _compute_ps(self, cosmopars, astropars, BAOpars, obspars, outputdict):
-        from SSLimPy.LIMsurvey.PowerSpectra import PowerSpectra
-        cosmo = updater.update_cosmo(self.curent_cosmo,
-                                     cosmopars,
-                                     )
+    def _compute_ps(self, cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict):
+        from SSLimPy.LIMsurvey.power_spectrum import PowerSpectra
+        self.curent_astro = updater.update_astro(
+            self.curent_astro, cosmopars, halopars, astropars, obspars,
+        )
+        outputdict["Power spectrum"] = PowerSpectra(self.curent_astro, BAOpars, pobs_settings)
 
-        astro = updater.update_astro(self.curent_cosmo,
-                                     cosmopars,
-                                     self.curent_astro,
-                                     astropars,
-                                     updated_cosmo=cosmo,
-                                     )
+    def _compute_cov(self, cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict):
+        from SSLimPy.LIMsurvey.covariance import Covariance
+        if "Power spectrum" in outputdict:
+            pass
+        else:
+            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
+        outputdict["Covariance"] = Covariance(outputdict["Power spectrum"])
 
-        astro = updater.update_obspars(obspars,
-                                       astro,
-                                       )
-
-        outputdict["Power spectrum"] = PowerSpectra(cosmo,astro,BAOpars)
-        outputdict["Power spectrum"].compute_power_spectra()
-        outputdict["Power spectrum"].compute_power_spectra_moments()
-
-
-    def _compute_cov(self, power_spectrum, outputdict):
-        from SSLimPy.LIMsurvey.Covariance import Covariance
-        outputdict["Covariance"] = Covariance(power_spectrum)
 
     def recap_options(self):
         """This will print all the selected options into the standard output"""
@@ -125,11 +94,4 @@ class sslimpy:
         print("Settings:")
         for key in cfg.settings:
             print("   " + key + ": {}".format(cfg.settings[key]))
-        print("")
-        print("Observational Parameters:")
-        for key in cfg.obspars:
-            print("   " + key + ": {}".format(cfg.obspars[key]))
-        #print("VID Parameters:")
-        #for key in cfg.vidpars:
-        #    print("   " + key + ": {}".format(cfg.vidpars[key]))
 

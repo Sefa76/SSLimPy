@@ -1,5 +1,60 @@
-from numba import njit, prange
+from numba import njit
 import numpy as np
+
+
+##################
+# Helper Functions
+##################
+def lognormal(x, mu, sigma):
+    """
+    Returns a lognormal PDF as function of x with mu and sigma
+    being the mean of log(x) and standard deviation of log(x), respectively
+    """
+    try:
+        return (
+            1
+            / x
+            / sigma
+            / (2.0 * np.pi) ** 0.5
+            * np.exp(-((np.log(x.value) - mu) ** 2) / 2.0 / sigma**2)
+        )
+    except AttributeError:
+        return (
+            1
+            / x
+            / sigma
+            / (2.0 * np.pi) ** 0.5
+            * np.exp(-((np.log(x) - mu) ** 2) / 2.0 / sigma**2)
+        )
+
+
+def restore_shape(A, *args):
+    """
+    Extremely dangerous function to reshape squeezed arrays into arrays with boradcastable shapes
+    This assumes that the output shape has lenghs corresponding to input
+    and is sqeezed in order of the input
+    """
+    A = np.atleast_1d(A)
+    inputShape = A.shape
+    targetShape = ()
+    for arg in args:
+        targetShape = (*targetShape, *np.atleast_1d(arg).shape)
+
+    inputShape = np.array(inputShape)
+    targetShape = np.array(targetShape)
+
+    new_shape_A = []
+    j = 0
+    for i in range(len(targetShape)):
+        if j < len(inputShape) and inputShape[j] == targetShape[i]:
+            new_shape_A.append(inputShape[j])
+            j += 1
+        else:
+            new_shape_A.append(1)
+
+    A = A.reshape(new_shape_A)
+    return A
+
 
 #####################
 # Special Functions #
@@ -21,33 +76,75 @@ def legendre_4(mu):
     return 1 / 8 * (35 * np.power(mu, 4) - 30 * np.power(mu, 2) + 3)
 
 
+@njit
+def get_legendre(ell, mu):
+    if ell==0:
+        return legendre_0(mu)
+    if ell==2:
+        return legendre_2(mu)
+    if ell==4:
+        return legendre_4(mu)
+    
+
+@njit
+def smooth_W(x):
+    lx = len(x)
+    W = np.empty(lx)
+    for ix, xi in enumerate(x):
+        if xi < 1e-3:
+            W[ix] = 1.0 - 1.0 / 10.0 * xi**2
+        else:
+            W[ix] = 3.0 / xi**3 * (np.sin(xi) - xi * np.cos(xi))
+    return W
+
+
+@njit
+def smooth_dW(x):
+    lx = len(x)
+    dW = np.empty(lx)
+    for ix, xi in enumerate(x):
+        if xi < 1e-3:
+            dW[ix] = -1.0 / 5.0 * xi - 1.0 / 70.0 * xi**3
+        else:
+            dW[ix] = 3.0 / xi**2 * np.sin(xi) - 9 / xi**4 * (
+                np.sin(xi) - xi * np.cos(xi)
+            )
+    return dW
+
+
 ##################
 # Base Functions #
 ##################
 
 
+@njit
+def any_close_to_zero(values, atol=1e-8):
+    for value in values:
+        if np.isclose(value, 0, atol=atol):
+            return True
+    return False
+
+
 @njit(
     "(float64, float64, float64, float64, float64, float64)",
-    fastmath=True,
 )
 def scalarProduct(k1, mu1, ph1, k2, mu2, ph2):
 
-    s1s = (1 - mu1**2)
-    if np.isclose(s1s,0):
+    s1s = 1 - mu1**2
+    if np.isclose(s1s, 0):
         s1s = 0
         mu1 = 1 * np.sign(mu1)
 
-    s2s = (1 - mu2**2)
-    if np.isclose(s2s,0):
+    s2s = 1 - mu2**2
+    if np.isclose(s2s, 0):
         s2s = 0
         mu2 = 1 * np.sign(mu2)
 
-    return k1 * k2 * (np.sqrt(s2s*s1s) * np.cos(ph1 - ph2) + mu1 * mu2)
+    return k1 * k2 * (np.sqrt(s2s * s1s) * np.cos(ph1 - ph2) + mu1 * mu2)
 
 
 @njit(
     "(float64, float64, float64, float64, float64, float64)",
-    fastmath=True,
 )
 def addVectors(
     k1,
@@ -58,36 +155,34 @@ def addVectors(
     ph2,
 ):
     k1pk2 = scalarProduct(k1, mu1, ph1, k2, mu2, ph2)
-    radicant = k1**2 + 2 * k1pk2 + k2**2
-    if np.isclose(radicant, 0):
-        k12 = 0
-        mu12 = 0
-        phi12 = 0
+    radicant = max(0.0, k1**2 + 2 * k1pk2 + k2**2)
+
+    k12 = np.sqrt(radicant)
+    if np.isclose(k12, 0, atol=1e-12):
+        return 0.0, 0.0, 0.0
+    
+    mu12 = (k1 * mu1 + k2 * mu2) / k12
+    mu12 = min(np.abs(mu12), 1.0) * np.sign(mu12)
+
+    if np.isclose(np.abs(mu12), 1):
+        return k12, mu12, 0
+    
+    s1s = max(0, 1 - mu1**2)
+    s2s = max(0, 1 - mu2**2)
+
+    x = k1 * np.sqrt(s1s) * np.cos(ph1) + k2 * np.sqrt(s2s) * np.cos(ph2)
+    y = k1 * np.sqrt(s1s) * np.sin(ph1) + k2 * np.sqrt(s2s) * np.sin(ph2)
+
+    if np.isclose(x, 0):
+        phi12 = np.pi if np.sign(y) == 1 else -np.pi
     else:
-        k12 = np.sqrt(radicant)
-        mu12 = (k1 * mu1 + k2 * mu2) / k12
-        if np.isclose(np.abs(mu12), 1):
-            phi12 = 0
-        else:
-            # Yes this sometimes fails
-            s1s = 1-mu1**2
-            if np.isclose(s1s,0):
-                s1s = 0
-            s2s = 1-mu2**2
-            if np.isclose(s2s,0):
-                s2s = 0
-
-            x = k1 * np.sqrt(s1s) * np.cos(ph1) + k2 * np.sqrt(s2s) * np.cos(ph2)
-            y = k1 * np.sqrt(s1s) * np.sin(ph1) + k2 * np.sqrt(s2s) * np.sin(ph2)
-
-            phi12 = np.arctan2(y, x)
+        phi12 = np.arctan2(y, x)
 
     return k12, mu12, phi12
 
 
 @njit(
-    "(float64[::1], float64[::1], float64[::1])",
-    fastmath=True,
+    "(float64[:], float64[:], float64[:])",
 )
 def linear_interpolate(xi, yi, x):
     xl = yi.size
@@ -113,8 +208,7 @@ def linear_interpolate(xi, yi, x):
 
 
 @njit(
-    "(float64[::1], float64[::1], float64[:,:], float64[::1], float64[::1])",
-    fastmath=True,
+    "(float64[:], float64[:], float64[:,:], float64[:], float64[:])",
 )
 def bilinear_interpolate(xi, yj, zij, x, y):
     # Check input sizes
@@ -158,99 +252,55 @@ def bilinear_interpolate(xi, yj, zij, x, y):
     return results
 
 
-# The numba trapezoid for phi, muq, and q
-@njit("(float64[::1], float64[::1])", fastmath=True)
-def trapezoid(y, x):
-    s = 0.0
-    for i in range(x.size - 1):
-        dx = x[i + 1] - x[i]
-        dy = y[i] + y[i + 1]
-        s += dx * dy
-    return s * 0.5
+#####################
+# Spline Integrator #
+#####################
 
 
-#########################
-# Specialized Functions #
-#########################
+@njit
+def adaptive_mesh_integral(a, b, integrand, args=(), eps=1e-2, jmin=5, jmax=20):
+    """Adaptation of implementation of HMCode2020 by Alexander Mead"""
+    if a == b:
+        return 0
 
+    # Initialize sum variables for integration
+    sum_2n = 0.0
+    sum_n = 0.0
+    sum_old = 0.0
+    sum_new = 0.0
 
-@njit(
-    "(float64[::1], float64[::1], "
-    + "float64[::1], float64[::1], float64[::1], "
-    + "float64[:,:], float64[:,:])",
-    parallel=True,
-)
-def convolve(k, mu, q, muq, deltaphi, P, W):
-    # Check input sizes
-    kl, mul = P.shape
-    assert kl == k.size, "k should be the same size as axis 0 of P"
-    assert mul == mu.size, "mu should be the same size as axis 1 of P"
-    ql, muql = W.shape
-    deltaphil = deltaphi.size
-    assert ql == q.size, "q should be the same size as axis 0 of W"
-    assert muql == muq.size, "muq should be the same size as axis 1 of W"
+    for j in range(1, jmax + 1):
+        n = 1 + 2 ** (j - 1)
+        dx = (b - a) / (n - 1)
+        if j == 1:
+            t = np.array([a, b])
+            f = np.empty_like(t)
+            for it, ti in enumerate(t):
+                f[it] = integrand(ti, *args)
+            sum_2n = np.sum(0.5 * f * dx)
+            sum_new = sum_2n
+        else:
+            t = a + (b - a) * (np.arange(2, n, 2) - 1) / (n - 1)
+            f = np.empty_like(t)
+            for it, ti in enumerate(t):
+                f[it] = integrand(ti, *args)
 
-    # create Return array to be filled in parallel
-    Pconv = np.empty_like(P, dtype=np.float64)
-    for ik in prange(kl):
-        for imu in prange(mul):
-            # use q, muq, deltaphi and obtain abs k-q and the polar angle of k-q
-            abskminusq = np.empty((ql, muql, deltaphil))
-            mukminusq = np.empty((ql, muql, deltaphil))
-            for iq in range(ql):
-                for imuq in range(muql):
-                    for ideltaphi in range(deltaphil):
-                        kmq, mukmq, _ = addVectors(
-                            k[ik], mu[imu], deltaphi[ideltaphi], q[iq], -mu[imuq], np.pi
-                        )
-                        abskminusq[iq, imuq, ideltaphi] = kmq
-                        mukminusq[iq, imuq, ideltaphi] = mukmq
+            sum_2n = sum_n / 2 + np.sum(f * dx)
+            sum_new = (4 * sum_2n - sum_n) / 3
+            # print(sum_new, sum_old)
 
-            # flatten the axis last axis first
-            abskminusq = abskminusq.flatten()
-            mukminusq = mukminusq.flatten()
-            # interpolate the logP on mu logk and fill with new values
-            logPkminusq = bilinear_interpolate(
-                np.log(k), mu, np.log(P), np.log(abskminusq), mukminusq
-            )
-            logPkminusq = np.reshape(logPkminusq, (ql, muql, deltaphil))
-
-            # Do the 3D trapezoid integration
-            q_integrand = np.empty(ql)
-            for iq in range(ql):
-                muq_integrand = np.empty(muql)
-                for imuq in range(muql):
-                    phi_integrand = (
-                        1
-                        / (2 * np.pi) ** 3
-                        * q[iq] ** 2
-                        * (np.abs(W[iq, imuq]) ** 2)
-                        * np.exp(logPkminusq[iq, imuq, :])
-                    )
-                    muq_integrand[imuq] = trapezoid(phi_integrand, deltaphi)
-                q_integrand[iq] = trapezoid(muq_integrand, muq)
-            Pconv[ik, imu] = trapezoid(q_integrand * q, np.log(q))
-    return Pconv
-
-
-@njit(
-    "(uint16, uint16, "
-    + "float64[:,:], float64[:,:], float64[:,:], "
-    + "float64[:,:], float64[:,:], "
-    + "float64[:,:])",
-    parallel=True,
-)
-def construct_gaussian_cov(nk, nz, C00, C20, C40, C22, C42, C44):
-    cov = np.empty((nk, 3, 3, nz))
-    for ki in prange(nk):
-        for zi in range(nz):
-            cov[ki, 0, 0, zi] = C00[ki, zi]
-            cov[ki, 1, 0, zi] = C20[ki, zi]
-            cov[ki, 2, 0, zi] = C40[ki, zi]
-            cov[ki, 0, 1, zi] = C20[ki, zi]
-            cov[ki, 0, 2, zi] = C40[ki, zi]
-            cov[ki, 1, 1, zi] = C22[ki, zi]
-            cov[ki, 1, 2, zi] = C42[ki, zi]
-            cov[ki, 2, 1, zi] = C42[ki, zi]
-            cov[ki, 2, 2, zi] = C44[ki, zi]
-    return cov
+        if j >= jmin:
+            if sum_old != 0.0:
+                if abs(1.0 - sum_new / sum_old) < eps:
+                    return sum_new
+            elif sum_new == 0.0:
+                return 0.0
+        if j == jmax:
+            # print(*args)
+            print("INTEGRATE: Integration timed out")
+            return sum_new
+        else:
+            sum_old = sum_new
+            sum_n = sum_2n
+            sum_2n = 0.0
+    return sum_new

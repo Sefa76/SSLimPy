@@ -8,21 +8,24 @@ Each function should have the same signature (M, z, dc) -> scalar or array like
 """
 
 from copy import deepcopy
-
+from functools import partial
 import numpy as np
 
 
-class bias_fittinig_functions:
+class bias_fitting_functions:
 
-    def __init__(self, astro):
-        self.astro = astro  # dont call it astrology
-        self.cosmology = astro.cosmology
-        self.astroparams = deepcopy(astro.astroparams)
-        self.bias_par = self.astroparams["bias_par"]
+    def __init__(self, halomodel):
+        self.halomodel = halomodel
+        self.cosmology = halomodel.cosmology
+        self.bias_par = halomodel.haloparams["bias_par"]
+        self.sigmaM = partial(self.halomodel.sigmaM, tracer=self.halomodel.tracer)
+        self.dsigmaM_dM = partial(
+            self.halomodel.dsigmaM_dM, tracer=self.halomodel.tracer
+        )
 
     def Tinker10(self, M, z, dc):
 
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
         # Parameters of bias fit
         y = self.bias_par.get("y", np.log10(200.0))
         B = self.bias_par.get("B", 0.183)
@@ -41,7 +44,7 @@ class bias_fittinig_functions:
 
         Taken from Mo and White (1996)
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         return 1.0 + (nu**2.0 - 1.0) / dc
 
@@ -52,11 +55,11 @@ class bias_fittinig_functions:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        M_NL = self.astro.mass_non_linear(z, delta_crit=dc)
+        M_NL = self.halomodel.mass_non_linear(z, delta_crit=dc)
         x = (M[:, None] / M_NL[None, :]).to(1).value
 
-        ns = self.cosmology.input_cosmopars.get(
-            "ns", self.cosmology.input_cosmopars["n_s"]
+        ns = self.cosmology.fullcosmoparams.get(
+            "ns", self.cosmology.fullcosmoparams["n_s"]
         )
         nu_star = x ** (ns + 3.0) / 6.0
 
@@ -75,7 +78,7 @@ class bias_fittinig_functions:
 
         Taken from Sheth & Tormen (1999).
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         q = self.bias_par.get("q", 0.707)
         p = self.bias_par.get("p", 0.3)
@@ -88,7 +91,7 @@ class bias_fittinig_functions:
 
         Taken from Sheth, Mo & Tormen (2001)
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         a = self.bias_par.get("a", 0.707)
         b = self.bias_par.get("b", 0.5)
@@ -109,7 +112,7 @@ class bias_fittinig_functions:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        M_NL = self.astro.mass_non_linear(z, delta_crit=dc)
+        M_NL = self.halomodel.mass_non_linear(z, delta_crit=dc)
         x = (M[:, None] / M_NL[None, :]).to(1).value
 
         a = self.bias_par.get("a", 0.53)
@@ -131,7 +134,7 @@ class bias_fittinig_functions:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        M_NL = self.astro.mass_non_linear(z, delta_crit=dc)
+        M_NL = self.halomodel.mass_non_linear(z, delta_crit=dc)
         x = (M[:, None] / M_NL[None, :]).to(1).value
 
         a = self.bias_par.get("a", 0.53)
@@ -146,11 +149,11 @@ class bias_fittinig_functions:
         a3 = self.bias_par.get("a3", 0.8)
 
         Om0m = self.cosmology.Omegam_of_z(0)
-        ns = self.cosmology.input_cosmopars.get(
-            "ns", self.cosmology.input_cosmopars["n_s"]
+        ns = self.cosmology.fullcosmoparams.get(
+            "ns", self.cosmology.fullcosmoparams["n_s"]
         )
-        nrun = self.cosmology.input_cosmopars.get(
-            "alpha_s", self.cosmology.input_cosmopars["nrun"]
+        nrun = self.cosmology.fullcosmoparams.get(
+            "alpha_s", self.cosmology.fullcosmoparams["nrun"]
         )
         s8 = self.cosmology.sigma8_of_z(0)
 
@@ -172,7 +175,7 @@ class bias_fittinig_functions:
         """
         Empirical bias, same as SMT01 but modified parameters.
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         a = self.bias_par.get("a", 0.707)
         b = self.bias_par.get("b", 0.35)
@@ -189,7 +192,7 @@ class bias_fittinig_functions:
         """
         Empirical bias, same as ST99 but changed parameters
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         q = self.bias_par.get("q", 0.73)
         p = self.bias_par.get("p", 0.15)
@@ -202,7 +205,7 @@ class bias_fittinig_functions:
         """
         Empirical bias, same as ST99 but changed parameters
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         q = self.bias_par.get("q", 0.709)
         p = self.bias_par.get("p", 0.248)
@@ -215,6 +218,6 @@ class bias_fittinig_functions:
         """
         Returns a linear constant bias
         """
-        nu = dc / self.astro.sigmaM(M, z)
+        nu = dc / self.sigmaM(M, z)
 
         return self.bias_par["b"] * np.ones_like(nu)
