@@ -98,6 +98,7 @@ class nonGuassianCov:
         self.astro = power_spectrum.astro
         self.powerSpectrum = power_spectrum
         self.tracer = cfg.settings["TracerPowerSpectrum"]
+        self.specs = power_spectrum.survey_specs
         self.k = power_spectrum.k
         self.mu = power_spectrum.mu
         self.z = power_spectrum.z
@@ -121,16 +122,16 @@ class nonGuassianCov:
 
         def p_rec(k, q):
             tf = FFTLog(extrap_pk, kminebs, kmaxebs,
-                                    cfg.settings("LogN_modes"), q,
+                                    cfg.settings["LogN_modes"], q,
                                     kgrid=self.kgrid.value, Pkgrid=self.Pgrid.value,
                                     )
             return tf(k).real
 
         #find good numerical bias
-        q, _= curve_fit(p_rec, self.k.value, self.P.value, p0=[0.3], sigma=self.Pk.value)
+        q, _= curve_fit(p_rec, self.k.value, self.Pk.value, p0=[0.3], sigma=self.Pk.value)
         q = q[0]
         self.fftLog_Pofk = FFTLog(extrap_pk, kminebs, kmaxebs,
-                                  cfg.settings("LogN_modes"), q,
+                                  cfg.settings["LogN_modes"], q,
                                   kgrid=self.kgrid.value, Pkgrid=self.Pgrid.value,
                                   )
 
@@ -142,7 +143,7 @@ class nonGuassianCov:
         z = np.atleast_1d(z)
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
-        I1 = restore_shape(self.astro.Thalo(z, k, p=1).value, k, z)
+        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
         #This is the normalisation found in pyCCL, Not necessarily true for LIM
         I1 = I1 / I1.value[0, :]
 
@@ -163,8 +164,8 @@ class nonGuassianCov:
             kernel_4h_3111_iz = ingredients_T0.T3111_kernel(k[:,None], k[None, :], b1_L1[iz], b2_L1[iz], bG2_L1[iz], b3_L1[iz], bdG2_L1[iz], bG3_L1[iz], bDG2_L1[iz])
             squeezed_4h_3111_iz = ingredients_T0.T3111_squeezed(b1_L1[iz], b2_L1[iz], bG2_L1[iz], b3_L1[iz], bdG2_L1[iz], bG3_L1[iz], bDG2_L1[iz])
             np.fill_diagonal(kernel_4h_3111_iz, squeezed_4h_3111_iz)
-            kernel_4h_3111[:, :, iz] = kernel_4h_3111_iz
-        T_3111 = 12 * self.Pk[:, None, None]**2 * self.Pk[None, :, None] * kernel_4h_3111_iz * D[None, None, :]**6
+            kernel_4h_3111[:, :, iz] = kernel_4h_3111_iz.real
+        T_3111 = 12 * self.Pk[:, None, None]**2 * self.Pk[None, :, None] * kernel_4h_3111 * D[None, None, :]**6
         T_3111 += np.transpose(T_3111, (1,0,2))
 
         # 2211 Terms
@@ -202,7 +203,7 @@ class nonGuassianCov:
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
         I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
-        I2 = restore_shape(self.astro.Thalo(z, k, k, p=1), k, k, z)
+        I2 = restore_shape(self.astro.Thalo(z, k, k, p=2), k, k, z)
 
         #This is the normalisation found in pyCCL, Not necessarily true for LIM
         I1 *= 1 / I1.value[0, :]
@@ -246,8 +247,8 @@ class nonGuassianCov:
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
         I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
-        I2 = restore_shape(self.astro.Thalo(z, k, k, p=1), k, k, z)
-        I3 = restore_shape(self.astro.Thalo(z, k, k, p=1, scale=(2,1)), k, k, z)
+        I2 = restore_shape(self.astro.Thalo(z, k, k, p=2), k, k, z)
+        I3 = restore_shape(self.astro.Thalo(z, k, k, p=2, scale=(2,1)), k, k, z)
 
         #This is the normalisation found in pyCCL, Not necessarily true for LIM
         I1 *= 1 / I1.value[0, :]
@@ -261,7 +262,7 @@ class nonGuassianCov:
         kl = len(k)
         zl = len(z)
 
-        kernel_2h_31 = np.empty(kl, iz)
+        kernel_2h_31 = np.empty((kl, zl))
         for iz, zi in enumerate(z):
             kernel_2h_31[:, iz] = (
                 vZ1(b1_L1[iz], 0.0, 0.0, 0.0, 0.0)
@@ -290,7 +291,7 @@ class nonGuassianCov:
         if z is None:
             z = self.z
 
-        I1 = restore_shape(self.astro.Thalo(z, k, p=1).value, k, z)
+        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
         I4 = restore_shape(self.astro.Thalo(z, k, k, p=2, scale=(2,2)), k, k, z)
 
         #This is the normalisation found in pyCCL, Not necessarily true for LIM
@@ -299,6 +300,15 @@ class nonGuassianCov:
         T_1h = I4
 
         return T_1h
+
+    def compute_nG_Cov(self):
+        T_1h = self.integrate_1h()
+        T_2h = self.integrate_2h()
+        T_3h = self.integrate_3h()
+        T_4h = self.integrate_4h()
+
+        _, V = self.specs.Wsurvey(self.kgrid, self.mu)
+        return (T_1h + T_2h + T_3h + T_4h) / V
 
 ##############
 # Numba part #

@@ -408,7 +408,7 @@ class PowerSpectra:
             Ps = Pshot[None, None, :]
         else:
             if cfg.settings["halo_model_PS"]:
-                Ps = self.astro.T_one_halo(k, z, mu=mu)
+                Ps = self.astro.Thalo(z, k, p=1, scale=(2,))
             else:
                 Ps = self.astro.Tavg(z, p=2)
         return np.squeeze(Ps)
@@ -456,12 +456,14 @@ class PowerSpectra:
                     (*k.shape, *mu.shape, *z.shape),
                 )
         else:
-            rsd = restore_shape(
+            rsd = np.power(
+                restore_shape(
                 self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),
                 k,
                 mu,
                 z,
-            )
+            ),
+            2)
 
         if cfg.settings["verbosity"] > 1:
             trsd = time()

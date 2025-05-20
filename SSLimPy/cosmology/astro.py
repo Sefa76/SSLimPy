@@ -364,10 +364,14 @@ class AstroFunctions:
             I2 = I2 * Fv[ik] * normhaloprofile[ik]
         logM = np.log(M.value)
         Umean = (np.trapz(I2, logM, axis=-2) / np.trapz(I1, logM, axis=-2)).to(1).value
-        return np.squeeze(self.Lavg(z, p=p) * Umean)
+        return np.squeeze(self.Lavg(z, p=np.sum(alpha)) * Umean)
 
     def Thalo(self, z, *args, p=1, scale=()):
-        return self.CLT(z) ** p * self.Lhalo(z, *args, p=p, scale=scale)
+        if scale:
+            alpha = np.sum(scale)
+        else:
+            alpha = p
+        return self.CLT(z) ** alpha * self.Lhalo(z, *args, p=p, scale=scale)
 
     def T_one_halo(self, k, z, mu=None):
         """Directly computes the one-halo power spectrum."""
