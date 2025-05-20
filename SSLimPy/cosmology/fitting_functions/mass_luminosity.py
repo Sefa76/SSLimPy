@@ -15,6 +15,12 @@ Add in models from Matlab code
 """
 
 import os
+from copy import deepcopy
+
+import astropy.constants as cu
+import astropy.units as u
+import numpy as np
+from scipy.interpolate import RegularGridInterpolator, interp1d
 
 import astropy.units as u
 import numpy as np

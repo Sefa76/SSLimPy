@@ -72,9 +72,16 @@ class SurveySpecifications:
 
         return np.squeeze(np.exp(logF))
 
-    ##################################
-    # Convolution and Survey Windows #
-    ##################################
+    def get_redshifts(self):
+        # Calculate dz from deltanu
+        nu = self.obsparams["nu"]
+        nuObs = self.obsparams["nuObs"]
+        Delta_nu = self.obsparams["Delta_nu"]
+        z = (nu / nuObs - 1).to(1).value
+        z_min = (nu / (nuObs + Delta_nu / 2) - 1).to(1).value
+        z_max = (nu / (nuObs - Delta_nu / 2) - 1).to(1).value
+
+        return z_min, z, z_max
 
     def Lfield(self, z1, z2):
         zgrid = [z1, z2]
@@ -86,6 +93,17 @@ class SurveySpecifications:
         sO = Omegafield.to(u.rad**2).value
         return r2 * sO
 
+    def Vfield(self):
+        z_min, z, z_max = self.get_redshifts()
+        
+        Sfield = self.Sfield(z, self.obsparams["Omega_field"])
+        Lfield = self.Lfield(z_min, z_max)
+        return Sfield * Lfield
+
+    ##################################
+    # Convolution and Survey Windows #
+    ##################################
+
     def Wsurvey(self, q, muq):
         """Compute the Fourier-transformed sky selection window function"""
         q = np.atleast_1d(q)
@@ -94,14 +112,7 @@ class SurveySpecifications:
         qparr = q[:, None, None] * muq[None, :, None]
         qperp = q[:, None, None] * np.sqrt(1 - np.power(muq[None, :, None], 2))
 
-        # Calculate dz from deltanu
-        nu = self.obsparams["nu"]
-        nuObs = self.obsparams["nuObs"]
-        Delta_nu = self.obsparams["Delta_nu"]
-        z = (nu / nuObs - 1).to(1).value
-        z_min = (nu / (nuObs + Delta_nu / 2) - 1).to(1).value
-        z_max = (nu / (nuObs - Delta_nu / 2) - 1).to(1).value
-
+        z_min, z, z_max = self.get_redshifts()
         # Construct W_survey (now just a cylinder)
         Sfield = self.Sfield(z, self.obsparams["Omega_field"])
         Lperp = np.sqrt(Sfield / np.pi)

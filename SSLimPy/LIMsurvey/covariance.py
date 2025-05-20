@@ -27,7 +27,7 @@ class Covariance:
 
     def Nmodes(self):
         Vk = 4 * np.pi * self.k**2 * self.dk
-        _, Vw = self.survey_specs.Wsurvey(self.k, self.mu)
+        Vw = self.survey_specs.Vfield()
         return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi) ** 3)
 
     def Detector_noise(self):
@@ -35,8 +35,7 @@ class Covariance:
             self.survey_specs.obsparams["Tsys_NEFD"] ** 2
             * self.survey_specs.obsparams["Omega_field"].to(u.sr).value
             / (
-                2
-                * self.survey_specs.obsparams["nD"]
+                self.survey_specs.obsparams["nD"]
                 * self.survey_specs.obsparams["tobs"]
             )
         )
@@ -55,33 +54,42 @@ class Covariance:
         sigma = (Pobs + PI) ** 2 / self.Nmodes()[:, None, :]
 
         # compute the C_ell covaraiance
-        cov_00 = trapezoid(legendre(0)(self.mu)[None, :, None] ** 2 * sigma, axis=1) * (
-            1 / 2
-        )
+        cov_00 = trapezoid(
+            legendre(0)(self.mu)[None, :, None] ** 2
+            * sigma,
+            x=self.mu,
+            axis=1) * 1 / 2
         cov_20 = trapezoid(
             legendre(0)(self.mu)[None, :, None]
             * legendre(2)(self.mu)[None, :, None]
             * sigma,
+            x=self.mu,
             axis=1,
-        ) * (5 / 2)
+        ) * 5 / 2
         cov_40 = trapezoid(
             legendre(0)(self.mu)[None, :, None]
             * legendre(4)(self.mu)[None, :, None]
             * sigma,
+            x=self.mu,
             axis=1,
-        ) * (9 / 2)
-        cov_22 = trapezoid(legendre(2)(self.mu)[None, :, None] ** 2 * sigma, axis=1) * (
-            25 / 2
-        )
+        ) * 9 / 2
+        cov_22 = trapezoid(
+            legendre(2)(self.mu)[None, :, None] ** 2
+            * sigma,
+            x=self.mu,
+            axis=1) * 25 / 2
         cov_42 = trapezoid(
             legendre(2)(self.mu)[None, :, None]
             * legendre(4)(self.mu)[None, :, None]
             * sigma,
+            x=self.mu,
             axis=1,
-        ) * (45 / 2)
-        cov_44 = trapezoid(legendre(4)(self.mu)[None, :, None] ** 2 * sigma, axis=1) * (
-            81 / 2
-        )
+        ) * 45 / 2
+        cov_44 = trapezoid(
+            legendre(4)(self.mu)[None, :, None] ** 2
+            * sigma,
+            x=self.mu,
+            axis=1) * 81 / 2
 
         # construct the covariance
         nk = np.uint16(len(self.k))
@@ -98,7 +106,7 @@ class nonGuassianCov:
         self.astro = power_spectrum.astro
         self.powerSpectrum = power_spectrum
         self.tracer = cfg.settings["TracerPowerSpectrum"]
-        self.specs = power_spectrum.survey_specs
+        self.survey_specs = power_spectrum.survey_specs
         self.k = power_spectrum.k
         self.mu = power_spectrum.mu
         self.z = power_spectrum.z
@@ -307,7 +315,7 @@ class nonGuassianCov:
         T_3h = self.integrate_3h()
         T_4h = self.integrate_4h()
 
-        _, V = self.specs.Wsurvey(self.kgrid, self.mu)
+        V = self.survey_specs.Vfield()
         return (T_1h + T_2h + T_3h + T_4h) / V
 
 ##############

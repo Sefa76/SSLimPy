@@ -11,6 +11,8 @@ from copy import deepcopy
 from functools import partial
 import numpy as np
 
+import numpy as np
+
 
 class bias_fitting_functions:
 

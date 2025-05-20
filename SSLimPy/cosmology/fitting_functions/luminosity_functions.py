@@ -9,6 +9,9 @@ All functions take a vector of luminosities in L_sun and return dn/dL in
 import astropy.units as u
 import numpy as np
 
+import astropy.units as u
+import numpy as np
+
 
 class luminosity_functions:
     def __init__(self, astro, model_par):
