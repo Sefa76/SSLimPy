@@ -100,6 +100,24 @@ class SurveySpecifications:
         Lfield = self.Lfield(z_min, z_max)
         return Sfield * Lfield
 
+    def detector_noise(self, z):
+        F1 = (
+            self.obsparams["Tsys_NEFD"] ** 2
+            * self.obsparams["Omega_field"].to(u.sr).value
+            / (
+                self.obsparams["nD"]
+                * self.obsparams["tobs"]
+            )
+        )
+        F2 = self.cosmology.CELERITAS / self.obsparams["nu"]
+        F3 = (
+            self.cosmology.comoving(z) ** 2
+            * (1 + z) ** 2
+            / self.cosmology.Hubble(z, physical=True)
+        )
+        PI = F1 * F2 * F3
+        return PI
+
     ##################################
     # Convolution and Survey Windows #
     ##################################

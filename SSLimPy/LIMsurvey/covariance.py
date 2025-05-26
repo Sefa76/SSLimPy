@@ -3,6 +3,7 @@ import itertools
 import numpy as np
 from astropy import units as u
 from numba import njit, prange
+from scipy.interpolate import UnivariateSpline
 from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.special import legendre, roots_legendre
@@ -27,30 +28,16 @@ class Covariance:
 
     def Nmodes(self):
         Vk = 4 * np.pi * self.k**2 * self.dk
-        Vw = self.survey_specs.Vfield()
+        Vw = np.atleast_1d(self.survey_specs.Vfield())
         return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi) ** 3)
 
-    def Detector_noise(self):
-        F1 = (
-            self.survey_specs.obsparams["Tsys_NEFD"] ** 2
-            * self.survey_specs.obsparams["Omega_field"].to(u.sr).value
-            / (
-                self.survey_specs.obsparams["nD"]
-                * self.survey_specs.obsparams["tobs"]
-            )
-        )
-        F2 = self.cosmology.CELERITAS / self.survey_specs.obsparams["nu"]
-        F3 = (
-            self.cosmology.comoving(self.z) ** 2
-            * (1 + self.z) ** 2
-            / self.cosmology.Hubble(self.z, physical=True)
-        )
-        PI = (F1 * F2 * F3).to(self.power_spectrum.Pk_Obs.unit)
-        return PI
+    def get_detectornoise(self):
+        PI = self.survey_specs.detector_noise(self.z)
+        return PI.to(self.power_spectrum.Pk_Obs.unit)
 
     def gaussian_cov(self):
         Pobs = self.power_spectrum.Pk_Obs
-        PI = self.Detector_noise()
+        PI = self.get_detectornoise()
         sigma = (Pobs + PI) ** 2 / self.Nmodes()[:, None, :]
 
         # compute the C_ell covaraiance
@@ -235,7 +222,7 @@ class nonGuassianCov:
         kernel_3h_221_X = np.empty((kl, kl, zl)) * u.Mpc**3
         for iz, zi in enumerate(z):
             kernel_3h_211_X_iz = 0.0
-            squeezed_3h_211_X_iz = 0.0 
+            squeezed_3h_211_X_iz = 0.0
             for gammai, coefi in zip(gamma, coef):
                 kernel_3h_211_X_iz += coefi * ingredients_T0.T211_X_kernel(k[:,None], k[None, :], b1_L1[iz], b2_L1[iz], bG2_L1[iz], b1_L2[iz], gammai)
                 squeezed_3h_211_X_iz += coefi * ingredients_T0.T211_X_squeezed(k, b1_L1[iz], b2_L1[iz], bG2_L1[iz], b1_L2[iz], gammai)
@@ -317,6 +304,109 @@ class nonGuassianCov:
 
         V = self.survey_specs.Vfield()
         return (T_1h + T_2h + T_3h + T_4h) / V
+
+
+class SuperSampleCovariance:
+    def __init__(self, power_spectrum:power_spectrum.PowerSpectra):
+        self.power_spectrum = power_spectrum
+        self.cosmology = power_spectrum.cosmology
+        self.halomodel = power_spectrum.halomodel
+        self.astro = power_spectrum.astro
+        self.survey_specs = power_spectrum.survey_specs
+
+        self.k = power_spectrum.k
+        self.mu = power_spectrum.mu
+        self.kgrid = power_spectrum.k_numerics
+        self.z = power_spectrum.z
+
+    def sigma_survey(self):
+        k = self.kgrid
+        mu = self.mu
+        z = np.atleast_1d(self.z)
+
+        V = self.survey_specs.Vfield()
+        W, Vapprox= self.survey_specs.Wsurvey(self.kgrid, self.mu)
+        W = np.reshape(W, (*k.shape, *mu.shape, *z.shape))
+
+        P = np.reshape(
+            self.cosmology.matpow(k, z, nonlinear=False, tracer=self.halomodel.tracer),
+            (*k.shape, *z.shape))
+
+        sigma2_intgrnd = (
+            2 * np.pi
+            * (self.kgrid[:, None, None] / (2 * np.pi))**3
+            * W**2
+            * P[:, None, :]
+        )
+        sigma2_intgrnd = np.trapz(sigma2_intgrnd, x=mu, axis=1)
+        sigma2 = np.trapz(sigma2_intgrnd, x=np.log(k.value), axis=0)
+        return np.squeeze(sigma2 / V)
+
+    def halo_sample_variance(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        b1_L2 =   np.atleast_1d(self.astro.bavg("b1", z, 2))
+        I2 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(2,)), (*k.shape, *z.shape))
+
+        halo_sample_variance = b1_L2**2 * I2
+        return halo_sample_variance
+
+    def linear_dilation(self, k , z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        b1_L1 =   np.atleast_1d(self.astro.bavg("b1", z, 1))
+        I1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,)), (*k.shape, *z.shape))
+
+        Pk = np.reshape(self.cosmology.matpow(self.kgrid, z, nonlinear=False, tracer=self.halomodel.tracer),
+                        (*self.kgrid.shape, *z.shape))
+
+        logDeltam = np.log((self.kgrid[:,None]**3*Pk).to(1).value)
+        neff = np.empty((*k.shape, *z.shape))
+        for iz in range(len(z)):
+            neff[:, iz] = UnivariateSpline(np.log(self.kgrid.to(k.unit).value), logDeltam[:, iz]).derivative(1)(np.log(k.value))
+
+        linear_dilation = -neff / 3 * b1_L1**2 * I1**2
+        return linear_dilation
+
+    def beat_coupling(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        I1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,)), (*k.shape, *z.shape))
+
+        b1_L1 =   np.atleast_1d(self.astro.bavg("b1", z, 1))
+        b2_L1 =   np.atleast_1d(self.astro.bavg("b2", z, 1))
+        bG2_L1 =  np.atleast_1d(self.astro.bavg("bG2", z, 1))
+
+        local_secondorder_bias = b2_L1 - 4 / 3 * bG2_L1
+
+        beat_coupling = (68 / 21 * b1_L1*2 + 2 * local_secondorder_bias) * I1**2
+        return beat_coupling
+
+    def response(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)        
+
+        Pk = np.reshape(self.cosmology.matpow(k, z, nonlinear=False, tracer=self.halomodel.tracer),
+                        (*k.shape, *z.shape))
+
+        beat_coupling = np.reshape(self.beat_coupling(k, z), (*k.shape, *z.shape))
+        linear_dilation = np.reshape(self.linear_dilation(k, z), (*k.shape, *z.shape))
+        halo_sample_variance = np.reshape(self.halo_sample_variance(k, z), (*k.shape, *z.shape))
+        return (beat_coupling + linear_dilation) * Pk + halo_sample_variance
+
+    def compute_SSC(self):
+        k = self.k
+        z = self.z
+
+        V = np.atleast_1d(self.survey_specs.Vfield())
+        response = self.response(k, z)
+        sigma = np.atleast_1d(self.sigma_survey())
+
+        SSC = (sigma / V)[None, None, :] * response[:, None, :] * response[None, :, :]
+        return SSC
 
 ##############
 # Numba part #
