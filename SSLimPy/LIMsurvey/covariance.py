@@ -1,9 +1,10 @@
 import itertools
+from functools import partial
 
 import numpy as np
 from astropy import units as u
 from numba import njit, prange
-from scipy.interpolate import UnivariateSpline
+from scipy.interpolate import UnivariateSpline as _UnivariateSpline
 from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.special import legendre, roots_legendre
@@ -14,6 +15,8 @@ from SSLimPy.LIMsurvey.higher_order import *
 from SSLimPy.LIMsurvey import ingredients_T0
 from SSLimPy.utils.fft_log import FFTLog
 from SSLimPy.utils.utils import *
+
+UnivariateSpline = partial(_UnivariateSpline, s=0)
 
 
 class Covariance:
@@ -346,18 +349,15 @@ class SuperSampleCovariance:
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        b1_L2 =   np.atleast_1d(self.astro.bavg("b1", z, 2))
-        I2 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(2,)), (*k.shape, *z.shape))
+        b1_L2 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(2,), beta="b1"), (*k.shape, *z.shape))
 
-        halo_sample_variance = b1_L2**2 * I2
-        return halo_sample_variance
+        return b1_L2
 
     def linear_dilation(self, k , z):
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        b1_L1 =   np.atleast_1d(self.astro.bavg("b1", z, 1))
-        I1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,)), (*k.shape, *z.shape))
+        b1_L1 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
 
         Pk = np.reshape(self.cosmology.matpow(self.kgrid, z, nonlinear=False, tracer=self.halomodel.tracer),
                         (*self.kgrid.shape, *z.shape))
@@ -367,22 +367,20 @@ class SuperSampleCovariance:
         for iz in range(len(z)):
             neff[:, iz] = UnivariateSpline(np.log(self.kgrid.to(k.unit).value), logDeltam[:, iz]).derivative(1)(np.log(k.value))
 
-        linear_dilation = -neff / 3 * b1_L1**2 * I1**2
+        linear_dilation = -neff / 3 * b1_L1**2
         return linear_dilation
 
     def beat_coupling(self, k, z):
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        I1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,)), (*k.shape, *z.shape))
-
-        b1_L1 =   np.atleast_1d(self.astro.bavg("b1", z, 1))
-        b2_L1 =   np.atleast_1d(self.astro.bavg("b2", z, 1))
-        bG2_L1 =  np.atleast_1d(self.astro.bavg("bG2", z, 1))
+        b1_L1 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
+        b2_L1 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(1,), beta="b2"), (*k.shape, *z.shape))
+        bG2_L1 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(1,), beta="bG2"), (*k.shape, *z.shape))
 
         local_secondorder_bias = b2_L1 - 4 / 3 * bG2_L1
 
-        beat_coupling = (68 / 21 * b1_L1*2 + 2 * local_secondorder_bias) * I1**2
+        beat_coupling = (68 / 21 * b1_L1*2 + 2 * local_secondorder_bias)
         return beat_coupling
 
     def response(self, k, z):

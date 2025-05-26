@@ -5,14 +5,19 @@ Obtain cosmological functions from the Einstein Boltzmann Code
 import types
 from copy import deepcopy
 from warnings import warn
+from functools import partial
 
 import astropy.constants as c
 import astropy.units as u
 import numpy as np
-from scipy.interpolate import RectBivariateSpline, UnivariateSpline
+from scipy.interpolate import RectBivariateSpline as _RectBivariateSpline
+from scipy.interpolate import UnivariateSpline as _UnivariateSpline
 from scipy.signal import savgol_filter
 from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
+
+RectBivariateSpline = partial(_RectBivariateSpline, s=0)
+UnivariateSpline = partial(_UnivariateSpline, s=0)
 
 
 class BoltzmannCode:
@@ -165,6 +170,7 @@ class BoltzmannCode:
             )
 
         return classpars
+
     # Basis Conversion for Camb
     def basechange_camb(self, cosmopars, camb):
         # transforms cosmopars into cosmopars that can be read by CAMB
@@ -227,7 +233,7 @@ class BoltzmannCode:
             rescaleAs = True
 
         try:
-            camb.set_params(**cambpars) 
+            camb.set_params(**cambpars)
         except camb.CAMBUnknownArgumentError as argument:
             print("Remove parameter from cambparams: " + str(argument))
             raise argument
