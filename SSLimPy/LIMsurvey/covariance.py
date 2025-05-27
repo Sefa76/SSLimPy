@@ -142,8 +142,6 @@ class nonGuassianCov:
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
         I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
-        #This is the normalisation found in pyCCL, Not necessarily true for LIM
-        I1 = I1 / I1.value[0, :]
 
         b1_L1 = np.atleast_1d(args.get("b1", self.astro.bavg("b1", z, 1)))
         b2_L1 = np.atleast_1d(args.get("b2", self.astro.bavg("b2", z, 1)))
@@ -203,10 +201,6 @@ class nonGuassianCov:
         I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
         I2 = restore_shape(self.astro.Thalo(z, k, k, p=2), k, k, z)
 
-        #This is the normalisation found in pyCCL, Not necessarily true for LIM
-        I1 *= 1 / I1.value[0, :]
-        I2 *= 1 / I1.value[0, :]**2
-
         b1_L1 =   np.atleast_1d(self.astro.bavg("b1", z, 1))
         b2_L1 =   np.atleast_1d(self.astro.bavg("b2", z, 1))
         bG2_L1 =  np.atleast_1d(self.astro.bavg("bG2", z, 1))
@@ -248,11 +242,6 @@ class nonGuassianCov:
         I2 = restore_shape(self.astro.Thalo(z, k, k, p=2), k, k, z)
         I3 = restore_shape(self.astro.Thalo(z, k, k, p=2, scale=(2,1)), k, k, z)
 
-        #This is the normalisation found in pyCCL, Not necessarily true for LIM
-        I1 *= 1 / I1.value[0, :]
-        I2 *= 1 / I1.value[0, :]**2
-        I3 *= 1 / I1.value[0, :]**3
-
         b1_L1 = np.atleast_1d(self.astro.bavg("b1", z, 1))
         b1_L2 = np.atleast_1d(self.astro.bavg("b1", z, 2))
         b1_L3 = np.atleast_1d(self.astro.bavg("b1", z, 3))
@@ -289,11 +278,7 @@ class nonGuassianCov:
         if z is None:
             z = self.z
 
-        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
         I4 = restore_shape(self.astro.Thalo(z, k, k, p=2, scale=(2,2)), k, k, z)
-
-        #This is the normalisation found in pyCCL, Not necessarily true for LIM
-        I4 *= 1 / I1.value[0, :]**4
 
         T_1h = I4
 
@@ -385,7 +370,7 @@ class SuperSampleCovariance:
 
     def response(self, k, z):
         k = np.atleast_1d(k)
-        z = np.atleast_1d(z)        
+        z = np.atleast_1d(z)
 
         Pk = np.reshape(self.cosmology.matpow(k, z, nonlinear=False, tracer=self.halomodel.tracer),
                         (*k.shape, *z.shape))
