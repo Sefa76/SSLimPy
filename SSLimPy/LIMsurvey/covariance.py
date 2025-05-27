@@ -349,7 +349,7 @@ class SuperSampleCovariance:
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        b1_L2 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(2,), beta="b1"), (*k.shape, *z.shape))
+        b1_L2 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(2,), beta="b1"), (*k.shape, *z.shape))
 
         return b1_L2
 
@@ -357,7 +357,7 @@ class SuperSampleCovariance:
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        b1_L1 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
+        b1_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
 
         Pk = np.reshape(self.cosmology.matpow(self.kgrid, z, nonlinear=False, tracer=self.halomodel.tracer),
                         (*self.kgrid.shape, *z.shape))
@@ -374,13 +374,13 @@ class SuperSampleCovariance:
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        b1_L1 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
-        b2_L1 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(1,), beta="b2"), (*k.shape, *z.shape))
-        bG2_L1 = np.reshape(self.astro.Lhalo(z, k, p=1, scale=(1,), beta="bG2"), (*k.shape, *z.shape))
+        b1_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
+        b2_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2"), (*k.shape, *z.shape))
+        bG2_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="bG2"), (*k.shape, *z.shape))
 
         local_secondorder_bias = b2_L1 - 4 / 3 * bG2_L1
 
-        beat_coupling = (68 / 21 * b1_L1*2 + 2 * local_secondorder_bias)
+        beat_coupling = (68 / 21 * b1_L1**2 + 2 * b1_L1 * local_secondorder_bias)
         return beat_coupling
 
     def response(self, k, z):

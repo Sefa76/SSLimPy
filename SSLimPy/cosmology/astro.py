@@ -301,7 +301,7 @@ class AstroFunctions:
     # Halo integrals #
     ##################
 
-    def Lhalo(self, z, *args, p=1, scale=(), beta=0):
+    def Lhalo(self, z, *args, p=1, scale=(), beta=0, dc=1.6865):
         """Luminosity weight higher order halo profiles for n-halo terms
         Computes the mean halo profile weight with some power of the luminosity.
         this shows up for example in the halo shot noise,
@@ -333,7 +333,7 @@ class AstroFunctions:
             bstring = beta
         
         b = np.reshape(
-            getattr(self.halomodel._bias_function, bstring)(M, z),
+            getattr(self.halomodel._bias_function, bstring)(M, z, dc=dc),
             (*M.shape, *z.shape),
         )
 
