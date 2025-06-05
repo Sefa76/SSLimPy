@@ -250,7 +250,7 @@ class PowerSpectra:
             )
         else:
             Biasterm = (
-                restore_shape(self.astro.bhalo(k, z, mu=mu), k, mu, z)
+                restore_shape(self.astro.Thalo(z, k, mu, p=1, scale=(1,), beta=1), k, mu, z)
                 * np.reshape(self.halomodel.sigma8_of_z(z, tracer=self.tracer), z.shape)[None, None, :]
             )
         return np.squeeze(Biasterm)

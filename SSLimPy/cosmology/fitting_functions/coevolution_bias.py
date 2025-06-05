@@ -77,6 +77,11 @@ class coevolution_bias(bias_fitting_functions):
     ##############
     # Obtained from completeness relations
 
+    def b0(self, M, z, dc):
+        """dummy function
+        """
+        return np.ones_like(M.value)
+
     def b1(self, M, z, dc):
         nu = dc / self.sigmaM(M, z)
 

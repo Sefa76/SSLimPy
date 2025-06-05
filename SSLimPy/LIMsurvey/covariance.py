@@ -1,8 +1,10 @@
 import itertools
+from functools import partial
 
 import numpy as np
 from astropy import units as u
 from numba import njit, prange
+from scipy.interpolate import UnivariateSpline as _UnivariateSpline
 from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.special import legendre, roots_legendre
@@ -13,6 +15,8 @@ from SSLimPy.LIMsurvey.higher_order import *
 from SSLimPy.LIMsurvey import ingredients_T0
 from SSLimPy.utils.fft_log import FFTLog
 from SSLimPy.utils.utils import *
+
+UnivariateSpline = partial(_UnivariateSpline, s=0)
 
 
 class Covariance:
@@ -27,30 +31,16 @@ class Covariance:
 
     def Nmodes(self):
         Vk = 4 * np.pi * self.k**2 * self.dk
-        Vw = self.survey_specs.Vfield()
+        Vw = np.atleast_1d(self.survey_specs.Vfield())
         return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi) ** 3)
 
-    def Detector_noise(self):
-        F1 = (
-            self.survey_specs.obsparams["Tsys_NEFD"] ** 2
-            * self.survey_specs.obsparams["Omega_field"].to(u.sr).value
-            / (
-                self.survey_specs.obsparams["nD"]
-                * self.survey_specs.obsparams["tobs"]
-            )
-        )
-        F2 = self.cosmology.CELERITAS / self.survey_specs.obsparams["nu"]
-        F3 = (
-            self.cosmology.comoving(self.z) ** 2
-            * (1 + self.z) ** 2
-            / self.cosmology.Hubble(self.z, physical=True)
-        )
-        PI = (F1 * F2 * F3).to(self.power_spectrum.Pk_Obs.unit)
-        return PI
+    def get_detectornoise(self):
+        PI = self.survey_specs.detector_noise(self.z)
+        return PI.to(self.power_spectrum.Pk_Obs.unit)
 
     def gaussian_cov(self):
         Pobs = self.power_spectrum.Pk_Obs
-        PI = self.Detector_noise()
+        PI = self.get_detectornoise()
         sigma = (Pobs + PI) ** 2 / self.Nmodes()[:, None, :]
 
         # compute the C_ell covaraiance
@@ -144,33 +134,40 @@ class nonGuassianCov:
                                   )
 
 
-    def integrate_4h(self, args: dict = dict(), z=None):
+    def integrate_4h(self, z=None):
         k = self.k
         if z is None:
             z = self.z
         z = np.atleast_1d(z)
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
-        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
-        #This is the normalisation found in pyCCL, Not necessarily true for LIM
-        I1 = I1 / I1.value[0, :]
-
-        b1_L1 = np.atleast_1d(args.get("b1", self.astro.bavg("b1", z, 1)))
-        b2_L1 = np.atleast_1d(args.get("b2", self.astro.bavg("b2", z, 1)))
-        bG2_L1 = np.atleast_1d(args.get("bG2", self.astro.bavg("bG2", z, 1)))
-        b3_L1 = np.atleast_1d(args.get("b3", self.astro.bavg("b3", z, 1)))
-        bdG2_L1 = np.atleast_1d(args.get("bdG2", self.astro.bavg("bdG2", z, 1)))
-        bG3_L1 = np.atleast_1d(args.get("bG3", self.astro.bavg("bG3", z, 1)))
-        bDG2_L1 = np.atleast_1d(args.get("bDG2", self.astro.bavg("bDG2", z, 1)))
+        I11 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b1"), k, z)
+        I12 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
+        I1G2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
+        I13 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b3"), k, z)
+        I1dG2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bdG2"), k, z)
+        I1G3 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bG3"), k, z)
+        I1DG2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bDG2"), k, z)
 
         kl = len(k)
         zl = len(z)
 
         # 3111 Terms
-        kernel_4h_3111 = np.empty((kl, kl, zl))
+        kernel_4h_3111 = np.empty((kl, kl, zl)) * u.uK**4
         for iz, zi in enumerate(z):
-            kernel_4h_3111_iz = ingredients_T0.T3111_kernel(k[:,None], k[None, :], b1_L1[iz], b2_L1[iz], bG2_L1[iz], b3_L1[iz], bdG2_L1[iz], bG3_L1[iz], bDG2_L1[iz])
-            squeezed_4h_3111_iz = ingredients_T0.T3111_squeezed(b1_L1[iz], b2_L1[iz], bG2_L1[iz], b3_L1[iz], bdG2_L1[iz], bG3_L1[iz], bDG2_L1[iz])
+            I11_iz = I11[:, iz]
+            I12_iz = I12[:, iz]
+            I1G2_iz = I1G2[:, iz]
+            I13_iz = I13[:, iz]
+            I1dG2_iz = I1dG2[:, iz]
+            I1G3_iz = I1G3[:, iz]
+            I1DG2_iz = I1DG2[:, iz]
+
+            kernel_4h_3111_iz = ingredients_T0.T3111_kernel(
+                k[:,None], k[None, :],
+                I11_iz[:, None], I11_iz[None, :], I12_iz[None, :], I1G2_iz[None, :], I13_iz[None, :], I1dG2_iz[None, :], I1G3_iz[None, :], I1DG2_iz[None, :])
+            squeezed_4h_3111_iz = ingredients_T0.T3111_squeezed(
+                I11_iz, I12_iz, I1G2_iz, I13_iz, I1dG2_iz, I1G3_iz, I1DG2_iz)
             np.fill_diagonal(kernel_4h_3111_iz, squeezed_4h_3111_iz)
             kernel_4h_3111[:, :, iz] = kernel_4h_3111_iz.real
         T_3111 = 12 * self.Pk[:, None, None]**2 * self.Pk[None, :, None] * kernel_4h_3111 * D[None, None, :]**6
@@ -179,18 +176,28 @@ class nonGuassianCov:
         # 2211 Terms
         gamma, coef = self.fftLog_Pofk.get_power_and_coef()
 
-        kernel_4h_2211_A = np.empty((kl, kl, zl)) * u.Mpc**3
-        kernel_4h_2211_X = np.empty((kl, kl, zl)) * u.Mpc**3
+        kernel_4h_2211_A = np.empty((kl, kl, zl)) * u.uK**4 * u.Mpc**3
+        kernel_4h_2211_X = np.empty((kl, kl, zl)) * u.uK**4 * u.Mpc**3
         for iz, zi in enumerate(z):
             kernel_4h_2211_A_iz = 0.0
             squeezed_4h_2211_A_iz = 0.0
             kernel_4h_2211_X_iz = 0.0
             squeezed_4h_2211_X_iz = 0.0
+
+            I11_iz = I11[:, iz]
+            I12_iz = I12[:, iz]
+            I1G2_iz = I1G2[:, iz]
             for gammai, coefi in zip(gamma, coef):
-                kernel_4h_2211_A_iz += coefi * ingredients_T0.T2211_A_kernel(k[:,None], k[None,:], b1_L1[iz], b2_L1[iz], bG2_L1[iz], gammai)
-                squeezed_4h_2211_A_iz += coefi * ingredients_T0.T2211_A_squeezed(k, b1_L1[iz], b2_L1[iz], bG2_L1[iz], gammai)
-                kernel_4h_2211_X_iz += coefi * ingredients_T0.T2211_X_kernel(k[:,None], k[None,:], b1_L1[iz], b2_L1[iz], bG2_L1[iz], gammai)
-                squeezed_4h_2211_X_iz += coefi * ingredients_T0.T2211_X_squeezed(k, b1_L1[iz], b2_L1[iz], bG2_L1[iz], gammai)
+                kernel_4h_2211_A_iz += coefi * ingredients_T0.T2211_A_kernel(
+                    k[:,None], k[None,:],
+                    I11_iz[:, None], I11_iz[None, :], I12_iz[None, :], I1G2_iz[None, :], gammai)
+                squeezed_4h_2211_A_iz += coefi * ingredients_T0.T2211_A_squeezed(k, I11_iz, I12_iz, I1G2_iz, gammai)
+                kernel_4h_2211_X_iz += coefi * ingredients_T0.T2211_X_kernel(
+                    k[:,None], k[None,:],
+                    I11_iz[:, None], I12_iz[:, None], I1G2_iz[:, None],
+                    I11_iz[None, :], I12_iz[None, :], I1G2_iz[None, :],
+                    gammai)
+                squeezed_4h_2211_X_iz += coefi * ingredients_T0.T2211_X_squeezed(k, I11_iz, I12_iz, I1G2_iz, gammai)
             np.fill_diagonal(kernel_4h_2211_A_iz, squeezed_4h_2211_A_iz)
             np.fill_diagonal(kernel_4h_2211_X_iz, squeezed_4h_2211_X_iz)
             kernel_4h_2211_A[:,:,iz] = kernel_4h_2211_A_iz.real * u.Mpc**3
@@ -200,7 +207,7 @@ class nonGuassianCov:
         T_2211_A += np.transpose(T_2211_A, (1,0,2))
         T_2211_X = 16 * self.Pk[:, None, None] * self.Pk[None, :, None] * kernel_4h_2211_X * D[None, None, :]**6
 
-        T_4h = I1[:, None, :]**2 * I1[None, :, :]**2 * (T_3111 + T_2211_X + T_2211_A)
+        T_4h = T_3111 + T_2211_X + T_2211_A
         return T_4h
 
     def integrate_3h(self, z=None):
@@ -210,41 +217,41 @@ class nonGuassianCov:
         z = np.atleast_1d(z)
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
-        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
-        I2 = restore_shape(self.astro.Thalo(z, k, k, p=2), k, k, z)
-
-        #This is the normalisation found in pyCCL, Not necessarily true for LIM
-        I1 *= 1 / I1.value[0, :]
-        I2 *= 1 / I1.value[0, :]**2
-
-        b1_L1 =   np.atleast_1d(self.astro.bavg("b1", z, 1))
-        b2_L1 =   np.atleast_1d(self.astro.bavg("b2", z, 1))
-        bG2_L1 =  np.atleast_1d(self.astro.bavg("bG2", z, 1))
-        b1_L2 =  np.atleast_1d(self.astro.bavg("b1", z, 2))
-        b2_L2 =  np.atleast_1d(self.astro.bavg("b2", z, 2))
-        bG2_L2 = np.atleast_1d(self.astro.bavg("bG2", z, 2))
+        I11 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b1"), k, z)
+        I12 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
+        I1G2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
+        I21 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b1"), k, k, z)
+        I22 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b2"), k, k, z)
+        I2G2 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="bG2"), k, k, z)
 
         kl = len(k)
         zl = len(z)
 
-        kernel_3h_211_A = ingredients_T0.T211_A_kernel(b1_L1, b1_L2, b2_L2, bG2_L2)
+        kernel_3h_211_A = ingredients_T0.T211_A_kernel(I11[:, None, :], I11[None, :, :], I21, I22, I2G2)
         T_211_A = kernel_3h_211_A * self.Pk[:, None, None] * self.Pk[None, :, None] * D[None, None, :]**4
 
         gamma, coef = self.fftLog_Pofk.get_power_and_coef()
 
-        kernel_3h_221_X = np.empty((kl, kl, zl)) * u.Mpc**3
+        kernel_3h_221_X = np.empty((kl, kl, zl)) * u.uK**4 * u.Mpc**6
         for iz, zi in enumerate(z):
             kernel_3h_211_X_iz = 0.0
-            squeezed_3h_211_X_iz = 0.0 
+            squeezed_3h_211_X_iz = 0.0
+
+            I11_iz = I11[:, iz]
+            I12_iz = I12[:, iz]
+            I1G2_iz = I1G2[:, iz]
+            I21_iz = I21[:, :, iz]
             for gammai, coefi in zip(gamma, coef):
-                kernel_3h_211_X_iz += coefi * ingredients_T0.T211_X_kernel(k[:,None], k[None, :], b1_L1[iz], b2_L1[iz], bG2_L1[iz], b1_L2[iz], gammai)
-                squeezed_3h_211_X_iz += coefi * ingredients_T0.T211_X_squeezed(k, b1_L1[iz], b2_L1[iz], bG2_L1[iz], b1_L2[iz], gammai)
+                kernel_3h_211_X_iz += coefi * ingredients_T0.T211_X_kernel(
+                    k[:,None], k[None, :],
+                    I11_iz[:, None], I12_iz[:, None], I1G2_iz[:, None], I21_iz, gammai)
+                squeezed_3h_211_X_iz += coefi * ingredients_T0.T211_X_squeezed(k, I11_iz, I12_iz, I1G2_iz, np.diag(I21_iz), gammai)
             np.fill_diagonal(kernel_3h_211_X_iz, squeezed_3h_211_X_iz)
             kernel_3h_221_X[:, :, iz] = kernel_3h_211_X_iz.real * u.Mpc**3
         T_211_X =  kernel_3h_221_X * self.Pk[:, None, None] * D[None, None, :]**4
         T_211_X += np.transpose(T_211_X, (1, 0, 2))
 
-        T_3h = 4 * I2 * I1[:, None, :] * I1[None, :, :] * (T_211_A + T_211_X)
+        T_3h = 4 * (T_211_A + T_211_X)
         return T_3h
 
     def integrate_2h(self, z=None):
@@ -254,44 +261,26 @@ class nonGuassianCov:
         z = np.atleast_1d(z)
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
-        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
-        I2 = restore_shape(self.astro.Thalo(z, k, k, p=2), k, k, z)
-        I3 = restore_shape(self.astro.Thalo(z, k, k, p=2, scale=(2,1)), k, k, z)
-
-        #This is the normalisation found in pyCCL, Not necessarily true for LIM
-        I1 *= 1 / I1.value[0, :]
-        I2 *= 1 / I1.value[0, :]**2
-        I3 *= 1 / I1.value[0, :]**3
-
-        b1_L1 = np.atleast_1d(self.astro.bavg("b1", z, 1))
-        b1_L2 = np.atleast_1d(self.astro.bavg("b1", z, 2))
-        b1_L3 = np.atleast_1d(self.astro.bavg("b1", z, 3))
+        I1 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b1"), k, z)
+        I2 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b1"), k, k, z)
+        I3 = restore_shape(self.astro.Thalo(z, k, k, p=2, scale=(2,1), beta="b1"), k, k, z)
 
         kl = len(k)
         zl = len(z)
 
-        kernel_2h_31 = np.empty((kl, zl))
-        for iz, zi in enumerate(z):
-            kernel_2h_31[:, iz] = (
-                vZ1(b1_L1[iz], 0.0, 0.0, 0.0, 0.0)
-                * vZ1(b1_L3[iz], 0.0, 0.0, 0.0, 0.0)
-            )
-        T_31 = 2 * self.Pk[None, :, None] * kernel_2h_31 * D[None, None, :]**2
+        T_31 = 2 * self.Pk[None, :, None] * I1[None, :, :] * I3 * D[None, None, :]**2
+        T_31 += np.transpose(T_31, (1, 0, 2))
 
         gamma, coef = self.fftLog_Pofk.get_power_and_coef()
-
         kernel_2h_22 = np.empty((kl, kl, zl)) * u.Mpc**3
         for iz, zi in enumerate(z):
             kernel_2h_22_iz = 0.0
             for gammai, coefi in zip(gamma, coef):
-                kernel_2h_22_iz += coefi * ingredients_T0.T22_kernel(k[:,None], k[None,:], b1_L2, gammai)
+                kernel_2h_22_iz += coefi * ingredients_T0.T22_kernel(k[:,None], k[None,:], gammai)
             kernel_2h_22[:,:,iz] = kernel_2h_22_iz.real * u.Mpc**3
-        T_22 = 2 * kernel_2h_22 * D[None, None, :]**2
+        T_22 = 2 * kernel_2h_22 * I2**2 * D[None, None, :]**2
 
-        T_2h = (T_22 * I2**2
-                + T_31 * I1[None, :, :] * I3
-                + np.transpose(T_31 * I1[None, :, :] * I3, (1, 0, 2))
-        )
+        T_2h = (T_22 + T_31)
         return T_2h
 
     def integrate_1h(self, z=None):
@@ -299,11 +288,7 @@ class nonGuassianCov:
         if z is None:
             z = self.z
 
-        I1 = restore_shape(self.astro.Thalo(z, k, p=1), k, z)
         I4 = restore_shape(self.astro.Thalo(z, k, k, p=2, scale=(2,2)), k, k, z)
-
-        #This is the normalisation found in pyCCL, Not necessarily true for LIM
-        I4 *= 1 / I1.value[0, :]**4
 
         T_1h = I4
 
@@ -317,6 +302,104 @@ class nonGuassianCov:
 
         V = self.survey_specs.Vfield()
         return (T_1h + T_2h + T_3h + T_4h) / V
+
+
+class SuperSampleCovariance:
+    def __init__(self, power_spectrum:power_spectrum.PowerSpectra):
+        self.power_spectrum = power_spectrum
+        self.cosmology = power_spectrum.cosmology
+        self.halomodel = power_spectrum.halomodel
+        self.astro = power_spectrum.astro
+        self.survey_specs = power_spectrum.survey_specs
+
+        self.k = power_spectrum.k
+        self.mu = power_spectrum.mu
+        self.kgrid = power_spectrum.k_numerics
+        self.z = power_spectrum.z
+
+    def sigma_survey(self):
+        k = self.kgrid
+        mu = self.mu
+        z = np.atleast_1d(self.z)
+
+        V = self.survey_specs.Vfield()
+        W, Vapprox= self.survey_specs.Wsurvey(self.kgrid, self.mu)
+        W = np.reshape(W, (*k.shape, *mu.shape, *z.shape))
+
+        P = np.reshape(
+            self.cosmology.matpow(k, z, nonlinear=False, tracer=self.halomodel.tracer),
+            (*k.shape, *z.shape))
+
+        sigma2_intgrnd = (
+            2 * np.pi
+            * (self.kgrid[:, None, None] / (2 * np.pi))**3
+            * W**2
+            * P[:, None, :]
+        )
+        sigma2_intgrnd = np.trapz(sigma2_intgrnd, x=mu, axis=1)
+        sigma2 = np.trapz(sigma2_intgrnd, x=np.log(k.value), axis=0)
+        return np.squeeze(sigma2 / V)
+
+    def halo_sample_variance(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        b1_L2 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(2,), beta="b1"), (*k.shape, *z.shape))
+
+        return b1_L2
+
+    def linear_dilation(self, k , z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        b1_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
+
+        Pk = np.reshape(self.cosmology.matpow(self.kgrid, z, nonlinear=False, tracer=self.halomodel.tracer),
+                        (*self.kgrid.shape, *z.shape))
+
+        logDeltam = np.log((self.kgrid[:,None]**3*Pk).to(1).value)
+        neff = np.empty((*k.shape, *z.shape))
+        for iz in range(len(z)):
+            neff[:, iz] = UnivariateSpline(np.log(self.kgrid.to(k.unit).value), logDeltam[:, iz]).derivative(1)(np.log(k.value))
+
+        linear_dilation = -neff / 3 * b1_L1**2
+        return linear_dilation
+
+    def beat_coupling(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        b1_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
+        b2_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2"), (*k.shape, *z.shape))
+        bG2_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="bG2"), (*k.shape, *z.shape))
+
+        local_secondorder_bias = b2_L1 - 4 / 3 * bG2_L1
+
+        beat_coupling = (68 / 21 * b1_L1**2 + 2 * b1_L1 * local_secondorder_bias)
+        return beat_coupling
+
+    def response(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        Pk = np.reshape(self.cosmology.matpow(k, z, nonlinear=False, tracer=self.halomodel.tracer),
+                        (*k.shape, *z.shape))
+
+        beat_coupling = np.reshape(self.beat_coupling(k, z), (*k.shape, *z.shape))
+        linear_dilation = np.reshape(self.linear_dilation(k, z), (*k.shape, *z.shape))
+        halo_sample_variance = np.reshape(self.halo_sample_variance(k, z), (*k.shape, *z.shape))
+        return (beat_coupling + linear_dilation) * Pk + halo_sample_variance
+
+    def compute_SSC(self):
+        k = self.k
+        z = self.z
+
+        V = np.atleast_1d(self.survey_specs.Vfield())
+        response = self.response(k, z)
+        sigma = np.atleast_1d(self.sigma_survey())
+
+        SSC = (sigma / V)[None, None, :] * response[:, None, :] * response[None, :, :]
+        return SSC
 
 ##############
 # Numba part #

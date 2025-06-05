@@ -301,7 +301,7 @@ class AstroFunctions:
     # Halo integrals #
     ##################
 
-    def Lhalo(self, z, *args, p=1, scale=()):
+    def Lhalo(self, z, *args, p=1, scale=(), beta=0, dc=1.6865):
         """Luminosity weight higher order halo profiles for n-halo terms
         Computes the mean halo profile weight with some power of the luminosity.
         this shows up for example in the halo shot noise,
@@ -324,6 +324,18 @@ class AstroFunctions:
         # Independent of k
         L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
         dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
+
+        if beta==0:
+            bstring = "b0"
+        elif beta==1:
+            bstring = self.halomodel.haloparams["bias_model"]
+        else:
+            bstring = beta
+        
+        b = np.reshape(
+            getattr(self.halomodel._bias_function, bstring)(M, z, dc=dc),
+            (*M.shape, *z.shape),
+        )
 
         # Dependent on k
         normhaloprofile = []
@@ -359,78 +371,19 @@ class AstroFunctions:
 
         # Construct the integrand
         I1 = dndM * L_of_M**np.sum(alpha) * M[:, None]
-        I2 = dndM * M[:, None]
+        I2 = dndM * M[:, None] * b
         for ik in range(p):
             I2 = I2 * Fv[ik] * normhaloprofile[ik]
         logM = np.log(M.value)
         Umean = (np.trapz(I2, logM, axis=-2) / np.trapz(I1, logM, axis=-2)).to(1).value
         return np.squeeze(self.Lavg(z, p=np.sum(alpha)) * Umean)
 
-    def Thalo(self, z, *args, p=1, scale=()):
+    def Thalo(self, z, *args, p=1, scale=(), beta=0):
         if scale:
             alpha = np.sum(scale)
         else:
             alpha = p
-        return self.CLT(z) ** alpha * self.Lhalo(z, *args, p=p, scale=scale)
-
-    def T_one_halo(self, k, z, mu=None):
-        """Directly computes the one-halo power spectrum."""
-        M = self.M.to(u.Msun)
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        z = np.atleast_1d(z)
-
-        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
-        L_of_M = np.reshape(
-            self.massluminosityfunction(M, z) ** 2, (*M.shape, *z.shape)
-        )
-        U2 = np.reshape(
-            self.halomodel.ft_NFW(k, M, z) ** 2, (*k.shape, *M.shape, *z.shape)
-        )
-        Fv = 1
-        if self.halomodel.haloparams["v_of_M"]:
-            Fv = np.reshape(
-                self.halomodel.broadening_FT(k, mu, M, z) ** 2,
-                (*k.shape, *mu.shape, *M.shape, *z.shape),
-            )
-        I1 = M[None, None, :, None] * L_of_M[None, None, :, :] * dndM[None, None, :, :]
-        I2 = I1 * U2[:, None, :, :] * Fv
-        Uavg = (
-            (
-                np.trapz(I2, np.log(M.value), axis=-2)
-                / np.trapz(I1, np.log(M.value), axis=-2)
-            )
-            .to(1)
-            .value
-        )
-        return np.squeeze(self.Tavg(z, p=2) * Uavg)
-
-    def bhalo(self, k, z, mu=None):
-        """Mean Tb, factor in front of the clutstering part of the LIM-autopower spectrum"""
-        k = np.atleast_1d(k)
-        z = np.atleast_1d(z)
-        mu = np.atleast_1d(mu)
-        M = self.M
-
-        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
-        L = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
-        b = restore_shape(self.halomodel.halobias(M, z, k=k), k, M, z)
-        U = restore_shape(self.halomodel.ft_NFW(k, M, z), k, M, z)
-
-        Fv = 1
-        if self.halomodel.haloparams["v_of_M"]:
-            Fv = np.reshape(
-                self.halomodel.broadening_FT(k, mu, M, z),
-                (*k.shape, *mu.shape, *M.shape, *z.shape),
-            )
-
-        I1 = L * dndM * M[:, None]
-        I2 = I1 * Fv * U[:, None, :, :] * b[:, None, :, :]
-        bmean = (
-            (np.trapz(I2, np.log(M.value), axis=-2) / np.trapz(I1, np.log(M.value), axis=-2)).to(1).value
-        )
-
-        return np.squeeze(self.Tavg(z, p=1) * bmean)
+        return self.CLT(z) ** alpha * self.Lhalo(z, *args, p=p, scale=scale, beta=beta)
 
     def recap_astro(self):
         print("Astronomical Parameters:")
