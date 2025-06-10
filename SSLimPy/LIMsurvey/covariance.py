@@ -9,7 +9,6 @@ from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.special import legendre, roots_legendre
 
-from SSLimPy.interface import config as cfg
 from SSLimPy.LIMsurvey import power_spectrum
 from SSLimPy.LIMsurvey.higher_order import *
 from SSLimPy.LIMsurvey import ingredients_T0
@@ -93,9 +92,10 @@ class Covariance:
 class nonGuassianCov:
     def __init__(self, power_spectrum: power_spectrum.PowerSpectra):
         self.cosmo = power_spectrum.cosmology
+        self.cfg = self.cosmo.cfg
         self.astro = power_spectrum.astro
         self.powerSpectrum = power_spectrum
-        self.tracer = cfg.settings["TracerPowerSpectrum"]
+        self.tracer = self.cfg.settings["TracerPowerSpectrum"]
         self.survey_specs = power_spectrum.survey_specs
         self.k = power_spectrum.k
         self.mu = power_spectrum.mu
@@ -108,8 +108,8 @@ class nonGuassianCov:
         self.Pk = self.cosmo.matpow(self.k, 0.0, nonlinear=False, tracer=self.tracer).to(u.Mpc**3)
 
         # FFTlog Approximation
-        kminebs = np.min(self.kgrid).to(u.Mpc**-1).value / cfg.settings["Log-extrap"]
-        kmaxebs = np.max(self.kgrid).to(u.Mpc**-1).value * cfg.settings["Log-extrap"]
+        kminebs = np.min(self.kgrid).to(u.Mpc**-1).value / self.cfg.settings["Log-extrap"]
+        kmaxebs = np.max(self.kgrid).to(u.Mpc**-1).value * self.cfg.settings["Log-extrap"]
 
         def extrap_pk(k, kgrid, Pkgrid):
             logk = np.log(k)
@@ -120,7 +120,7 @@ class nonGuassianCov:
 
         def p_rec(k, q):
             tf = FFTLog(extrap_pk, kminebs, kmaxebs,
-                                    cfg.settings["LogN_modes"], q,
+                                    self.cfg.settings["LogN_modes"], q,
                                     kgrid=self.kgrid.value, Pkgrid=self.Pgrid.value,
                                     )
             return tf(k).real
@@ -129,7 +129,7 @@ class nonGuassianCov:
         q, _= curve_fit(p_rec, self.k.value, self.Pk.value, p0=[0.3], sigma=self.Pk.value)
         q = q[0]
         self.fftLog_Pofk = FFTLog(extrap_pk, kminebs, kmaxebs,
-                                  cfg.settings["LogN_modes"], q,
+                                  self.cfg.settings["LogN_modes"], q,
                                   kgrid=self.kgrid.value, Pkgrid=self.Pgrid.value,
                                   )
 

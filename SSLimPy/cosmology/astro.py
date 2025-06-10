@@ -9,7 +9,6 @@ from SSLimPy.cosmology.halo_model import HaloModel
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
 from SSLimPy.interface.survey_specs import SurveySpecifications
-from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
@@ -23,6 +22,7 @@ class AstroFunctions:
         self.halomodel = halomodel
         self.cosmology = halomodel.cosmology
         self.survey_specs = survey_specs
+        self.cfg = halomodel.cfg
 
         # Units
         self.hubble = halomodel.hubble
@@ -40,7 +40,7 @@ class AstroFunctions:
         self.fduty = self.astroparams["fduty"]
 
         ### TEXT VOMIT ###
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             self.recap_astro()
         ##################
 
@@ -208,7 +208,7 @@ class AstroFunctions:
         return nbar
 
     def CLT(self, z):
-        if cfg.settings["do_Jysr"]:
+        if self.cfg.settings["do_Jysr"]:
             x = c.c / (
                 4.0
                 * np.pi

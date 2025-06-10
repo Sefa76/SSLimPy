@@ -8,7 +8,6 @@ from scipy.special import sici
 from SSLimPy.cosmology.cosmology import CosmoFunctions
 from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
-from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
@@ -21,6 +20,7 @@ class HaloModel:
         halopars: dict = dict(),
     ):
         self.cosmology = cosmo
+        self.cfg = cosmo.cfg
         self.haloparams = deepcopy(halopars)
         self._set_halo_defaults()
 
@@ -46,23 +46,23 @@ class HaloModel:
         self.Mmin = min(self.M)
         self.Mmax = max(self.M)
 
-        if cfg.settings["k_kind"] == "log":
+        if self.cfg.settings["k_kind"] == "log":
             k_edge = np.geomspace(
-                cfg.settings["kmin"],
-                cfg.settings["kmax"],
-                cfg.settings["nk"],
+                self.cfg.settings["kmin"],
+                self.cfg.settings["kmax"],
+                self.cfg.settings["nk"],
             ).to(u.Mpc**-1)
         else:
             k_edge = np.linspace(
-                cfg.settings["kmin"],
-                cfg.settings["nk"],
+                self.cfg.settings["kmin"],
+                self.cfg.settings["nk"],
             ).to(u.Mpc**-1)
         self.k = (k_edge[1:] + k_edge[:-1]) / 2.0
 
         self.z = np.linspace(
-            cfg.settings["zmin"],
-            cfg.settings["zmax"],
-            cfg.settings["nz"],
+            self.cfg.settings["zmin"],
+            self.cfg.settings["zmax"],
+            self.cfg.settings["nz"],
         )
 
         self.sigmaR_lut, self.dsigmaR_lut = self._create_sigmaR_lookuptable()
@@ -589,8 +589,8 @@ class HaloModel:
 
         rhoM = self.rho_tracer
         R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
-        kmin = cfg.settings["kmin"]
-        kmax = cfg.settings["kmax"]
+        kmin = self.cfg.settings["kmin"]
+        kmax = self.cfg.settings["kmax"]
         k = self.k
         mu = np.linspace(-0.995, 0.995, 128)
 

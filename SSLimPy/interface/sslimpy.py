@@ -1,7 +1,7 @@
 import sys
 from copy import copy
 from numpy import atleast_1d
-import SSLimPy.interface.config as cfg
+from SSLimPy.interface.config import Configuration
 from SSLimPy.interface import updater
 
 class sslimpy:
@@ -27,29 +27,30 @@ class sslimpy:
         print("#---------------------------------------------------#")
         sys.stdout.flush()
 
-        cfg.init(settings_dict = settings_dict,
-        camb_yaml_file = camb_yaml_file,
-        class_yaml_file = class_yaml_file,
-        obspars_dict = obspars_dict,
-        cosmopars = cosmopars,
-        astropars = astropars,
-        BAOpars= BAOpars,
+        self.cfg = Configuration(
+            settings_dict = settings_dict,
+            camb_yaml_file = camb_yaml_file,
+            class_yaml_file = class_yaml_file,
+            obspars_dict = obspars_dict,
+            cosmopars = cosmopars,
+            astropars = astropars,
+            BAOpars= BAOpars,
         )
 
-        self.settings = cfg.settings
-        self.fiducialcosmo = cfg.fiducialcosmo
-        self.fiducialcosmoparams = cfg.fiducialcosmoparams
+        self.settings = self.cfg.settings
+        self.fiducialcosmo = self.cfg.fiducialcosmo
+        self.fiducialcosmoparams = self.cfg.fiducialcosmoparams
 
-        self.fiducialastro = cfg.fiducialastro
-        self.fiducialastroparams = cfg.fiducialastroparams
+        self.fiducialastro = self.cfg.fiducialastro
+        self.fiducialastroparams = self.cfg.fiducialastroparams
 
-        self.output = atleast_1d(cfg.settings["output"])
+        self.output = atleast_1d(self.cfg.settings["output"])
 
         ### save very fist cosmology ###
-        self.curent_astro = copy(self.fiducialastro)
+        self.curent_astro = self.fiducialastro
 
         ### TEXT VOMIT ###
-        if cfg.settings["verbosity"]>1:
+        if self.cfg.settings["verbosity"]>1:
             self.recap_options()
         ##################
 
@@ -64,25 +65,25 @@ class sslimpy:
         outputdict = {}
 
         if "Power spectrum" in output:
-            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
+            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict, self.cfg)
 
         if "Covariance" in output:
-            self._compute_cov(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
+            self._compute_cov(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict, self.cfg)
         return outputdict
 
-    def _compute_ps(self, cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict):
+    def _compute_ps(self, cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict, configuration):
         from SSLimPy.LIMsurvey.power_spectrum import PowerSpectra
         self.curent_astro = updater.update_astro(
-            self.curent_astro, cosmopars, halopars, astropars, obspars,
+            self.curent_astro, cosmopars, halopars, astropars, obspars, configuration
         )
         outputdict["Power spectrum"] = PowerSpectra(self.curent_astro, BAOpars, pobs_settings)
 
-    def _compute_cov(self, cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict):
+    def _compute_cov(self, cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict, configuration):
         from SSLimPy.LIMsurvey.covariance import Covariance
         if "Power spectrum" in outputdict:
             pass
         else:
-            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict)
+            self._compute_ps(cosmopars, halopars, astropars, obspars, BAOpars, pobs_settings, outputdict, configuration)
         outputdict["Covariance"] = Covariance(outputdict["Power spectrum"])
 
 
@@ -92,6 +93,6 @@ class sslimpy:
         print("----------RECAP OF SELECTED OPTIONS--------")
         print("")
         print("Settings:")
-        for key in cfg.settings:
-            print("   " + key + ": {}".format(cfg.settings[key]))
+        for key in self.cfg.settings:
+            print("   " + key + ": {}".format(self.cfg.settings[key]))
 

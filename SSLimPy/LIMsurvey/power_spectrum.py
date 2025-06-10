@@ -7,7 +7,6 @@ from scipy.integrate import simpson
 from scipy.interpolate import RectBivariateSpline
 from scipy.special import legendre
 from SSLimPy.cosmology.astro import AstroFunctions
-from SSLimPy.interface import config as cfg
 from SSLimPy.utils.utils import *
 
 
@@ -15,6 +14,7 @@ class PowerSpectra:
 
     def __init__(self, astro: AstroFunctions, BAOpars=dict(), settings=dict()):
         self.cosmology = astro.cosmology
+        self.cfg = self.cosmology.cfg
         self.halomodel = astro.halomodel
         # Nu enters into the Mass-Luminosity and Luminosity-Temperature relations
         self.survey_specs = astro.survey_specs 
@@ -23,8 +23,8 @@ class PowerSpectra:
         self.BAOpars = copy(BAOpars)
         self.tracer = self.halomodel.tracer
 
-        self.fiducial_cosmology = cfg.fiducialcosmo
-        self.fiducial_halomodel = cfg.fiducialhalomodel
+        self.fiducial_cosmology = self.cfg.fiducialcosmo
+        self.fiducial_halomodel = self.cfg.fiducialhalomodel
 
         #################################
         # Properties of target redshift #
@@ -49,10 +49,10 @@ class PowerSpectra:
         """Constructs the kspace for the survey
         Defaults back to config if not passed
         """
-        k_kind = settings.get("k_kind", cfg.settings["k_kind"])
-        nk = settings.get("nk", cfg.settings["nk"])
-        kmin = settings.get("kmin", cfg.settings["kmin"])
-        kmax = settings.get("kmax", cfg.settings["kmax"])
+        k_kind = settings.get("k_kind", self.cfg.settings["k_kind"])
+        nk = settings.get("nk", self.cfg.settings["nk"])
+        kmin = settings.get("kmin", self.cfg.settings["kmin"])
+        kmax = settings.get("kmax", self.cfg.settings["kmax"])
 
         if k_kind == "log":
             k_edge = np.geomspace(kmin, kmax, nk).to(u.Mpc**-1)
@@ -76,7 +76,7 @@ class PowerSpectra:
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
 
-        if cfg.settings["fix_cosmo_nl_terms"]:
+        if self.cfg.settings["fix_cosmo_nl_terms"]:
             cosmo = self.fiducial_cosmology
             halomodel = self.fiducial_halomodel
         else:
@@ -301,7 +301,7 @@ class PowerSpectra:
         mu = np.atleast_1d(mu)
         z = np.atleast_1d(z)
 
-        if cfg.settings["fix_cosmo_nl_terms"]:
+        if self.cfg.settings["fix_cosmo_nl_terms"]:
             cosmo = self.fiducial_cosmology
             halomodel = self.fiducial_halomodel
         else:
@@ -320,7 +320,7 @@ class PowerSpectra:
             sp = sigmap * f_scaleindependent
         else:
             sp = np.atleast_1d(halomodel.sigmaV_of_z(z, moment=2))
-        FoG_damp = cfg.settings["FoG_damp"]
+        FoG_damp = self.cfg.settings["FoG_damp"]
         if FoG_damp == "Lorentzian":
             FoG = np.power(
                 1.0
@@ -353,13 +353,13 @@ class PowerSpectra:
         nz = Pobs.shape[-1]
 
         # Downsample q, muq and deltaphi
-        nq = np.uint8(len(k) / cfg.settings["downsample_conv_q"])
-        if "log" in cfg.settings["k_kind"]:
+        nq = np.uint8(len(k) / self.cfg.settings["downsample_conv_q"])
+        if "log" in self.cfg.settings["k_kind"]:
             q = np.geomspace(k[0], k[-1], nq)
         else:
             q = np.linspace(k[0], k[-1], nq)
 
-        nmuq = np.uint8((len(mu)) / cfg.settings["downsample_conv_muq"])
+        nmuq = np.uint8((len(mu)) / self.cfg.settings["downsample_conv_muq"])
         nmuq = nmuq + 1 - nmuq % 2
         muq = np.linspace(-1, 1, nmuq)
         muq = (muq[1:] + muq[:-1]) / 2.0
@@ -407,7 +407,7 @@ class PowerSpectra:
                 raise ValueError("did not pass the shotnoise for every z asked for")
             Ps = Pshot[None, None, :]
         else:
-            if cfg.settings["halo_model_PS"]:
+            if self.cfg.settings["halo_model_PS"]:
                 Ps = self.astro.Thalo(z, k, p=1, scale=(2,))
             else:
                 Ps = self.astro.Tavg(z, p=2)
@@ -422,11 +422,11 @@ class PowerSpectra:
         mu = copy(self.mu)
         z = copy(self.z)
         gridshape = (*k.shape, *mu.shape, *z.shape)
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             print("requested Pk shape:", gridshape)
             tstart = time()
 
-        if cfg.settings["QNLpowerspectrum"]:
+        if self.cfg.settings["QNLpowerspectrum"]:
             # Obtain the normalized dewiggled power spectrum
             Pk = np.reshape(
                 self.dewiggled_pdd(k, mu, z, BAOpars=self.BAOpars), gridshape
@@ -438,11 +438,11 @@ class PowerSpectra:
             )
             Pk = Pk[:, None, :]
 
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             tPk = time()
             print("Power spectrum obtained in {} seconds".format(tPk - tstart))
 
-        if cfg.settings["do_RSD"]:
+        if self.cfg.settings["do_RSD"]:
             # Obtain redshiftspace distortions
             rsd = restore_shape(
                 self.Kaiser_Term(k, mu, z, BAOpars=self.BAOpars),
@@ -450,7 +450,7 @@ class PowerSpectra:
                 mu,
                 z,
             )
-            if cfg.settings["nonlinearRSD"]:
+            if self.cfg.settings["nonlinearRSD"]:
                 rsd = rsd * np.reshape(
                     self.fingers_of_god(k, mu, z, BAOpars=self.BAOpars),
                     (*k.shape, *mu.shape, *z.shape),
@@ -465,7 +465,7 @@ class PowerSpectra:
             ),
             2)
 
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             trsd = time()
             print(
                 "Redshift space distortions obtained in {} seconds".format(trsd - tPk)
@@ -475,7 +475,7 @@ class PowerSpectra:
             self.shotnoise(z, k=k, mu=mu, BAOpars=self.BAOpars), k, mu, z
         )
 
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             tps = time()
             print("Shot-noise obtained in {} seconds".format(tps - trsd))
 
@@ -506,8 +506,8 @@ class PowerSpectra:
         for iz, zi in enumerate(z):
             logk_ap_zi = logk_ap[:, :, iz].flatten()
             if (
-                cfg.settings["QNLpowerspectrum"]
-                or cfg.settings["do_RSD"]
+                self.cfg.settings["QNLpowerspectrum"]
+                or self.cfg.settings["do_RSD"]
                 or self.halomodel.haloparams["v_of_M"]
             ):
                 mu_ap_zi = mu_ap[:, :, iz].flatten()
@@ -529,7 +529,7 @@ class PowerSpectra:
         Pk_Obs = Pk_Obs * uP
 
         Fnu = np.ones(outputshape)
-        if cfg.settings["Smooth_resolution"]:
+        if self.cfg.settings["Smooth_resolution"]:
             # The dampning from resolution is to be computed without any cosmolgy dependance
             F_parr = np.reshape(self.survey_specs.F_parr(k, mu, z, self.nuObs), outputshape)
             F_perp = np.reshape(self.survey_specs.F_perp(k, mu, z), outputshape)
@@ -539,17 +539,17 @@ class PowerSpectra:
             (alpha_par * np.power(alpha_perp, 2))[None, None, :] * Pk_Obs * Fnu
         )
 
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             tap = time()
             print(
                 "Alcock-Paczynski projection performed in {} seconds".format(tap - tps)
             )
 
-        if cfg.settings["Smooth_window"]:
+        if self.cfg.settings["Smooth_window"]:
             self.Pk_true = copy(self.Pk_Obs)
             self.Pk_Obs = self.convolved_Pk()
 
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             print(
                 "Observed power spectrum obtained in {} seconds".format(time() - tstart)
             )

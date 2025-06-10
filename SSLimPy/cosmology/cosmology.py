@@ -13,7 +13,7 @@ import numpy as np
 from scipy.interpolate import RectBivariateSpline as _RectBivariateSpline
 from scipy.interpolate import UnivariateSpline as _UnivariateSpline
 from scipy.signal import savgol_filter
-from SSLimPy.interface import config as cfg
+from SSLimPy.interface.config import Configuration
 from SSLimPy.utils.utils import *
 
 RectBivariateSpline = partial(_RectBivariateSpline, s=0)
@@ -24,7 +24,7 @@ class BoltzmannCode:
     N_EFF = 3.044
     NEUTRINO_MASS_FAC = 94.07
 
-    def __init__(self, cosmopars, code="camb"):
+    def __init__(self, cosmopars, cfg: Configuration, code="camb"):
         """
         Constructor method for the class.
 
@@ -32,9 +32,10 @@ class BoltzmannCode:
         - cosmopars: The cosmological parameters object to be copied.
         - code: The code to be used (default value is 'camb').
         """
+        self.cfg = cfg
+        self.settings = cfg.settings
 
         self.cosmopars = deepcopy(cosmopars)
-        self.settings = cfg.settings
         self.set_cosmology_defaults()
 
         if code == "camb":
@@ -117,7 +118,7 @@ class BoltzmannCode:
     # Basis Conversion for Class
     def basechange_class(self, cosmopars):
         # transforms cosmopars into cosmopars that can be read by CLASS
-        shareDeltaNeff = cfg.settings["share_delta_neff"]
+        shareDeltaNeff = self.cfg.settings["share_delta_neff"]
         classpars = deepcopy(cosmopars)
         if "h" in classpars:
             classpars["h"] = classpars.pop("h")
@@ -188,7 +189,7 @@ class BoltzmannCode:
         if "logAs" in cambpars:
             cambpars["As"] = np.exp(cambpars.pop("logAs")) * 1.0e-10
 
-        shareDeltaNeff = cfg.settings["share_delta_neff"]
+        shareDeltaNeff = self.cfg.settings["share_delta_neff"]
         cambpars["share_delta_neff"] = shareDeltaNeff
         fidNeff = self.N_EFF
         if "Neff" in cambpars:
@@ -294,7 +295,7 @@ class BoltzmannCode:
         )
 
         ### TEXT VOMIT ###
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             self.recap_camb()
         ##################
 
@@ -317,7 +318,7 @@ class BoltzmannCode:
         self.kmin_pk = 1e-4
 
         ### TEXT VOMIT ###
-        if cfg.settings["verbosity"] > 1:
+        if self.cfg.settings["verbosity"] > 1:
             self.recap_class()
         ##################
 
@@ -505,7 +506,7 @@ class BoltzmannCode:
 
         ## interpolating function Pk_nl (k,z)
         Pk_nl, k, z = classres.get_pk_and_k_and_z(
-            nonlinear=cfg.settings["nonlinearMatpow"]
+            nonlinear= self.cfg.settings["nonlinearMatpow"]
         )
         self.results.Pk_nl = RectBivariateSpline(
             z[::-1], k, (np.flip(Pk_nl, axis=1)).transpose()
@@ -545,6 +546,7 @@ class CosmoFunctions:
 
     def __init__(
         self,
+        cfg: Configuration,
         cosmopars=dict(),
         nuiscance_like=dict(),
         input_type=None,
@@ -556,6 +558,7 @@ class CosmoFunctions:
         instead of the callables inside of results.
         Will not read cosmopars if cosmology is directly passed
         """
+        self.cfg = cfg
         self.settings = cfg.settings
 
         self.cosmopars = deepcopy(cosmopars)
@@ -569,14 +572,14 @@ class CosmoFunctions:
             if input_type is None:
                 input_type = cfg.input_type
             if input_type == "camb":
-                cambresults = BoltzmannCode(cosmopars, code="camb")
+                cambresults = BoltzmannCode(cosmopars, cfg, code="camb")
                 self.code = "camb"
                 self.results = cambresults.results
                 self.kgrid = cambresults.results.kgrid
                 self.cosmopars = cambresults.cosmopars
                 self.cambcosmopars = cambresults.cambcosmopars
             elif input_type == "class":
-                classresults = BoltzmannCode(cosmopars, code="class")
+                classresults = BoltzmannCode(cosmopars, cfg, code="class")
                 self.code = "class"
                 self.results = classresults.results
                 self.kgrid = classresults.results.kgrid
@@ -785,7 +788,7 @@ class CosmoFunctions:
         ###################################
         # Emulators and Fitting functions #
         ###################################
-        if cfg.settings["do_pheno_ncdm"]:
+        if self.cfg.settings["do_pheno_ncdm"]:
             Pk *= self.transfer_ncdm(kvec)
 
         return np.squeeze(Pk)

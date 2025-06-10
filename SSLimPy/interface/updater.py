@@ -5,7 +5,7 @@ Like this the update is done heirachially from bottom to top.
 
 from copy import copy
 
-from SSLimPy.interface import config as cfg
+from SSLimPy.interface.config import Configuration
 from SSLimPy.cosmology import cosmology
 from SSLimPy.cosmology import halo_model
 from SSLimPy.cosmology import astro
@@ -14,6 +14,7 @@ from SSLimPy.interface import survey_specs
 
 def update_surveySpecs(
     obspars: dict,
+    cfg: Configuration,
 ) -> survey_specs.SurveySpecifications:
     """This class only depends on the fiducial cosmology and
     needs only one dict
@@ -24,6 +25,7 @@ def update_surveySpecs(
 def update_cosmo(
     current_cosmo: cosmology.CosmoFunctions,
     cosmopars: dict,
+    cfg: Configuration,
 ) -> cosmology.CosmoFunctions:
     """This function gets the old cosmology aswell as a new set of
     cosmological parameters. It then seperates EBS parameters from
@@ -43,17 +45,13 @@ def update_cosmo(
     if cosmopars == current_cosmopars:
         cosmo = current_cosmo
         if nuiscance_like != current_nuiscance_like:
-            cosmo = cosmology.CosmoFunctions(
-                cosmology=current_cosmo, nuiscance_like=nuiscance_like
-            )
+            cosmo = cosmology.CosmoFunctions(cfg, cosmology=current_cosmo, nuiscance_like=nuiscance_like)
     elif cosmopars == cfg.fiducialcosmoparams:
         cosmo = cfg.fiducialcosmo
         if nuiscance_like != cfg.fiducialnuiscancelikeparams:
-            cosmo = cosmology.CosmoFunctions(
-                cosmology=cfg.fiducialcosmo, nuiscance_like=nuiscance_like
-            )
+            cosmo = cosmology.CosmoFunctions(cfg, cosmology=cfg.fiducialcosmo, nuiscance_like=nuiscance_like)
     else:
-        cosmo = cosmology.CosmoFunctions(cosmopars, nuiscance_like)
+        cosmo = cosmology.CosmoFunctions(cfg, cosmopars, nuiscance_like)
     return cosmo
 
 
@@ -61,12 +59,13 @@ def update_halomodel(
     current_halomodel: halo_model.HaloModel,
     cosmopars: dict,
     halopars: dict,
+    cfg: Configuration,
 ) -> halo_model.HaloModel:
     """Will update the cosmology and halomodel with passed parameters."""
     current_cosmo = current_halomodel.cosmology
     current_haloparams = current_halomodel.haloparams
 
-    updated_cosmo = update_cosmo(current_cosmo, cosmopars)
+    updated_cosmo = update_cosmo(current_cosmo, cosmopars, cfg)
 
     if updated_cosmo == current_cosmo:
         if halopars == current_haloparams:
@@ -89,6 +88,7 @@ def update_astro(
     halopars: dict,
     astropars: dict,
     obspars: dict,
+    cfg: Configuration,
 ) -> astro.AstroFunctions:
     """Will update the cosmology, halomodel, survey specifications, and the astro model with passed parameters."""
 
@@ -96,7 +96,7 @@ def update_astro(
     current_specs = current_astro.survey_specs
     current_astoparams = current_astro.astroparams
 
-    updated_halomodel = update_halomodel(current_halomodel, cosmopars, halopars)
+    updated_halomodel = update_halomodel(current_halomodel, cosmopars, halopars, cfg)
 
     if updated_halomodel == current_halomodel:
         if astropars == current_astoparams:
