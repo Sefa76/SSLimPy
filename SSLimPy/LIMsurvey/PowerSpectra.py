@@ -493,13 +493,9 @@ class PowerSpectra:
             cosmo = self.cosmology
 
         if "sigmap" in BAOpars:
-            # This quantitiy is different from the old lim one by a factor of f^2
-            sigmap = np.atleast_1d(BAOpars["sigmap"])
-            if len(sigmap) != len(z):
+            sp = np.atleast_1d(BAOpars["sigmap"])
+            if len(sp) != len(z):
                 raise ValueError("did not pass velocity dispertion for every z asked for")
-            # scale independent f
-            f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
-            sp = sigmap*f_scaleindependent
         else:
             sp = np.atleast_1d(cosmo.P_ThetaTheta_Moments(z,moment=2))
         FoG_damp = cfg.settings["FoG_damp"]
@@ -508,6 +504,10 @@ class PowerSpectra:
         elif FoG_damp == 'Gaussian':
             FoG = np.exp(-((k[:,None,None]*mu[None,:,None]*sp[None,None,:])**2.))
         elif FoG_damp == "ISTF_like":
+            # This quantitiy is different from the old lim one by a factor of f^2
+            # scale independent f
+            f_scaleindependent = cosmo.growth_rate(1e-4/u.Mpc,z)
+            sp *= f_scaleindependent
             FoG = np.power(1+np.power(k[:,None,None]*mu[None,:,None]*sp[None,None,:],2),-1)
 
         return np.squeeze(FoG)
