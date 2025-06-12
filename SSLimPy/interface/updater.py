@@ -103,21 +103,21 @@ def update_astro(
             if obspars == current_specs.obsparams:
                 return current_astro
             else:
-                survey_specs = update_surveySpecs(obspars)
+                survey_specs = update_surveySpecs(obspars, cfg)
                 return astro.AstroFunctions(current_halomodel, survey_specs, current_astoparams)
         else:
-            survey_specs = update_surveySpecs(obspars)
+            survey_specs = update_surveySpecs(obspars, cfg)
             return astro.AstroFunctions(current_halomodel, survey_specs, astropars)
     elif updated_halomodel == cfg.fiducialhalomodel:
         if astropars == cfg.fiducialastroparams:
             if obspars == cfg.fiducialspecparams:
                 return cfg.fiducialastro
             else:
-                survey_specs = update_surveySpecs(obspars)
+                survey_specs = update_surveySpecs(obspars, cfg)
                 return astro.AstroFunctions(cfg.fiducialhalomodel, survey_specs, cfg.fiducialastroparams)
         else:
-            survey_specs = update_surveySpecs(obspars)
+            survey_specs = update_surveySpecs(obspars, cfg)
             return astro.AstroFunctions(cfg.fiducialhalomodel, survey_specs, astropars)
     else:
-        survey_specs = update_surveySpecs(obspars)
+        survey_specs = update_surveySpecs(obspars, cfg)
         return astro.AstroFunctions(updated_halomodel, survey_specs, astropars)

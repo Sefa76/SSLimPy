@@ -52,7 +52,7 @@ class SurveySpecifications:
         logF = -0.5 * np.power(
             k[:, None, None]
             * mu[None, :, None]
-            * self.sigma_parr(z, nu_obs)[None, None, :],
+            * np.atleast_1d(self.sigma_parr(z, nu_obs))[None, None, :],
             2,
         )
 
@@ -66,7 +66,7 @@ class SurveySpecifications:
         logF = -0.5 * np.power(
             k[:, None, None]
             * np.sqrt(1 - mu[None, :, None] ** 2)
-            * self.sigma_perp(z)[None, None, :],
+            * np.atleast_1d(self.sigma_perp(z))[None, None, :],
             2,
         )
 

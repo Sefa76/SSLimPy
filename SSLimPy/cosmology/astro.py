@@ -35,7 +35,6 @@ class AstroFunctions:
         self.model_name = self.astroparams["model_name"]
         self.model_par = self.astroparams["model_par"]
         self.nu = self.survey_specs.obsparams["nu"]
-        self.nuObs = self.survey_specs.obsparams["nuObs"]
         self.sigma_scatter = self.astroparams["sigma_scatter"]
         self.fduty = self.astroparams["fduty"]
 

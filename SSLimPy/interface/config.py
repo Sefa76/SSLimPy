@@ -176,6 +176,7 @@ class Configuration:
         from SSLimPy.cosmology import cosmology
 
         self.fiducialcosmo = cosmology.CosmoFunctions(
+            cfg = self,
             cosmopars=self.fiducialcosmoparams,
             nuiscance_like=self.fiducialnuiscancelikeparams,
             input_type=self.input_type,

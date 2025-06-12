@@ -31,7 +31,7 @@ class PowerSpectra:
         #################################
 
         self.nu = astro.nu
-        self.nuObs = astro.nuObs
+        self.nuObs = self.survey_specs.obsparams["nuObs"]
         self.z = np.sort(np.atleast_1d(self.nu / self.nuObs).to(1).value - 1)
 
         #########################################
