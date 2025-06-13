@@ -12,7 +12,7 @@ import astropy.units as u
 import numpy as np
 from scipy.interpolate import RectBivariateSpline as _RectBivariateSpline
 from scipy.interpolate import UnivariateSpline as _UnivariateSpline
-from scipy.signal import savgol_filter
+from scipy.signal import find_peaks
 from SSLimPy.interface.config import Configuration
 from SSLimPy.utils.utils import *
 
@@ -838,6 +838,30 @@ class CosmoFunctions:
             power = self.results.Pk_cb_l(z, k, grid=False)
         return power
 
+    def P_nw_shape(self, k):
+        # Get cosmologyical quantities for the fit
+        h = (self.Hubble(0, physical=True) / (100 * u.km * u.s**-1 * u.Mpc**-1)).to(1).value
+        Om = self.Omega(0, "matter")
+        wm = Om * h**2
+        wb = self.cosmopars["Omegab"] * h**2
+
+        # This should be changed to the actuall CMB background temp
+        theta = 2.7255 / 2.7 
+        rb = wb / wm
+        ns = self.cosmopars["ns"]
+
+        k = k.to(u.Mpc**-1).value
+        s = 44.5 * np.log(9.83 / wm) / np.sqrt(1 + 10 * wb**(3/4))
+        alpha = 1 - 0.328 * np.log(431 * wm) * rb + 0.38 * np.log(22.3 * wm) * rb**2
+
+        Gamma = (wm / h) * (alpha + (1- alpha) / (1 + (0.43 * k * s)**4))
+        q = k / h * theta**2 / Gamma
+
+        L0 = np.log(2 * np.e + 1.8 * q)
+        C0 = 14.2 + 731 / (1 + 62.5 * q)
+        T_nw = L0 / (L0 + C0 * q**2)
+        return T_nw**2 * k**ns
+
     def nonwiggle_pow(self, k, z, nonlinear=False, tracer="matter"):
         """Calculate the power spectrum at a specific redshift and wavenumber,
         after smoothing to remove baryonic acoustic oscillations (BAO).
@@ -845,8 +869,7 @@ class CosmoFunctions:
         Args:
             z: The redshift of interest.
             k: An array of wavenumbers at which to compute the power
-                spectrum. Must be in units of Mpc^-1/h. Should be sorted in
-                increasing order.
+                spectrum.
             nonlinear: Whether to include nonlinear corrections
                 to the matter power spectrum. Default is False.
             tracer: Which perturbations to use for computing
@@ -855,59 +878,55 @@ class CosmoFunctions:
 
         Returns:
             An array of power spectrum values corresponding to the
-            input wavenumbers. Units are (Mpc/h)^3.
+            input wavenumbers.
 
         Note:
             This function computes the power spectrum of a given tracer quantity
-            at a specific redshift, using the matter power spectrum function
-            `matpow`. It then applies a Savitzky-Golay filter to smooth out the
-            BAO features in the power spectrum. This is done by first taking the
-            natural logarithm of the power spectrum values at a set of logarithmic
-            wavenumbers spanning from `kmin_loc` to `kmax_loc`. The smoothed power
-            spectrum is then returned on a linear (not logarithmic) grid of
-            wavenumbers given by the input array `k`.
+            at a specific redshift, using the matter power spectrum function `matpow`.
+            It then smooths out the BAO signal by constructing two splines trough the inflection points.
+            To reduce the dynamic range, the power spectrum is divided
+            by the smooth Eisenstein--Hu approximation
         """
         z = np.atleast_1d(z)
 
         # wave number grids
-        kmin_loc = self.settings["savgol_internalkmin"]  # 1/Mpc
-        kmax_loc = np.max(self.kgrid)  # 1/Mpc
-        loc_samples = self.settings["savgol_internalsamples"]
-        log_kgrid_loc = np.linspace(np.log(kmin_loc), np.log(kmax_loc), loc_samples)
+        kmin_loc = self.settings["smooth_internal_kmin"]
+        kmax_loc = self.settings["smooth_internal_kmax"]
+        loc_samples = self.settings["smooth_internal_samples"]
+        width = self.settings["smooth_internal_width"]
+        polyorder = self.settings["smooth_internal_polyorder"]
 
-        # sav-gol settings
-        poly_order = self.settings["savgol_polyorder"]
-        dlnk_loc = np.mean(log_kgrid_loc[1:] - log_kgrid_loc[0:-1])
-        savgol_width = self.settings["savgol_width"]
-        n_savgol = int(np.round(savgol_width / np.log(1 + dlnk_loc)))
+        kgrid_savgol = np.geomspace(kmin_loc, kmax_loc, loc_samples)
+        logkgrid_savgol = np.log(kgrid_savgol.to(u.Mpc**-1).value)
 
         P = np.reshape(
-            self.matpow(
-                np.exp(log_kgrid_loc) / u.Mpc, z, nonlinear=nonlinear, tracer=tracer
-            ),
+            self.matpow(kgrid_savgol, z, nonlinear=nonlinear, tracer=tracer),
             (loc_samples, *z.shape),
         )
         uP = P.unit
 
-        pow_sg = savgol_filter(
-            np.log(P.value),
-            n_savgol,
-            poly_order,
-            axis=0,
-        )
+        P_shape = self.P_nw_shape(kgrid_savgol)
+        P_reshape = self.P_nw_shape(k)
+        P_shapeless = (P / P_shape[:, None]).value
 
-        if len(z) == 1:
-            logki = np.log(k.to(u.Mpc**-1).value)
-            P_nw = uP * np.exp(linear_interpolate(log_kgrid_loc, pow_sg[:, 0], logki))
-        else:
-            logki = np.repeat(np.log(k.to(u.Mpc**-1).value.flatten()), len(z.flatten()))
-            zj = np.tile(z.flatten(), len(k.flatten()))
-            P_nw = uP * np.exp(
-                bilinear_interpolate(log_kgrid_loc, z, pow_sg, logki, zj)
-            )
+        Psmoothed = np.empty((*k.shape, *z.shape)) * uP
+        for iz, zi in enumerate(z):
+            Pprime_inter = UnivariateSpline(logkgrid_savgol, P_shapeless[:, iz], s=0, k=polyorder).derivative(1)(logkgrid_savgol)
 
-        P_nw = np.reshape(P_nw, (*k.shape, *z.shape))
-        return P_nw
+            logkmin = np.argmin(np.abs(kgrid_savgol - kmin_loc * width))
+            logkmax = np.argmin(np.abs(kgrid_savgol - kmax_loc / width))
+
+            logkpeaks, _ = find_peaks(Pprime_inter[:])
+            logkvalleys, _ = find_peaks(-Pprime_inter[:])
+
+            ipeaks = [*range(logkmin), *logkpeaks[(logkpeaks > logkmin) & (logkpeaks < logkmax)], *range(logkmax, loc_samples)]
+            ivalleys = [*range(logkmin), *logkvalleys[(logkvalleys > logkmin) & (logkvalleys < logkmax)], *range(logkmax, loc_samples)]
+
+            Psl_peaks = UnivariateSpline(kgrid_savgol[ipeaks], P_shapeless[ipeaks, iz], s=0, k=polyorder)(k)
+            Psl_valleys = UnivariateSpline(kgrid_savgol[ivalleys], P_shapeless[ivalleys, iz], s=0, k=polyorder)(k)
+            Psmoothed[:, iz] = 0.5 * (Psl_peaks + Psl_valleys) * P_reshape * uP
+
+        return Psmoothed
 
     def transfer_ncdm(self, ncdmk):
         """

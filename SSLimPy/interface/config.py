@@ -48,10 +48,11 @@ class Configuration:
         self.settings.setdefault("do_pheno_ncdm", False)
 
         # Savgol numerics
-        self.settings.setdefault("savgol_polyorder", 3)
-        self.settings.setdefault("savgol_width", 1.358528901113328)
-        self.settings.setdefault("savgol_internalsamples", 800)
-        self.settings.setdefault("savgol_internalkmin", 0.001)
+        self.settings.setdefault("smooth_internal_kmin", 1e-3 * u.Mpc**-1)
+        self.settings.setdefault("smooth_internal_kmax", 10 * u.Mpc**-1)
+        self.settings.setdefault("smooth_internal_samples", 800)
+        self.settings.setdefault("smooth_internal_width", 1.5)
+        self.settings.setdefault("smooth_internal_polyorder", 3)
 
         # Pk numerics
         self.settings.setdefault("k_kind", "log")
