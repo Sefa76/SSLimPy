@@ -926,6 +926,9 @@ class CosmoFunctions:
             Psl_valleys = UnivariateSpline(kgrid_savgol[ivalleys], P_shapeless[ivalleys, iz], s=0, k=polyorder)(k)
             Psmoothed[:, iz] = 0.5 * (Psl_peaks + Psl_valleys) * P_reshape * uP
 
+        P_locked = np.reshape(self.matpow(k, z, nonlinear=nonlinear, tracer=tracer), (*k.shape, *z.shape))
+        Psmoothed[np.where((k<kmin_loc) & (k>kmax_loc)), :] = P_locked[np.where((k<kmin_loc) & (k>kmax_loc)), :]
+
         return Psmoothed
 
     def transfer_ncdm(self, ncdmk):

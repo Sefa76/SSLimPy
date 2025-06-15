@@ -101,6 +101,7 @@ class HaloModel:
         self.haloparams.setdefault("tol_sigma", 1e-4)
         self.haloparams.setdefault("concentration", "Diemer19")
         self.haloparams.setdefault("bloating", False)
+        self.haloparams.setdefault("onehalo_damping", False)
         self.haloparams.setdefault("transition_smoothing", False)
 
     def _init_halo_mass_function(self):
@@ -519,6 +520,18 @@ class HaloModel:
         c = 5.196 * (1 + zf) / (1 + z[None, :])
         return np.squeeze(c)
 
+    def one_halo_dampening(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        kstar = (
+            0.05618
+            * np.atleast_1d(self.sigma8_of_z(z, tracer=self.tracer))**-1.013
+            * self.Mpch**-1
+            )
+        x = (k[:, None] / kstar[None, :]).to(1).value
+        return np.squeeze(x**4/(1 + x**4))
+
     def ft_NFW(self, k, M, z):
         """
         Fourier transform of NFW profile, for computing one-halo term
@@ -566,7 +579,7 @@ class HaloModel:
     def neff_NL(self, z, delta_crit=1.686):
         M_NL = self.mass_non_linear(z, delta_crit=delta_crit)
         R_NL = np.power((3 * M_NL) / (4 * np.pi * self.rho_tracer), 1 / 3)
-        return self.n_eff_of_z(R_NL, z, tracer=self.tracer)
+        return np.squeeze(self.n_eff_of_z(R_NL, z, tracer=self.tracer))
 
     #########################################
     # f_NL corrections to HMF and halo bias #
@@ -594,10 +607,7 @@ class HaloModel:
         k = self.k
         mu = np.linspace(-0.995, 0.995, 128)
 
-        #############################
-        # Indicies k1, k2, mu, M, z #
-        #############################
-
+        # Indicies k1, k2, mu, M, z
         # funnctions of k1 or k2 only
         P_phi = 9 / 25 * self.cosmology.primordial_scalar_pow(k)
         k_1 = k[:, None, None, None, None]
@@ -893,10 +903,16 @@ class HaloModel:
         I0_2 = restore_shape(self.Ihalo(z, "b0", k, mu, p=1, scale=(2,)), k, mu, z)
 
         alpha = 1
-        if self.haloparams["transition_smoothing"] == "Mead2020":
-            alpha = (1.875 * (1.603)**self.neff_NL(z))[None, None, :]
+        if self.haloparams["transition_smoothing"]:
+            neff_NL = np.atleast_1d(self.neff_NL(z))
+            alpha = 1.875 * (1.603)**neff_NL[None, None, :]
 
-        D1h = ((k[:, None, None] / (2 * np.pi))**3 * I0_2).to(1).value
+        onehalo_damping = 1
+        if self.haloparams["onehalo_damping"]:
+            onehalo_damping = np.reshape(self.one_halo_dampening(k, z),
+                                         (*k.shape, 1, *z.shape))
+
+        D1h = ((k[:, None, None] / (2 * np.pi))**3 * onehalo_damping * I0_2).to(1).value
         D2h = ((k[:, None, None] / (2 * np.pi))**3 * I1_1**2 * P_QNL[:, None, :]).to(1).value
 
         P = (D1h**alpha + D2h**alpha)**(1/alpha) * (k[:, None, None] / (2 * np.pi))**-3
