@@ -927,9 +927,9 @@ class CosmoFunctions:
             Psmoothed[:, iz] = 0.5 * (Psl_peaks + Psl_valleys) * P_reshape * uP
 
         P_locked = np.reshape(self.matpow(k, z, nonlinear=nonlinear, tracer=tracer), (*k.shape, *z.shape))
-        Psmoothed[np.where((k<kmin_loc) & (k>kmax_loc)), :] = P_locked[np.where((k<kmin_loc) & (k>kmax_loc)), :]
+        Psmoothed[np.where((k<kmin_loc) | (k>kmax_loc)), :] = P_locked[np.where((k<kmin_loc) | (k>kmax_loc)), :]
 
-        return Psmoothed
+        return np.squeeze(Psmoothed)
 
     def transfer_ncdm(self, ncdmk):
         """
