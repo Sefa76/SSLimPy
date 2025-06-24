@@ -1,11 +1,13 @@
 from copy import copy
 from time import time
+
 import numpy as np
 from astropy import units as u
 from numba import njit, prange
 from scipy.integrate import simpson
 from scipy.interpolate import RectBivariateSpline
 from scipy.special import legendre
+
 from SSLimPy.cosmology.astro import AstroFunctions
 from SSLimPy.utils.utils import *
 
@@ -408,9 +410,15 @@ class PowerSpectra:
             Ps = Pshot[None, None, :]
         else:
             if self.cfg.settings["halo_model_PS"]:
-                Ps = self.astro.Thalo(z, k, p=1, scale=(2,))
+                Ps = restore_shape(self.astro.Thalo(z, k, mu,p=1, scale=(2,)), k, mu, z)
             else:
-                Ps = self.astro.Tavg(z, p=2)
+                Ps = self.astro.Tavg(z, p=2)[None, None, :]
+        
+        if self.halomodel.haloparams["onehalo_damping"]:
+            Ps = Ps * np.reshape(
+                self.halomodel.one_halo_dampening(k, z),
+                (*k.shape, 1, *z.shape))
+
         return np.squeeze(Ps)
 
     def compute_power_spectra(self):
@@ -531,8 +539,8 @@ class PowerSpectra:
         Fnu = np.ones(outputshape)
         if self.cfg.settings["Smooth_resolution"]:
             # The dampning from resolution is to be computed without any cosmolgy dependance
-            F_parr = np.reshape(self.survey_specs.F_parr(k, mu, z, self.nuObs), outputshape)
-            F_perp = np.reshape(self.survey_specs.F_perp(k, mu, z), outputshape)
+            F_parr = np.reshape(self.survey_specs.F_parr(k, mu), outputshape)
+            F_perp = np.reshape(self.survey_specs.F_perp(k, mu), outputshape)
             Fnu = F_parr * F_perp
 
         self.Pk_Obs = (

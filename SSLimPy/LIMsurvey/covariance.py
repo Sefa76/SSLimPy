@@ -34,7 +34,7 @@ class Covariance:
         return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi) ** 3)
 
     def get_detectornoise(self):
-        PI = self.survey_specs.detector_noise(self.z)
+        PI = self.survey_specs.detector_noise()
         return PI.to(self.power_spectrum.Pk_Obs.unit)
 
     def gaussian_cov(self):
@@ -176,8 +176,8 @@ class nonGuassianCov:
         # 2211 Terms
         gamma, coef = self.fftLog_Pofk.get_power_and_coef()
 
-        kernel_4h_2211_A = np.empty((kl, kl, zl)) * u.uK**4 * u.Mpc**3
-        kernel_4h_2211_X = np.empty((kl, kl, zl)) * u.uK**4 * u.Mpc**3
+        kernel_4h_2211_A = np.empty((kl, kl, zl)) * u.Mpc**3 * u.uK**4 
+        kernel_4h_2211_X = np.empty((kl, kl, zl)) * u.Mpc**3 * u.uK**4 
         for iz, zi in enumerate(z):
             kernel_4h_2211_A_iz = 0.0
             squeezed_4h_2211_A_iz = 0.0

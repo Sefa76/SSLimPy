@@ -8,7 +8,7 @@ from scipy.interpolate import RectBivariateSpline
 from SSLimPy.cosmology.halo_model import HaloModel
 from SSLimPy.cosmology.fitting_functions import luminosity_functions as lf
 from SSLimPy.cosmology.fitting_functions import mass_luminosity as ml
-from SSLimPy.interface.survey_specs import SurveySpecifications
+from SSLimPy.interface.survey_specs import LIMSuvey
 from SSLimPy.utils.utils import *
 
 
@@ -16,7 +16,7 @@ class AstroFunctions:
     def __init__(
         self,
         halomodel: HaloModel,
-        survey_specs: SurveySpecifications,
+        survey_specs: LIMSuvey,
         astropars: dict = dict(),
     ):
         self.halomodel = halomodel
@@ -192,20 +192,6 @@ class AstroFunctions:
     # Astro Functions #
     ###################
 
-    def nbar(self, z):
-        """
-        Mean number density of galaxies, computed from the luminosity function
-        in 'LF' models and from the mass function in 'ML' models
-        """
-        model_type = self.model_type
-        if model_type == "LF":
-            dndL = self.haloluminosityfunction(self.L, z)
-            nbar = np.trapz(dndL, self.L, axis=0)
-        else:
-            dndM = self.halomodel.halomassfunction(self.M, z)
-            nbar = np.trapz(dndM, self.M, axis=0)
-        return nbar
-
     def CLT(self, z):
         if self.cfg.settings["do_Jysr"]:
             x = c.c / (
@@ -270,37 +256,59 @@ class AstroFunctions:
     def Tavg(self, z, p=1):
         return self.CLT(z) ** p * self.Lavg(z, p=p)
 
-    def bavg(self, bstring, z, power, dc=1.6865):
+    def Lbavg(self, beta, z, power, dc=None, k=None):
         """
         Average luminosity-weighted bias for higher order bias functions
 
         Pass which bias you want as a string present in bias_coevolution
-        Will default back to use ST fitting function as halo mass function!
         """
-        # Integrands for mass-averaging
         M = self.M.to(self.Msunh)
         z = np.atleast_1d(z)
 
-        LofM = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
-        dndM = self.halomodel._bias_function.sc_hmf(M, z, dc=dc)
-        b = np.reshape(
-            getattr(self.halomodel._bias_function, bstring)(M, z, dc=dc),
+        L_of_M = np.reshape(
+            self.massluminosityfunction(M, z),
             (*M.shape, *z.shape),
         )
+        dndM = np.reshape(
+            self.halomodel.halomassfunction(M, z),
+            (*M.shape, *z.shape)
+        )
 
-        itgrnd1 = M[:, None] * LofM**power * dndM * b
-        itgrnd2 = M[:, None] * LofM**power * dndM
+        b = restore_shape(
+            self.halomodel.get_bias(M, z, beta=beta, dc=dc, k=k),
+            k, M, z
+        )
 
-        I1 = np.trapz(itgrnd1, np.log(M.value), axis=0)
-        I2 = np.trapz(itgrnd2, np.log(M.value), axis=0)
-        avgbL = np.squeeze(I1 / I2)
-        return avgbL.to(1).value
+        logM = np.log(M.value)
+
+        itgrnd1 = (
+            b * M[None, :, None]
+            * L_of_M[None, :, :]**power * dndM[None, :, :]
+        )
+        bavg = np.trapz(itgrnd1, logM, axis=1)
+
+        #Compute constant correcton factor (ML -> ML/LF)
+        Intgrnd = dndM * L_of_M**power * M[:, None]
+        L_MF = np.trapz(Intgrnd, logM, axis=0)
+        L_model = np.atleast_1d(self.Lavg(z, p=power))
+        corr = (L_model / L_MF).to(1).value
+
+        return np.squeeze(bavg * corr)
+
+    def Tbavg(self, beta, z, power, dc=None, k=None):
+        Lbavg = self.Lbavg(beta, z, power, dc=dc, k=k)
+        return self.CLT(z)**power * Lbavg
+
+    def bavg(self, beta, z, power, dc=None, k=None):
+        Lbavg = self.Lbavg(beta, z, power, dc=dc, k=k)
+        Lavg = self.Lavg(z, power)
+        return Lbavg / Lavg
 
     ##################
     # Halo integrals #
     ##################
 
-    def Lhalo(self, z, *args, p=1, scale=(), beta=0, dc=1.6865):
+    def Lhalo(self, z, *args, p=1, scale=(), beta=0, dc=None):
         """Luminosity weight higher order halo profiles for n-halo terms
         Computes the mean halo profile weight with some power of the luminosity.
         this shows up for example in the halo shot noise,
@@ -324,19 +332,13 @@ class AstroFunctions:
         L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
         dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
 
-        if beta==0:
-            bstring = "b0"
-        elif beta==1:
-            bstring = self.halomodel.haloparams["bias_model"]
-        else:
-            bstring = beta
-        
-        b = np.reshape(
-            getattr(self.halomodel._bias_function, bstring)(M, z, dc=dc),
-            (*M.shape, *z.shape),
-        )
-
         # Dependent on k
+        b = restore_shape(
+            self.halomodel.get_bias(M, z, beta=beta, dc=dc, k=k),
+            k, M, z
+        )
+        b = np.expand_dims(b, (*range(1, 2 * p),))
+
         normhaloprofile = []
         for ik in range(p):
             k = kd[ik]
@@ -369,20 +371,26 @@ class AstroFunctions:
                 Fv.append(np.power(F, alpha[ik]))
 
         # Construct the integrand
-        I1 = dndM * L_of_M**np.sum(alpha) * M[:, None]
-        I2 = dndM * M[:, None] * b
+        Intgrnd = b * dndM * M[:, None]
         for ik in range(p):
-            I2 = I2 * Fv[ik] * normhaloprofile[ik]
+            Intgrnd = Intgrnd * Fv[ik] * normhaloprofile[ik]
         logM = np.log(M.value)
-        Umean = (np.trapz(I2, logM, axis=-2) / np.trapz(I1, logM, axis=-2)).to(1).value
-        return np.squeeze(self.Lavg(z, p=np.sum(alpha)) * Umean)
+        Umean = np.trapz(Intgrnd, logM, axis=-2)
 
-    def Thalo(self, z, *args, p=1, scale=(), beta=0):
+        #Compute constant correcton factor (ML -> ML/LF)
+        Intgrnd = dndM * L_of_M**np.sum(alpha) * M[:, None]
+        L_MF = np.trapz(Intgrnd, logM, axis=-2)
+        L_model = np.atleast_1d(self.Lavg(z, np.sum(alpha)))
+        corr = (L_model / L_MF).to(1).value
+
+        return np.squeeze(corr * Umean)
+
+    def Thalo(self, z, *args, p=1, scale=(), beta=0,  dc=None):
         if scale:
             alpha = np.sum(scale)
         else:
             alpha = p
-        return self.CLT(z) ** alpha * self.Lhalo(z, *args, p=p, scale=scale, beta=beta)
+        return self.CLT(z) ** alpha * self.Lhalo(z, *args, p=p, scale=scale, beta=beta, dc=dc)
 
     def recap_astro(self):
         print("Astronomical Parameters:")

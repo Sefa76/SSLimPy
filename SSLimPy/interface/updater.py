@@ -15,11 +15,11 @@ from SSLimPy.interface import survey_specs
 def update_surveySpecs(
     obspars: dict,
     cfg: Configuration,
-) -> survey_specs.SurveySpecifications:
+) -> survey_specs.LIMSuvey:
     """This class only depends on the fiducial cosmology and
     needs only one dict
     """
-    return survey_specs.SurveySpecifications(obspars, cfg.fiducialcosmo)
+    return survey_specs.LIMSuvey(obspars, cfg.fiducialcosmo)
 
 
 def update_cosmo(
