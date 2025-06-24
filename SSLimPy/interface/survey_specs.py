@@ -1,78 +1,260 @@
-import numpy as np
-import astropy.units as u
+"""
+This module was desinged to learn about PEP typing and interfaces with linters / mypy.
+The rest of the code does not need to follow this style.
+"""
+
+from abc import ABC, abstractmethod
 from copy import copy
+from typing import Protocol, Union
+
+import astropy.units as u
+import numpy as np
+from astropy.units import Quantity
 from scipy.special import spherical_jn
-from scipy.integrate import simpson
 
 from SSLimPy.cosmology.cosmology import CosmoFunctions
 from SSLimPy.utils.utils import *
 
-class SurveySpecifications:
-    def __init__(self, obspars, cosmo: CosmoFunctions):
-        obspars = copy(obspars)
-        obspars.setdefault("Tsys_NEFD", 40 * u.uK)
-        obspars.setdefault("Nfeeds", 19)
-        obspars.setdefault("beam_FWHM", 4.1 * u.arcmin)
-        obspars.setdefault("nu", 115 * u.GHz)
-        obspars.setdefault("dnu", 15 * u.MHz)
-        obspars.setdefault("nuObs", 30 * u.GHz)
-        obspars.setdefault("Delta_nu", 8 * u.GHz)
-        obspars.setdefault("tobs", 1300 * u.h)
-        obspars.setdefault("nD", 1)
-        obspars.setdefault("Omega_field", 4 * u.deg**2)
-        obspars.setdefault("N_FG_par", 1)
-        obspars.setdefault("N_FG_perp", 1)
-        obspars.setdefault("do_FG_wedge", False)
-        obspars.setdefault("a_FG", 0.0)
-        obspars.setdefault("b_FG", 0.0)
 
-        self.obsparams = obspars
-        self.cosmology = cosmo
+class SurveyInterface(Protocol):
+    """This protocol ensures the correct ducktypes for the SurveySpecifications class"""
 
-    #####################
-    # Survey Resolution #
-    #####################
-    # Call these functions before applying the AP transformations, scale fixes, ect
+    cosmology: CosmoFunctions
+    obsparams: dict
 
-    def sigma_parr(self, z, nu_obs):
-        x = (self.obsparams["dnu"] / nu_obs).to(1).value
-        y = (1 + z) / self.cosmology.Hubble(z)
-        return np.squeeze(x * y)
+    def __init__(self, obspars: dict, cosmo: CosmoFunctions) -> None: ...
+    def set_survey_defaults(self) -> None: ...
+    def get_redshifts(self) -> tuple: ...
+    def F_parr(
+        self, k: Quantity, mu: Union[float, np.ndarray]
+    ) -> Union[float, np.ndarray]: ...
+    def F_perp(
+        self, k: Quantity, mu: Union[float, np.ndarray]
+    ) -> Union[float, np.ndarray]: ...
+    def detector_noise(self) -> Quantity: ...
 
-    def sigma_perp(self, z):
-        x = self.obsparams["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
-        y = self.cosmology.angdist(z) * (1 + z)
-        return np.squeeze(x * y)
 
-    def F_parr(self, k, mu, z, nu_obs):
-        k = np.atleast_1d(k)
-        mu = np.atleast_1d(mu)
-        z = np.atleast_1d(z)
+class SurveySpecifications(ABC):
+    """The Survey Specifications for different types of surveys
+    (Galaxies, LIM, etc) should be direct extensions to this baseclass,
+    and implenent all its methods"""
 
-        logF = -0.5 * np.power(
-            k[:, None, None]
-            * mu[None, :, None]
-            * np.atleast_1d(self.sigma_parr(z, nu_obs))[None, None, :],
-            2,
+    @abstractmethod
+    def __init__(self, obspars: dict, cosmo: CosmoFunctions) -> None: ...
+
+    @property
+    @abstractmethod
+    def cosmology(self) -> CosmoFunctions: ...
+    
+    @cosmology.setter
+    @abstractmethod
+    def cosmology(self, pcosmology: CosmoFunctions) -> None: ...
+
+    @property
+    @abstractmethod
+    def obsparams(self) -> dict: ...
+
+    @obsparams.setter
+    @abstractmethod
+    def obsparams(self, pobsparams: dict) -> None: ...
+
+    @abstractmethod
+    def set_survey_defaults(self) -> None: ...
+
+    @abstractmethod
+    def get_redshifts(self) -> tuple: ...
+
+    @abstractmethod
+    def F_parr(
+        self,
+        k: Quantity,
+        mu: Union[float, np.ndarray],
+    ) -> Union[float, np.ndarray]: ...
+
+    @abstractmethod
+    def F_perp(
+        self,
+        k: Quantity,
+        mu: Union[float, np.ndarray],
+    ) -> Union[float, np.ndarray]: ...
+
+    @abstractmethod
+    def detector_noise(self) -> Quantity: ...
+
+
+class SurveyWindowMixin:
+    def Lfield(self: SurveyInterface) -> Quantity:
+        zmin, _, zmax = self.get_redshifts()
+        Lmin = self.cosmology.comoving(zmin)
+        Lmax = self.cosmology.comoving(zmax)
+        return Lmax - Lmin
+
+    def Sfield(self: SurveyInterface) -> Quantity:
+        _, zmean, _ = self.get_redshifts()
+        Omegafield = self.obsparams["Omega_field"].to(u.rad**2).value
+        r2 = self.cosmology.comoving(zmean).to(u.Mpc) ** 2
+        return r2 * Omegafield
+
+    def Vfield(self: SurveyInterface) -> Quantity:
+        Sfield = self.Sfield()
+        Lfield = self.Lfield()
+        return Sfield * Lfield
+
+    def Wsurvey(
+        self: SurveyInterface, q: Quantity, muq: Union[float, np.ndarray]
+    ) -> Quantity:
+        """Compute the Fourier-transformed sky selection window function"""
+        q = np.atleast_1d(q)
+        muq = np.atleast_1d(muq)
+
+        qparr = q[:, None, None] * muq[None, :, None]
+        qperp = q[:, None, None] * np.sqrt(1 - np.power(muq[None, :, None], 2))
+
+        Sfield = self.Sfield()
+        Lperp = np.sqrt(Sfield / np.pi)
+        Lparr = self.Lfield()
+
+        xperp = (qperp * Lperp).to(1).value
+        Wperp = (
+            2
+            * np.pi
+            * Lperp
+            * np.reshape(
+                smooth_W(xperp.flatten()),
+                xperp.shape,
+            )
+            / qperp
         )
 
-        return np.squeeze(np.exp(logF))
+        xparr = (qparr * Lparr).to(1).value
+        Wparr = Lparr * spherical_jn(0, xparr / 2)
 
-    def F_perp(self, k, mu, z):
+        Wsurvey = Wperp * Wparr
+        return np.squeeze(Wsurvey)
+
+
+class GalaxySurvey(SurveyWindowMixin, SurveySpecifications):
+    def __init__(self, obspars: dict, cosmo: CosmoFunctions) -> None:
+        self._obsparams = copy(obspars)
+        self._cosmology = cosmo
+
+        self.set_survey_defaults()
+
+    @property
+    def cosmology(self) -> CosmoFunctions:
+        return self._cosmology
+
+    @cosmology.setter
+    def cosmology(self, pcosmology: CosmoFunctions) -> None:
+        self._cosmology = pcosmology
+
+    @property
+    def obsparams(self) -> dict:
+        return self._obsparams
+
+    @obsparams.setter
+    def obsparams(self, pobsparams: dict) -> None:
+        self._obsparams = pobsparams
+
+    def set_survey_defaults(self) -> None:
+        self.obsparams.setdefault("Omega_field", 4 * u.deg**2)
+        self.obsparams.setdefault("z_mean", np.array([2.833]))
+        self.obsparams.setdefault("z_binedges", np.array([2.382, 3.423]))
+        self.obsparams.setdefault("spec_err", 0.002)
+        self.obsparams.setdefault("ang_res", 0.2 * u.arcsec)
+        self.obsparams.setdefault("shot_noise", 0 * u.Mpc**3)
+
+    def get_redshifts(self) -> tuple:
+        z = self.obsparams["z_mean"]
+        zegeds = self.obsparams["z_binedges"]
+        zmin, zmax = zegeds[:-1], zegeds[1:]
+        return zmin, z, zmax
+
+    def F_parr(
+        self, k: Quantity, mu: Union[float, np.ndarray]
+    ) -> Union[float, np.ndarray]:
         k = np.atleast_1d(k)
         mu = np.atleast_1d(mu)
-        z = np.atleast_1d(z)
 
-        logF = -0.5 * np.power(
-            k[:, None, None]
-            * np.sqrt(1 - mu[None, :, None] ** 2)
-            * np.atleast_1d(self.sigma_perp(z))[None, None, :],
-            2,
+        _, z, _ = self.get_redshifts()
+        sigmapar = (1 + z) / self.cosmology.Hubble(z) * self.obsparams["spec_err"]
+        sigmapar = np.atleast_1d(sigmapar)
+
+        logF = (
+            -0.5 * (k[:, None, None] * mu[None, :, None] * sigmapar[None, None, :]) ** 2
         )
+        return np.squeeze(np.exp(logF.to(1).value))
 
-        return np.squeeze(np.exp(logF))
+    def F_perp(
+        self, k: Quantity, mu: Union[float, np.ndarray]
+    ) -> Union[float, np.ndarray]:
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+        _, z, _ = self.get_redshifts()
 
-    def get_redshifts(self):
+        sigma_perp = (
+            (1 + z)
+            * self.cosmology.angdist(z)
+            * self.obsparams["ang_res"].to(u.rad).value
+        )
+        sigma_perp = np.atleast_1d(sigma_perp)
+
+        logF = (
+            -0.5
+            * (
+                k[:, None, None]
+                * (1 - mu**2)[None, :, None]
+                * sigma_perp[None, None, :]
+            )
+            ** 2
+        )
+        return np.squeeze(np.exp(logF.to(1).value))
+
+    def detector_noise(self) -> Quantity:
+        return self.obsparams["shot_noise"]
+
+
+class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
+    def __init__(self, obspars: dict, cosmo: CosmoFunctions) -> None:
+        self._obsparams = copy(obspars)
+        self._cosmology = cosmo
+
+        self.set_survey_defaults()
+
+    @property
+    def cosmology(self) -> CosmoFunctions:
+        return self._cosmology
+
+    @cosmology.setter
+    def cosmology(self, pcosmology: CosmoFunctions) -> None:
+        self._cosmology = pcosmology
+
+    @property
+    def obsparams(self) -> dict:
+        return self._obsparams
+
+    @obsparams.setter
+    def obsparams(self, pobsparams: dict) -> None:
+        self._obsparams = pobsparams
+
+    def set_survey_defaults(self) -> None:
+        self.obsparams.setdefault("Tsys_NEFD", 40 * u.uK)
+        self.obsparams.setdefault("Nfeeds", 19)
+        self.obsparams.setdefault("beam_FWHM", 4.1 * u.arcmin)
+        self.obsparams.setdefault("nu", 115 * u.GHz)
+        self.obsparams.setdefault("dnu", 15 * u.MHz)
+        self.obsparams.setdefault("nuObs", 30 * u.GHz)
+        self.obsparams.setdefault("Delta_nu", 8 * u.GHz)
+        self.obsparams.setdefault("tobs", 1300 * u.h)
+        self.obsparams.setdefault("nD", 1)
+        self.obsparams.setdefault("Omega_field", 4 * u.deg**2)
+        self.obsparams.setdefault("N_FG_par", 1)
+        self.obsparams.setdefault("N_FG_perp", 1)
+        self.obsparams.setdefault("do_FG_wedge", False)
+        self.obsparams.setdefault("a_FG", 0.0)
+        self.obsparams.setdefault("b_FG", 0.0)
+
+    def get_redshifts(self) -> tuple:
         # Calculate dz from deltanu
         nu = self.obsparams["nu"]
         nuObs = self.obsparams["nuObs"]
@@ -83,31 +265,66 @@ class SurveySpecifications:
 
         return z_min, z, z_max
 
-    def Lfield(self, z1, z2):
-        zgrid = [z1, z2]
-        Lgrid = self.cosmology.comoving(zgrid)
-        return Lgrid[1] - Lgrid[0]
+    def sigma_parr(self) -> Quantity:
+        _, z, _ = self.get_redshifts()
+        nuObs = self.obsparams["nu"] / (1 + z)
 
-    def Sfield(self, zc, Omegafield):
-        r2 = np.power(self.cosmology.comoving(zc).to(u.Mpc), 2)
-        sO = Omegafield.to(u.rad**2).value
-        return r2 * sO
+        x = (self.obsparams["dnu"] / nuObs).to(1).value
+        y = (1 + z) / self.cosmology.Hubble(z)
+        return np.squeeze(x * y)
 
-    def Vfield(self):
-        z_min, z, z_max = self.get_redshifts()
-        
-        Sfield = self.Sfield(z, self.obsparams["Omega_field"])
-        Lfield = self.Lfield(z_min, z_max)
-        return Sfield * Lfield
+    def sigma_perp(self) -> Quantity:
+        _, z, _ = self.get_redshifts()
+        x = self.obsparams["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
+        y = self.cosmology.angdist(z) * (1 + z)
+        return np.squeeze(x * y)
 
-    def detector_noise(self, z):
+    def F_parr(
+        self, k: Quantity, mu: Union[float, np.ndarray]
+    ) -> Union[float, np.ndarray]:
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+
+        logF = (
+            -0.5
+            * np.power(
+                k[:, None, None]
+                * mu[None, :, None]
+                * np.atleast_1d(self.sigma_parr())[None, None, :],
+                2,
+            )
+            .to(1)
+            .value
+        )
+
+        return np.squeeze(np.exp(logF))
+
+    def F_perp(
+        self, k: Quantity, mu: Union[float, np.ndarray]
+    ) -> Union[float, np.ndarray]:
+        k = np.atleast_1d(k)
+        mu = np.atleast_1d(mu)
+
+        logF = (
+            -0.5
+            * np.power(
+                k[:, None, None]
+                * np.sqrt(1 - mu[None, :, None] ** 2)
+                * np.atleast_1d(self.sigma_perp())[None, None, :],
+                2,
+            )
+            .to(1)
+            .value
+        )
+
+        return np.squeeze(np.exp(logF))
+
+    def detector_noise(self) -> Quantity:
+        _, z, _ = self.get_redshifts()
         F1 = (
             self.obsparams["Tsys_NEFD"] ** 2
             * self.obsparams["Omega_field"].to(u.sr).value
-            / (
-                self.obsparams["nD"]
-                * self.obsparams["tobs"]
-            )
+            / (self.obsparams["nD"] * self.obsparams["tobs"])
         )
         F2 = self.cosmology.CELERITAS / self.obsparams["nu"]
         F3 = (
@@ -117,36 +334,3 @@ class SurveySpecifications:
         )
         PI = F1 * F2 * F3
         return PI
-
-    ##################################
-    # Convolution and Survey Windows #
-    ##################################
-
-    def Wsurvey(self, q, muq):
-        """Compute the Fourier-transformed sky selection window function"""
-        q = np.atleast_1d(q)
-        muq = np.atleast_1d(muq)
-
-        qparr = q[:, None, None] * muq[None, :, None]
-        qperp = q[:, None, None] * np.sqrt(1 - np.power(muq[None, :, None], 2))
-
-        z_min, z, z_max = self.get_redshifts()
-        # Construct W_survey (now just a cylinder)
-        Sfield = self.Sfield(z, self.obsparams["Omega_field"])
-        Lperp = np.sqrt(Sfield / np.pi)
-        Lparr = self.Lfield(z_min, z_max)
-        x = (qperp * Lperp).to(1).value
-        Wperp = 2 * np.pi * Lperp * np.reshape(smooth_W(x.flatten()), x.shape) / qperp
-        Wparr = Lparr * spherical_jn(0, (qparr * Lparr / 2).to(1).value)
-
-        Wsurvey = Wperp * Wparr
-        Vsurvey = (
-            simpson(
-                y=q[:, None] ** 3
-                * simpson(y=np.abs(Wsurvey) ** 2 / (2 * np.pi) ** 2,x=muq, axis=1),
-                x=np.log(q.value),
-                axis=0,
-            )
-            * (Sfield * Lparr).unit
-        )
-        return Wsurvey, Vsurvey

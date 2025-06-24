@@ -194,7 +194,7 @@ class Configuration:
     def initialize_fiducialspecs(self):
         from SSLimPy.interface import survey_specs
 
-        self.fiducialspecs = survey_specs.SurveySpecifications(
+        self.fiducialspecs = survey_specs.LIMSuvey(
             obspars= self.fiducialspecparams,
             cosmo= self.fiducialcosmo,
         )

@@ -101,7 +101,7 @@ class HaloModel:
         self.haloparams.setdefault("tol_sigma", 1e-4)
         self.haloparams.setdefault("concentration", "Diemer19")
         self.haloparams.setdefault("bloating", False)
-        self.haloparams.setdefault("onehalo_damping", False)
+        self.haloparams.setdefault("onehalo_damping", True)
         self.haloparams.setdefault("transition_smoothing", False)
 
     def _init_halo_mass_function(self):
@@ -421,7 +421,7 @@ class HaloModel:
         )
         return np.squeeze(fac)
 
-    def halobias(self, M, z, k=None):
+    def halobias(self, M, z, k=None, dc=None):
         """
         This function is a wrapper to obtain the halo bias with all correction and as a function of standard inputs
         """
@@ -429,7 +429,10 @@ class HaloModel:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        bh = self._b_of_M(M, z, self.delta_crit)
+        if dc == None:
+            dc = self.delta_crit
+
+        bh = self._b_of_M(M, z, dc)
 
         if "f_NL" in self.cosmology.fullcosmoparams:
             Delta_b = np.reshape(self.Delta_b(k, M, z), (*k.shape, *M.shape, *z.shape))
@@ -779,7 +782,43 @@ class HaloModel:
     # real space halo power spectrum #
     ##################################
 
-    def Ihalo(self, z, bstring, *args, p=1, scale=()):
+    def get_bias(self, M, z, beta, dc=None, k=None):
+        k = np.atleast_1d(k)
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+
+        if dc == None:
+            dc = self.delta_crit
+
+        if beta==1:
+            b = np.self.halobias(M, z, k=k, dc=dc)
+        else:
+            if beta==0:
+                beta = "b0" # Dummy function
+            b = getattr(self._bias_function, beta)(M, z, dc=dc)
+
+        return b
+
+    def bavg(self, beta, z, power, dc=None, k=None):
+        M = self.M.to(self.Msunh)
+        z = np.atleast_1d(z)
+
+        M_over_rho = self.M[None, :, None] / self.rho_tracer
+        dndM = np.reshape(
+            self.halomassfunction(M, z),
+            (*M.shape, *z.shape),
+        )[None, :, :]
+
+        b = restore_shape(
+            self.get_bias(M, z, beta=beta, dc=dc, k=k),
+            k, M, z,
+        )
+
+        itgrnd1 = M[None, :, None] * M_over_rho**power * dndM * b
+        bavg = np.trapz(itgrnd1, np.log(M.value), axis=1)
+        return np.squeeze(bavg)
+
+    def Ihalo(self, z, *args, p=1, scale=(), beta=0, dc=1.6865):
         M = self.M.to(u.Msun)
         z = np.atleast_1d(z)
 
@@ -794,22 +833,26 @@ class HaloModel:
             alpha = np.ones(p)
 
         # Independent of k
+        M_over_rho = self.M[:, None] / self.rho_tracer
         dndM = np.reshape(self.halomassfunction(M, z), (*M.shape, *z.shape))
-        bfunc = getattr(self._bias_function, bstring)
-        b = np.reshape(bfunc(M, z, self.delta_crit), (*M.shape, *z.shape))
 
         # Dependent on k
+        b = restore_shape(
+            self.get_bias(M, z, beta=beta, dc=dc, k=k),
+            k, M, z,
+        )
+        b = np.expand_dims(b, (*range(1, 2 * p),))
+
         normhaloprofile = []
-        fac = self.M[:, None] / self.rho_tracer
         for ik in range(p):
             k = kd[ik]
             U = np.reshape(
                 self.ft_NFW(k, M, z),
                 (*k.shape, *M.shape, *z.shape),
-             ) * fac
+             )
             U = np.expand_dims(U, (*range(ik), *range(ik + 1, p)))
             U = np.expand_dims(U, (*range(p, 2 * p),))
-            normhaloprofile.append(np.power(U, alpha[ik]))
+            normhaloprofile.append(np.power(U * M_over_rho, alpha[ik]))
 
         # Dependent on k and mu
         Fv = np.ones((p,))
@@ -838,43 +881,8 @@ class HaloModel:
             Intgrnd = Intgrnd * Fv[ik] * normhaloprofile[ik]
         logM = np.log(M.value)
         Umean = np.trapz(Intgrnd, logM, axis=-2)
+
         return np.squeeze(Umean)
-
-    def Ibeta_1(self, k, z, mu=None, beta=0):
-        if beta==0:
-            bstring = "b0"
-        elif beta==1:
-            bstring = self.haloparams["bias_model"]
-        else:
-            bstring = beta
-        return self.Ihalo(z, bstring, k, mu, p=1, scale=(1,))
-
-    def Ibeta_2(self, k, z, mu=None, beta=0):
-        if beta==0:
-            bstring = "b0"
-        elif beta==1:
-            bstring = self.haloparams["bias_model"]
-        else:
-            bstring = beta
-        return self.Ihalo(z, bstring, k, k, mu, mu, p=2, scale=(1, 1,))
-
-    def Ibeta_3(self, k, z, mu=None, beta=0):
-        if beta==0:
-            bstring = "b0"
-        elif beta==1:
-            bstring = self.haloparams["bias_model"]
-        else:
-            bstring = beta
-        return self.Ihalo(z, bstring, k, k, mu, mu, p=2, scale=(2, 1,))
-
-    def Ibeta_4(self, k, z, mu=None, beta=0):
-        if beta==0:
-            bstring = "b0"
-        elif beta==1:
-            bstring = self.haloparams["bias_model"]
-        else:
-            bstring = beta
-        return self.Ihalo(z, bstring, k, k, mu, mu, p=2, scale=(2, 2,))
 
     def P_QNL(self, k, z):
         k = np.atleast_1d(k)
@@ -886,8 +894,10 @@ class HaloModel:
         Pnw = np.reshape(self.cosmology.nonwiggle_pow(k, z, tracer=self.tracer),
                          (*k.shape, *z.shape),
         )
-        gd = np.exp(-(k[:, None]* self.sigmaV_of_z(z, tracer="matter", moment=0)).to(1).value)
-        return P * gd + Pnw * (1 - gd)
+        eta = (k[:, None]* self.sigmaV_of_z(z, tracer="matter", moment=0)).to(1).value
+        gd = np.exp(-eta**2)
+        P_QNL = P * gd + Pnw * (1 - gd)
+        return np.squeeze(P_QNL)
 
     def P_halo(self, k, z, mu=None):
         k = np.atleast_1d(k)
