@@ -791,7 +791,7 @@ class HaloModel:
             dc = self.delta_crit
 
         if beta==1:
-            b = np.self.halobias(M, z, k=k, dc=dc)
+            b = self.halobias(M, z, k=k, dc=dc)
         else:
             if beta==0:
                 beta = "b0" # Dummy function
@@ -838,8 +838,8 @@ class HaloModel:
 
         # Dependent on k
         b = restore_shape(
-            self.get_bias(M, z, beta=beta, dc=dc, k=k),
-            k, M, z,
+            self.get_bias(M, z, beta=beta, dc=dc, k=kd[0]),
+            kd[0], M, z,
         )
         b = np.expand_dims(b, (*range(1, 2 * p),))
 
@@ -906,11 +906,11 @@ class HaloModel:
 
         P_QNL = np.reshape(self.P_QNL(k, z), (*k.shape, *z.shape))
 
-        I1_1 = restore_shape(self.Ibeta_1(k, z, mu=mu, beta=1), k, mu, z)
-        I1_norm = restore_shape(self.Ibeta_1(1e-4*u.Mpc**-1, z, mu=mu, beta=1), mu, z)
-        I1_1 = I1_1 / I1_norm
+        I1_1 = restore_shape(self.Ihalo(z, k, mu, p=1, scale=(1,), beta=1), k, mu, z)
+        I1_norm = restore_shape(self.bavg(1, z, 1, k=k), k, z)
+        I1_1 = I1_1 / I1_norm[:, None, :]
 
-        I0_2 = restore_shape(self.Ihalo(z, "b0", k, mu, p=1, scale=(2,)), k, mu, z)
+        I0_2 = restore_shape(self.Ihalo(z, k, mu, p=1, scale=(2,), beta=0), k, mu, z)
 
         alpha = 1
         if self.haloparams["transition_smoothing"]:

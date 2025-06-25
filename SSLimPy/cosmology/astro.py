@@ -334,8 +334,8 @@ class AstroFunctions:
 
         # Dependent on k
         b = restore_shape(
-            self.halomodel.get_bias(M, z, beta=beta, dc=dc, k=k),
-            k, M, z
+            self.halomodel.get_bias(M, z, beta=beta, dc=dc, k=kd[0]),
+            kd[0], M, z
         )
         b = np.expand_dims(b, (*range(1, 2 * p),))
 
