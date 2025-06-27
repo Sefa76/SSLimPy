@@ -550,14 +550,12 @@ class CosmoFunctions:
                 cambresults = BoltzmannCode(cosmopars, cfg, code="camb")
                 self.code = "camb"
                 self.results = cambresults.results
-                self.kgrid = cambresults.results.kgrid
                 self.cosmopars = cambresults.cosmopars
                 self.cambcosmopars = cambresults.cambcosmopars
             elif input_type == "class":
                 classresults = BoltzmannCode(cosmopars, cfg, code="class")
                 self.code = "class"
                 self.results = classresults.results
-                self.kgrid = classresults.results.kgrid
                 self.cosmopars = classresults.cosmopars
                 self.classcosmopars = classresults.classcosmopars
             else:
@@ -565,7 +563,6 @@ class CosmoFunctions:
         else:
             self.code = cosmology.code
             self.results = cosmology.results
-            self.kgrid = cosmology.results.kgrid
             self.cosmopars = cosmology.cosmopars
             if self.code == "class":
                 self.classcosmopars = cosmology.classcosmopars

@@ -56,9 +56,9 @@ class Configuration:
 
         # Pk numerics
         self.settings.setdefault("k_kind", "log")
-        self.settings.setdefault("kmin", 1.0e-5 * u.Mpc**-1)
-        self.settings.setdefault("kmax", 50 * u.Mpc**-1)
-        self.settings.setdefault("nk", 200)
+        self.settings.setdefault("kmin", 1.0e-4 * u.Mpc**-1)
+        self.settings.setdefault("kmax", 10 * u.Mpc**-1)
+        self.settings.setdefault("nk", 250)
         self.settings.setdefault("zmin", 0)
         self.settings.setdefault("zmax", 5)
         self.settings.setdefault("nz", 32)
@@ -82,9 +82,8 @@ class Configuration:
 
         # Pk FFTlog approximation
         self.settings.setdefault("FFTlog_kmin", 1e-6 * u.Mpc**-1)
-        self.settings.setdefault("FFTlog_kmax", 300 * u.Mpc**-1)
-        self.settings.setdefault("FFTlog_LogN ", 10)
-
+        self.settings.setdefault("FFTlog_kmax", 1000 * u.Mpc**-1)
+        self.settings.setdefault("FFTlog_LogN", 10)
 
         # VID numerics
         self.settings.setdefault("Tmin_VID", 1e-2 * u.uK)
