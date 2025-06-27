@@ -96,217 +96,174 @@ def T2211_A_kernel(k1, k2, b1k1, b1k2, b2k2, bG2k2, an):
     k1 = np.asarray(k1, dtype=complex)
     k2 = np.asarray(k2, dtype=complex)
 
-    return (
-        np.power(b1k1, 2)
-        * (
-            np.power(k1 + k2, an)
-            * (
-                np.power(b1k2, 2)
-                * (
-                    2400 * np.power(k1, 6)
-                    - 2400 * an * np.power(k1, 5) * k2
-                    + 360
-                    * (-2 + an + 3 * np.power(an, 2))
-                    * np.power(k1, 4)
-                    * np.power(k2, 2)
-                    - 40
-                    * an
-                    * (2 + 9 * an + 7 * np.power(an, 2))
-                    * np.power(k1, 3)
-                    * np.power(k2, 3)
-                    + (
-                        -1392
-                        - 340 * an
-                        + 478 * np.power(an, 2)
-                        + 210 * np.power(an, 3)
-                        + 49 * np.power(an, 4)
-                    )
-                    * np.power(k1, 2)
-                    * np.power(k2, 4)
-                    - 2
-                    * an
-                    * (-144 + 70 * an + 49 * np.power(an, 2))
-                    * k1
-                    * np.power(k2, 5)
-                    + 2 * (-144 + 70 * an + 49 * np.power(an, 2)) * np.power(k2, 6)
-                )
-                - 14
-                * b1k2
-                * (k1 + k2)
-                * (
-                    (-12 + 4 * an + np.power(an, 2))
-                    * b2k2
-                    * np.power(k1, 2)
-                    * (
-                        20 * np.power(k1, 3)
-                        - 20 * (1 + an) * np.power(k1, 2) * k2
-                        + (8 + 15 * an + 7 * np.power(an, 2)) * k1 * np.power(k2, 2)
-                        - (8 + 7 * an) * np.power(k2, 3)
-                    )
-                    + 4
-                    * bG2k2
-                    * (
-                        120 * np.power(k1, 5)
-                        - 120 * (1 + an) * np.power(k1, 4) * k2
-                        + (42 + 89 * an + 47 * np.power(an, 2))
-                        * np.power(k1, 3)
-                        * np.power(k2, 2)
-                        - (42 + 51 * an + 16 * np.power(an, 2) + 7 * np.power(an, 3))
-                        * np.power(k1, 2)
-                        * np.power(k2, 3)
-                        + 3 * (2 + 9 * an + 7 * np.power(an, 2)) * k1 * np.power(k2, 4)
-                        - 3 * (2 + 7 * an) * np.power(k2, 5)
-                    )
-                )
-                + 49
-                * np.power(k1 + k2, 2)
-                * (
-                    np.power(an, 4) * np.power(b2k2, 2) * np.power(k1, 4)
-                    + 8
-                    * np.power(an, 3)
-                    * b2k2
-                    * np.power(k1, 3)
-                    * (b2k2 * k1 - bG2k2 * k2)
-                    + 96
-                    * bG2k2
-                    * np.power(k1 - k2, 2)
-                    * (
-                        -(b2k2 * np.power(k1, 2))
-                        + bG2k2 * (np.power(k1, 2) + np.power(k2, 2))
-                    )
-                    + 4
-                    * np.power(an, 2)
-                    * np.power(k1, 2)
-                    * (
-                        np.power(b2k2, 2) * np.power(k1, 2)
-                        + 8 * np.power(bG2k2, 2) * np.power(k2, 2)
-                        + 2
-                        * b2k2
-                        * bG2k2
-                        * (np.power(k1, 2) - 6 * k1 * k2 + np.power(k2, 2))
-                    )
-                    - 16
-                    * an
-                    * k1
-                    * (
-                        3 * np.power(b2k2, 2) * np.power(k1, 3)
-                        - 2
-                        * b2k2
-                        * bG2k2
-                        * k1
-                        * (np.power(k1, 2) + k1 * k2 + np.power(k2, 2))
-                        + 2
-                        * np.power(bG2k2, 2)
-                        * k2
-                        * (3 * np.power(k1, 2) - 4 * k1 * k2 + 3 * np.power(k2, 2))
-                    )
-                )
-            )
-            - (
-                np.power(b1k2, 2)
-                * (
-                    2400 * np.power(k1, 6)
-                    + 2400 * an * np.power(k1, 5) * k2
-                    + 360
-                    * (-2 + an + 3 * np.power(an, 2))
-                    * np.power(k1, 4)
-                    * np.power(k2, 2)
-                    + 40
-                    * an
-                    * (2 + 9 * an + 7 * np.power(an, 2))
-                    * np.power(k1, 3)
-                    * np.power(k2, 3)
-                    + (
-                        -1392
-                        - 340 * an
-                        + 478 * np.power(an, 2)
-                        + 210 * np.power(an, 3)
-                        + 49 * np.power(an, 4)
-                    )
-                    * np.power(k1, 2)
-                    * np.power(k2, 4)
-                    + 2
-                    * an
-                    * (-144 + 70 * an + 49 * np.power(an, 2))
-                    * k1
-                    * np.power(k2, 5)
-                    + 2 * (-144 + 70 * an + 49 * np.power(an, 2)) * np.power(k2, 6)
-                )
-                - 14
-                * b1k2
-                * (k1 - k2)
-                * (
-                    (-12 + 4 * an + np.power(an, 2))
-                    * b2k2
-                    * np.power(k1, 2)
-                    * (
-                        20 * np.power(k1, 3)
-                        + 20 * (1 + an) * np.power(k1, 2) * k2
-                        + (8 + 15 * an + 7 * np.power(an, 2)) * k1 * np.power(k2, 2)
-                        + (8 + 7 * an) * np.power(k2, 3)
-                    )
-                    + 4
-                    * bG2k2
-                    * (
-                        120 * np.power(k1, 5)
-                        + 120 * (1 + an) * np.power(k1, 4) * k2
-                        + (42 + 89 * an + 47 * np.power(an, 2))
-                        * np.power(k1, 3)
-                        * np.power(k2, 2)
-                        + (42 + 51 * an + 16 * np.power(an, 2) + 7 * np.power(an, 3))
-                        * np.power(k1, 2)
-                        * np.power(k2, 3)
-                        + 3 * (2 + 9 * an + 7 * np.power(an, 2)) * k1 * np.power(k2, 4)
-                        + 3 * (2 + 7 * an) * np.power(k2, 5)
-                    )
-                )
-                + 49
-                * np.power(k1 - k2, 2)
-                * (
-                    np.power(an, 4) * np.power(b2k2, 2) * np.power(k1, 4)
-                    + 8
-                    * np.power(an, 3)
-                    * b2k2
-                    * np.power(k1, 3)
-                    * (b2k2 * k1 + bG2k2 * k2)
-                    + 96
-                    * bG2k2
-                    * np.power(k1 + k2, 2)
-                    * (
-                        -(b2k2 * np.power(k1, 2))
-                        + bG2k2 * (np.power(k1, 2) + np.power(k2, 2))
-                    )
-                    + 4
-                    * np.power(an, 2)
-                    * np.power(k1, 2)
-                    * (
-                        np.power(b2k2, 2) * np.power(k1, 2)
-                        + 8 * np.power(bG2k2, 2) * np.power(k2, 2)
-                        + 2
-                        * b2k2
-                        * bG2k2
-                        * (np.power(k1, 2) + 6 * k1 * k2 + np.power(k2, 2))
-                    )
-                    - 16
-                    * an
-                    * k1
-                    * (
-                        3 * np.power(b2k2, 2) * np.power(k1, 3)
-                        - 2
-                        * b2k2
-                        * bG2k2
-                        * k1
-                        * (np.power(k1, 2) - k1 * k2 + np.power(k2, 2))
-                        - 2
-                        * np.power(bG2k2, 2)
-                        * k2
-                        * (3 * np.power(k1, 2) + 4 * k1 * k2 + 3 * np.power(k2, 2))
-                    )
-                )
-            )
-            * np.power(np.abs(k1 - k2), an)
+    factor = np.power(b1k1, 2) / (
+        392.0 * (-2 + an) * an * (2 + an) * (4 + an) * (6 + an) * np.power(k1, 5) * k2
+    )
+
+    pT1 = np.power(b1k2, 2) * (
+        2400 * np.power(k1, 6)
+        - 2400 * an * np.power(k1, 5) * k2
+        + 360 * (-2 + an + 3 * np.power(an, 2)) * np.power(k1, 4) * np.power(k2, 2)
+        - 40
+        * an
+        * (2 + 9 * an + 7 * np.power(an, 2))
+        * np.power(k1, 3)
+        * np.power(k2, 3)
+        + (
+            -1392
+            - 340 * an
+            + 478 * np.power(an, 2)
+            + 210 * np.power(an, 3)
+            + 49 * np.power(an, 4)
         )
-    ) / (392.0 * (-2 + an) * an * (2 + an) * (4 + an) * (6 + an) * np.power(k1, 5) * k2)
+        * np.power(k1, 2)
+        * np.power(k2, 4)
+        - 2 * an * (-144 + 70 * an + 49 * np.power(an, 2)) * k1 * np.power(k2, 5)
+        + 2 * (-144 + 70 * an + 49 * np.power(an, 2)) * np.power(k2, 6)
+    )
+
+    pT2 = (
+        b1k2
+        * (k1 + k2)
+        * (
+            (-12 + 4 * an + np.power(an, 2))
+            * b2k2
+            * np.power(k1, 2)
+            * (
+                20 * np.power(k1, 3)
+                - 20 * (1 + an) * np.power(k1, 2) * k2
+                + (8 + 15 * an + 7 * np.power(an, 2)) * k1 * np.power(k2, 2)
+                - (8 + 7 * an) * np.power(k2, 3)
+            )
+            + 4
+            * bG2k2
+            * (
+                120 * np.power(k1, 5)
+                - 120 * (1 + an) * np.power(k1, 4) * k2
+                + (42 + 89 * an + 47 * np.power(an, 2))
+                * np.power(k1, 3)
+                * np.power(k2, 2)
+                - (42 + 51 * an + 16 * np.power(an, 2) + 7 * np.power(an, 3))
+                * np.power(k1, 2)
+                * np.power(k2, 3)
+                + 3 * (2 + 9 * an + 7 * np.power(an, 2)) * k1 * np.power(k2, 4)
+                - 3 * (2 + 7 * an) * np.power(k2, 5)
+            )
+        )
+    )
+
+    pT3 = np.power(k1 + k2, 2) * (
+        np.power(an, 4) * np.power(b2k2, 2) * np.power(k1, 4)
+        + 8 * np.power(an, 3) * b2k2 * np.power(k1, 3) * (b2k2 * k1 - bG2k2 * k2)
+        + 96
+        * bG2k2
+        * np.power(k1 - k2, 2)
+        * (-(b2k2 * np.power(k1, 2)) + bG2k2 * (np.power(k1, 2) + np.power(k2, 2)))
+        + 4
+        * np.power(an, 2)
+        * np.power(k1, 2)
+        * (
+            np.power(b2k2, 2) * np.power(k1, 2)
+            + 8 * np.power(bG2k2, 2) * np.power(k2, 2)
+            + 2 * b2k2 * bG2k2 * (np.power(k1, 2) - 6 * k1 * k2 + np.power(k2, 2))
+        )
+        - 16
+        * an
+        * k1
+        * (
+            3 * np.power(b2k2, 2) * np.power(k1, 3)
+            - 2 * b2k2 * bG2k2 * k1 * (np.power(k1, 2) + k1 * k2 + np.power(k2, 2))
+            + 2
+            * np.power(bG2k2, 2)
+            * k2
+            * (3 * np.power(k1, 2) - 4 * k1 * k2 + 3 * np.power(k2, 2))
+        )
+    )
+
+    mT1 = np.power(b1k2, 2) * (
+        2400 * np.power(k1, 6)
+        + 2400 * an * np.power(k1, 5) * k2
+        + 360 * (-2 + an + 3 * np.power(an, 2)) * np.power(k1, 4) * np.power(k2, 2)
+        + 40
+        * an
+        * (2 + 9 * an + 7 * np.power(an, 2))
+        * np.power(k1, 3)
+        * np.power(k2, 3)
+        + (
+            -1392
+            - 340 * an
+            + 478 * np.power(an, 2)
+            + 210 * np.power(an, 3)
+            + 49 * np.power(an, 4)
+        )
+        * np.power(k1, 2)
+        * np.power(k2, 4)
+        + 2 * an * (-144 + 70 * an + 49 * np.power(an, 2)) * k1 * np.power(k2, 5)
+        + 2 * (-144 + 70 * an + 49 * np.power(an, 2)) * np.power(k2, 6)
+    )
+
+    mT2 = (
+        b1k2
+        * (k1 - k2)
+        * (
+            (-12 + 4 * an + np.power(an, 2))
+            * b2k2
+            * np.power(k1, 2)
+            * (
+                20 * np.power(k1, 3)
+                + 20 * (1 + an) * np.power(k1, 2) * k2
+                + (8 + 15 * an + 7 * np.power(an, 2)) * k1 * np.power(k2, 2)
+                + (8 + 7 * an) * np.power(k2, 3)
+            )
+            + 4
+            * bG2k2
+            * (
+                120 * np.power(k1, 5)
+                + 120 * (1 + an) * np.power(k1, 4) * k2
+                + (42 + 89 * an + 47 * np.power(an, 2))
+                * np.power(k1, 3)
+                * np.power(k2, 2)
+                + (42 + 51 * an + 16 * np.power(an, 2) + 7 * np.power(an, 3))
+                * np.power(k1, 2)
+                * np.power(k2, 3)
+                + 3 * (2 + 9 * an + 7 * np.power(an, 2)) * k1 * np.power(k2, 4)
+                + 3 * (2 + 7 * an) * np.power(k2, 5)
+            )
+        )
+    )
+
+    mT3 = np.power(k1 - k2, 2) * (
+        np.power(an, 4) * np.power(b2k2, 2) * np.power(k1, 4)
+        + 8 * np.power(an, 3) * b2k2 * np.power(k1, 3) * (b2k2 * k1 + bG2k2 * k2)
+        + 96
+        * bG2k2
+        * np.power(k1 + k2, 2)
+        * (-(b2k2 * np.power(k1, 2)) + bG2k2 * (np.power(k1, 2) + np.power(k2, 2)))
+        + 4
+        * np.power(an, 2)
+        * np.power(k1, 2)
+        * (
+            np.power(b2k2, 2) * np.power(k1, 2)
+            + 8 * np.power(bG2k2, 2) * np.power(k2, 2)
+            + 2 * b2k2 * bG2k2 * (np.power(k1, 2) + 6 * k1 * k2 + np.power(k2, 2))
+        )
+        - 16
+        * an
+        * k1
+        * (
+            3 * np.power(b2k2, 2) * np.power(k1, 3)
+            - 2 * b2k2 * bG2k2 * k1 * (np.power(k1, 2) - k1 * k2 + np.power(k2, 2))
+            - 2
+            * np.power(bG2k2, 2)
+            * k2
+            * (3 * np.power(k1, 2) + 4 * k1 * k2 + 3 * np.power(k2, 2))
+        )
+    )
+
+    return factor * (
+        np.power(k1 + k2, an) * (pT1 - 14 * pT2 + 49 * pT3)
+        - np.power(np.abs(k1 - k2), an) * (mT1 - 14 * mT2 + 49 * mT3)
+    )
 
 
 def T2211_A_squeezed(k1, b1k1, b2k1, bG2k1, an):
@@ -722,7 +679,6 @@ def T22_kernel(k1, k2, an):
     k1 = np.asarray(k1, dtype=complex)
     k2 = np.asarray(k2, dtype=complex)
 
-    return (
-        (np.power(k1 + k2, an + 2) - np.power(np.abs(k1 - k2), an + 2))
-        / (2 * k1 * k2 * (an + 2))
+    return (np.power(k1 + k2, an + 2) - np.power(np.abs(k1 - k2), an + 2)) / (
+        2 * k1 * k2 * (an + 2)
     )

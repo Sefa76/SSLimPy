@@ -4,8 +4,8 @@ Obtain cosmological functions from the Einstein Boltzmann Code
 
 import types
 from copy import deepcopy
-from warnings import warn
 from functools import partial
+from warnings import warn
 
 import astropy.constants as c
 import astropy.units as u
@@ -111,21 +111,43 @@ class BoltzmannCode:
         if not any(par in self.cosmopars for par in ["N_ur", "Neff"]):
             self.cosmopars["Neff"] = 3.044
 
-        # Set default value for gamma, if it is not found in cosmopars
-        # gamma is not used in many places, therefore not needed to add back in cosmopars
-        self.gamma = self.cosmopars.get("gamma", 0.545)
-
     # Basis Conversion for Class
     def basechange_class(self, cosmopars):
         # transforms cosmopars into cosmopars that can be read by CLASS
-        shareDeltaNeff = self.cfg.settings["share_delta_neff"]
         classpars = deepcopy(cosmopars)
-        if "h" in classpars:
-            classpars["h"] = classpars.pop("h")
-            h = classpars["h"]
         if "H0" in classpars:
-            classpars["H0"] = classpars.pop("H0")
-            h = classpars["H0"] / 100.0
+            classpars["h"] = classpars["H0"] / 100.0
+        h = classpars["h"]
+
+        shareDeltaNeff = self.cfg.settings["share_delta_neff"]
+        fidNeff = BoltzmannCode.N_EFF
+        Neff = classpars.pop("Neff")
+        if shareDeltaNeff:
+            # This version does not have the discontinuity at Nur = 1.99
+            classpars["N_ur"] = 2.0 / 3.0 * Neff
+            g_factor = Neff / 3.0
+        else:
+            classpars["N_ur"] = Neff - fidNeff / 3.0
+            g_factor = fidNeff / 3.0
+
+        neutrino_mass_fac = BoltzmannCode.NEUTRINO_MASS_FAC
+        if "mnu" in classpars:
+            mnu = classpars.pop("mnu")
+            classpars["T_ncdm"] = (4.0 / 11.0) ** (1.0 / 3.0) * g_factor ** (1.0 / 4.0)
+            classpars["Omega_ncdm"] = (
+                mnu * g_factor ** (0.75) / neutrino_mass_fac / h**2
+            )
+        elif "Omeganu" in classpars:
+            classpars["Omega_ncdm"] = classpars.pop("Omeganu")
+        elif "omnuh2" in classpars:
+            classpars["Omega_ncdm"] = classpars.pop("omnuh2") / h**2
+
+        if "As" in classpars:
+            classpars["A_s"] = classpars.pop("As")
+        elif "logAs" in classpars:
+            classpars["A_s"] = np.exp(classpars.pop("logAs")) * 1e-10
+        elif "10^9As" in classpars:
+            classpars["A_s"] = 1e-9 * classpars.pop("10^9As")
 
         if "ns" in classpars:
             classpars["n_s"] = classpars.pop("ns")
@@ -136,39 +158,24 @@ class BoltzmannCode:
         if "w0" in classpars:
             classpars["w0_fld"] = classpars.pop("w0")
             classpars["Omega_Lambda"] = 0
+
         if "wa" in classpars:
             classpars["wa_fld"] = classpars.pop("wa")
 
-        if "As" in classpars:
-            classpars["A_s"] = classpars.pop("As")
-
-        Neff = classpars.pop("Neff")
-        if shareDeltaNeff:
-            classpars["N_ur"] = (
-                2.0 / 3.0 * Neff
-            )  # This version does not have the discontinuity at Nur = 1.99
-            g_factor = Neff / 3.0
-        else:
-            classpars["N_ur"] = Neff - BoltzmannCode.N_EFF / 3.0
-            g_factor = BoltzmannCode.N_EFF / 3.0
-
-        if "mnu" in classpars:
-            mnu = classpars.pop("mnu")
-            classpars["T_ncdm"] = (4.0 / 11.0) ** (1.0 / 3.0) * g_factor ** (1.0 / 4.0)
-            classpars["Omega_ncdm"] = (
-                mnu * g_factor ** (0.75) / BoltzmannCode.NEUTRINO_MASS_FAC / h**2
-            )
-        elif "Omeganu" in classpars:
-            classpars["Omega_ncdm"] = classpars.pop("Omeganu")
-        elif "omnuh2" in classpars:
-            classpars["Omega_ncdm"] = classpars.pop("omnuh2") / h**2
-
         if "Omegab" in classpars:
             classpars["Omega_b"] = classpars.pop("Omegab")
+        elif "ombh2" in classpars:
+            classpars["Omega_b"] = classpars.pop("ombh2") / h**2
+        elif "100omega_b" in classpars:
+            classpars["Omega_b"] = classpars.pop("100omega_b") / 100 / h**2
+        elif "omega_b" in classpars:
+            classpars["Omega_b"] = classpars.pop("omega_b") / h**2
+
         if "Omegam" in classpars:
-            classpars["Omega_cdm"] = (
-                classpars.pop("Omegam") - classpars["Omega_b"] - classpars["Omega_ncdm"]
-            )
+            Om = classpars.pop("Omegam")
+            classpars["Omega_cdm"] = Om - classpars["Omega_b"] - classpars["Omega_ncdm"]
+        elif "omch2" in classpars:
+            classpars["omega_cdm"] = classpars.pop("omch2")
 
         return classpars
 
@@ -176,18 +183,10 @@ class BoltzmannCode:
     def basechange_camb(self, cosmopars, camb):
         # transforms cosmopars into cosmopars that can be read by CAMB
         cambpars = deepcopy(cosmopars)
+
         if "h" in cambpars:
             cambpars["H0"] = cambpars.pop("h") * 100
-        if "H0" in cambpars:
-            self.h_now = cambpars["H0"] / 100
-        if "Omegab" in cambpars:
-            cambpars["ombh2"] = cambpars.pop("Omegab") * (cambpars["H0"] / 100) ** 2
-        if "Omegak" in cambpars:
-            cambpars["omk"] = cambpars.pop("Omegak")
-        if "w0" in cambpars:
-            cambpars["w"] = cambpars.pop("w0")
-        if "logAs" in cambpars:
-            cambpars["As"] = np.exp(cambpars.pop("logAs")) * 1.0e-10
+        h = cambpars["H0"] / 100
 
         shareDeltaNeff = self.cfg.settings["share_delta_neff"]
         cambpars["share_delta_neff"] = shareDeltaNeff
@@ -195,42 +194,58 @@ class BoltzmannCode:
         if "Neff" in cambpars:
             Neff = cambpars.pop("Neff")
             if shareDeltaNeff:
-                cambpars["num_nu_massless"] = Neff - cambpars["num_nu_massive"]
+                cambpars["num_nu_massless"] = 2 / 3 * Neff
+                g_factor = Neff / 3
             else:
                 cambpars["num_nu_massless"] = Neff - fidNeff / 3
-
+                g_factor = fidNeff / 3
         else:
             Neff = cambpars["num_nu_massive"] + cambpars["num_nu_massless"]
-
-        if shareDeltaNeff:
-            g_factor = Neff / 3
-        else:
-            g_factor = fidNeff / 3
+        cambpars["standard_neutrino_neff"] = self.N_EFF
 
         neutrino_mass_fac = self.NEUTRINO_MASS_FAC
-        h2 = self.h_now**2
-
         if "mnu" in cambpars:
-            Onu = cambpars["mnu"] / neutrino_mass_fac * (g_factor) ** 0.75 / h2
-            onuh2 = Onu * h2
-            cambpars["omnuh2"] = onuh2
+            cambpars["omnuh2"] = cambpars["mnu"] * g_factor**0.75 / neutrino_mass_fac
         elif "Omeganu" in cambpars:
-            cambpars["omnuh2"] = cambpars.pop("Omeganu") * h2
-            onuh2 = cambpars["omnuh2"]
-        elif "omnuh2" in cambpars:
-            onuh2 = cambpars["omnuh2"]
+            cambpars["omnuh2"] = cambpars.pop("Omeganu") * h**2
 
-        if "Omegam" in cambpars:  # TO BE GENERALIZED
-            cambpars["omch2"] = cambpars.pop("Omegam") * h2 - cambpars["ombh2"] - onuh2
+        if "logAs" in cambpars:
+            cambpars["As"] = np.exp(cambpars.pop("logAs")) * 1.0e-10
+        elif "10^9As" in cambpars:
+            cambpars["As"] = cambpars.pop("10^9As") * 1e-9
+
+        if "n_s" in cambpars:
+            cambpars["ns"] = cambpars.pop("n_s")
 
         if "alpha_s" in cambpars:
             cambpars["nrun"] = cambpars.pop("alpha_s")
 
+        if "w0" in cambpars:
+            cambpars["w"] = cambpars.pop("w0")
+
+        if "Omegab" in cambpars:
+            cambpars["ombh2"] = cambpars.pop("Omegab") * h**2
+        elif "100omega_b" in cambpars:
+            cambpars["ombh2"] = cambpars.pop("100omega_b") / 100 * h**2
+        elif "omega_b" in cambpars:
+            cambpars["ombh2"] = cambpars.pop("omega_b")
+
+        if "Omegam" in cambpars:
+            cambpars["omch2"] = (
+                cambpars.pop("Omegam") * h**2 - cambpars["ombh2"] - cambpars["omnuh2"]
+            )
+        elif "Omega_cdm" in cambpars:
+            cambpars["omch2"] = cambpars.pop("Omega_cdm") * h**2
+        elif "omega_cdm" in cambpars:
+            cambpars["omch2"] = cambpars.pop("omega_cdm")
+
+        if "Omegak" in cambpars:
+            cambpars["omk"] = cambpars.pop("Omegak")
+
         rescaleAs = False
         if "sigma8" in cambpars:
-            insigma8 = cambpars["sigma8"]
+            insigma8 = cambpars.pop("sigma8")
             cambpars["As"] = self.settings.get("rescale_ini_As", 2.1e-9)
-            cambpars.pop("sigma8")
             rescaleAs = True
 
         try:
@@ -238,8 +253,6 @@ class BoltzmannCode:
         except camb.CAMBUnknownArgumentError as argument:
             print("Remove parameter from cambparams: " + str(argument))
             raise argument
-
-        self.extrap_kmax = cambpars.pop("extrap_kmax", 100)
 
         if rescaleAs:
             cambpars["As"] = self.rescale_LP(cambpars, camb, insigma8)
@@ -279,8 +292,6 @@ class BoltzmannCode:
 
         cambinstance = camb.set_params(**self.cambcosmopars)
 
-        self.kmax_pk = self.cambcosmopars["kmax"]
-        self.kmin_pk = 1e-4
         zmax = self.boltzmann_cambpars["NUMERICS"]["zmax"]
         zsamples = self.boltzmann_cambpars["NUMERICS"]["zsamples"]
         camb_zarray = np.linspace(0.0, zmax, zsamples)[::-1]
@@ -313,9 +324,6 @@ class BoltzmannCode:
 
         classres = Class()
         classres.set(self.classcosmopars)
-
-        self.kmax_pk = self.classcosmopars["P_k_max_1/Mpc"]
-        self.kmin_pk = 1e-4
 
         ### TEXT VOMIT ###
         if self.cfg.settings["verbosity"] > 1:
@@ -356,15 +364,8 @@ class BoltzmannCode:
                 return_z_k=True,
             )
         )
-        Pk_nl, _, _ = cambres.get_matter_power_interpolator(
-            hubble_units=False,
-            k_hunit=False,
-            var1="delta_tot",
-            var2="delta_tot",
-            nonlinear=True,
-            extrap_kmax=100,
-            return_z_k=True,
-        )
+        self.results.Pk_l = Pk_l.P(self.results.zgrid, self.results.kgrid).T
+
         Pk_cb_l, _, _ = cambres.get_matter_power_interpolator(
             hubble_units=False,
             k_hunit=False,
@@ -374,6 +375,18 @@ class BoltzmannCode:
             extrap_kmax=100,
             return_z_k=True,
         )
+        self.results.Pk_cb_l = Pk_cb_l.P(self.results.zgrid, self.results.kgrid).T
+
+        Pk_nl, _, _ = cambres.get_matter_power_interpolator(
+            hubble_units=False,
+            k_hunit=False,
+            var1="delta_tot",
+            var2="delta_tot",
+            nonlinear=True,
+            extrap_kmax=100,
+            return_z_k=True,
+        )
+        self.results.Pk_nl = Pk_nl.P(self.results.zgrid, self.results.kgrid).T
 
         pk_prim = (
             cambinstance.scalar_power(self.results.kgrid)
@@ -384,21 +397,28 @@ class BoltzmannCode:
         lgk = np.log10(self.results.kgrid)
         self.results.P_scalar = UnivariateSpline(lgk, lgpk_prim)
 
-        self.results.Pk_l = RectBivariateSpline(
-            self.results.zgrid,
-            self.results.kgrid,
-            Pk_l.P(self.results.zgrid, self.results.kgrid),
+        Pk_cross_l = cambres.get_matter_power_interpolator(
+            hubble_units=False,
+            k_hunit=False,
+            var1="delta_nonu",
+            var2="delta_nu",
+            nonlinear=False,
+            extrap_kmax=100,
+            return_z_k=False,
         )
-        self.results.Pk_nl = RectBivariateSpline(
-            self.results.zgrid,
-            self.results.kgrid,
-            Pk_nl.P(self.results.zgrid, self.results.kgrid),
+        Pk_cross_l = Pk_cross_l.P(self.results.zgrid, self.results.kgrid).T
+
+        Pk_nunu_l = cambres.get_matter_power_interpolator(
+            hubble_units=False,
+            k_hunit=False,
+            var1="delta_nu",
+            var2="delta_nu",
+            nonlinear=False,
+            extrap_kmax=100,
+            return_z_k=False,
         )
-        self.results.Pk_cb_l = RectBivariateSpline(
-            self.results.zgrid,
-            self.results.kgrid,
-            Pk_cb_l.P(self.results.zgrid, self.results.kgrid),
-        )
+        Pk_nunu_l = Pk_nunu_l.P(self.results.zgrid, self.results.kgrid).T
+
         self.results.h_of_z = UnivariateSpline(
             self.results.zgrid, cambres.h_of_z(self.results.zgrid)
         )
@@ -426,48 +446,15 @@ class BoltzmannCode:
             ),
         )
 
-        # Calculate the Non linear cb power spectrum using Gabrieles Approximation
+        # Calculate the Matter fractions for CB Powerspectrum
         f_cdm = cambres.get_Omega("cdm", z=0) / self.results.Om_m(0)
         f_b = cambres.get_Omega("baryon", z=0) / self.results.Om_m(0)
         f_cb = f_cdm + f_b
         f_nu = 1 - f_cb
-        Pk_cross_l = cambres.get_matter_power_interpolator(
-            hubble_units=False,
-            k_hunit=False,
-            var1="delta_nonu",
-            var2="delta_nu",
-            nonlinear=False,
-            extrap_kmax=100,
-            return_z_k=False,
-        )
-        Pk_nunu_l = cambres.get_matter_power_interpolator(
-            hubble_units=False,
-            k_hunit=False,
-            var1="delta_nu",
-            var2="delta_nu",
-            nonlinear=False,
-            extrap_kmax=100,
-            return_z_k=False,
-        )
-        Pk_cb_nl = (
-            1
-            / f_cb**2
-            * (
-                Pk_nl.P(self.results.zgrid, self.results.kgrid)
-                - 2 * Pk_cross_l.P(self.results.zgrid, self.results.kgrid) * f_cb * f_nu
-                - Pk_nunu_l.P(self.results.zgrid, self.results.kgrid) * f_nu**2
-            )
-        )
-        self.results.Pk_cb_nl = RectBivariateSpline(
-            self.results.zgrid, self.results.kgrid, Pk_cb_nl
-        )
 
-        self.results.kmin_pk = self.kmin_pk
-        self.results.kmax_pk = self.kmax_pk
-
-        if self.cambcosmopars["Want_CMB"]:
-            powers = cambres.get_cmb_power_spectra(CMB_unit="muK")
-            self.results.camb_cmb = powers["total"]
+        self.results.Pk_cb_nl = (
+            self.results.Pk_nl - 2 * Pk_cross_l * f_cb * f_nu - Pk_nunu_l * f_nu**2
+        ) / f_cb**2
 
     def class_results(self, Class, cosmopars):  # Get your CLASS results from here
         self.results = types.SimpleNamespace()
@@ -475,11 +462,12 @@ class BoltzmannCode:
         self.results.h_of_z = np.vectorize(classres.Hubble)
         self.results.ang_dist = np.vectorize(classres.angular_distance)
         self.results.com_dist = np.vectorize(classres.comoving_distance)
+        self.results.rs_drag = classres.rs_drag()
         self.results.Om_m = np.vectorize(classres.Om_m)
         self.results.Om_cb = np.vectorize(
             lambda z: classres.Om_cdm(z) + classres.Om_b(z)
         )
-        self.results.rs_drag = classres.rs_drag()
+
         # Calculate the Matter fractions for CB Powerspectrum
         f_cdm = classres.Omega0_cdm() / classres.Omega_m()
         f_b = classres.Omega_b() / classres.Omega_m()
@@ -488,57 +476,44 @@ class BoltzmannCode:
 
         ## rows are k, and columns are z
         ## interpolating function Pk_l (k,z)
-        Pk_l, k, z = classres.get_pk_and_k_and_z(nonlinear=False)
-        Pk_cb_l, k, z = classres.get_pk_and_k_and_z(
+        Pk_l, self.results.kgrid, zgrid = classres.get_pk_and_k_and_z(
+            nonlinear=False,
+        )
+        self.results.zgrid = zgrid[::-1]
+        self.results.Pk_l = Pk_l[:, ::-1]
+
+        Pk_cb_l, _, _ = classres.get_pk_and_k_and_z(
             only_clustering_species=True, nonlinear=False
         )
-        self.results.Pk_l = RectBivariateSpline(
-            z[::-1], k, (np.flip(Pk_l, axis=1)).transpose()
-        )
-        # self.results.Pk_l = lambda z,k: [np.array([classres.pk_lin(kval,z) for kval in k])]
-        self.results.Pk_cb_l = RectBivariateSpline(
-            z[::-1], k, (np.flip(Pk_cb_l, axis=1)).transpose()
-        )
-        # self.results.Pk_cb_l = lambda z,k: [np.array([classres.pk_cb_lin(kval,z) for kval in k])]
-
-        self.results.kgrid = k
-        self.results.zgrid = z[::-1]
+        self.results.Pk_cb_l = Pk_cb_l[:, ::-1]
 
         ## interpolating function Pk_nl (k,z)
-        Pk_nl, k, z = classres.get_pk_and_k_and_z(
-            nonlinear= self.cfg.settings["nonlinearMatpow"]
+        Pk_nl, _, _ = classres.get_pk_and_k_and_z(
+            nonlinear=self.cfg.settings["nonlinearMatpow"]
         )
-        self.results.Pk_nl = RectBivariateSpline(
-            z[::-1], k, (np.flip(Pk_nl, axis=1)).transpose()
-        )
+        self.results.Pk_nl = Pk_nl[:, ::-1]
 
-        tk, k, z = classres.get_transfer_and_k_and_z()
+        tk, _, _ = classres.get_transfer_and_k_and_z()
         T_cb = (f_b * tk["d_b"] + f_cdm * tk["d_cdm"]) / f_cb
         T_nu = tk["d_ncdm[0]"]
 
         pm = classres.get_primordial()
         pk_prim = (
-            UnivariateSpline(pm["k [1/Mpc]"], pm["P_scalar(k)"])(k)
+            UnivariateSpline(pm["k [1/Mpc]"], pm["P_scalar(k)"])(self.results.kgrid)
             * (2.0 * np.pi**2)
-            / np.power(k, 3)
+            / np.power(self.results.kgrid, 3)
         )
 
         lgpk_prim = np.log10(pk_prim)
-        lgk = np.log10(k)
+        lgk = np.log10(self.results.kgrid)
         self.results.P_scalar = UnivariateSpline(lgk, lgpk_prim)
 
-        pk_cnu = T_nu * T_cb * pk_prim[:, None]
-        pk_nunu = T_nu * T_nu * pk_prim[:, None]
-        Pk_cb_nl = (
-            1.0 / f_cb**2 * (Pk_nl - 2 * pk_cnu * f_nu * f_cb - pk_nunu * f_nu * f_nu)
-        )
+        Pk_cross_l = T_nu[:, ::-1] * T_cb[:, ::-1] * pk_prim[:, None]
+        Pk_nunu_l = T_nu[:, ::-1] * T_nu[:, ::-1] * pk_prim[:, None]
 
-        self.results.Pk_cb_nl = RectBivariateSpline(
-            z[::-1], k, (np.flip(Pk_cb_nl, axis=1)).transpose()
-        )
-
-        self.results.kmin_pk = self.kmin_pk
-        self.results.kmax_pk = self.kmax_pk
+        self.results.Pk_cb_nl = (
+            self.results.Pk_nl - 2 * Pk_cross_l * f_nu * f_cb - Pk_nunu_l * f_nu * f_nu
+        ) / f_cb**2
 
 
 class CosmoFunctions:
@@ -596,9 +571,28 @@ class CosmoFunctions:
                 self.classcosmopars = cosmology.classcosmopars
             if self.code == "camb":
                 self.cambcosmopars = cosmology.cambcosmopars
-
         self.fullcosmoparams = {**self.cosmopars, **nuiscance_like}
 
+        if self.cfg.settings["k_kind"] == "log":
+            k_edge = np.geomspace(
+                self.cfg.settings["kmin"],
+                self.cfg.settings["kmax"],
+                self.cfg.settings["nk"],
+            ).to(u.Mpc**-1)
+        else:
+            k_edge = np.linspace(
+                self.cfg.settings["kmin"],
+                self.cfg.settings["kmax"],
+                self.cfg.settings["nk"],
+            ).to(u.Mpc**-1)
+        self.k = (k_edge[1:] + k_edge[:-1]) / 2.0
+
+        self.z = np.linspace(
+            self.cfg.settings["zmin"],
+            self.cfg.settings["zmax"],
+            self.cfg.settings["nz"],
+        )
+        self.create_matter_interp()
         self.growth_factor, self.growth_rate = self.create_growth()
 
     ##############
@@ -734,6 +728,34 @@ class CosmoFunctions:
     #################
     # Power Spectra #
     #################
+
+    def create_matter_interp(self):
+        results = self.results
+
+        kgrid = results.kgrid.ravel()
+        zgrid = results.zgrid.ravel()
+
+        k_interp = np.repeat(self.k, len(self.z))
+        z_interp = np.tile(self.z, len(self.k))
+
+        def extract(P_array):
+            logP_interp = np.reshape(
+                bilinear_interpolate(
+                    np.log(kgrid),
+                    zgrid,
+                    np.log(P_array),
+                    np.log(k_interp.to(u.Mpc**-1).value),
+                    z_interp,
+                ),
+                (*self.k.shape, *self.z.shape),
+            )
+            return RectBivariateSpline(self.k, self.z, np.exp(logP_interp))
+
+        self.Pk_l = extract(self.results.Pk_l)
+        self.Pk_nl = extract(self.results.Pk_nl)
+        self.Pk_cb_l = extract(self.results.Pk_cb_l)
+        self.Pk_cb_nl = extract(self.results.Pk_cb_nl)
+
     def primordial_scalar_pow(self, k):
         lgk = np.log10(k.to(u.Mpc**-1).value)
         pk = np.power(10, self.results.P_scalar(lgk))
@@ -778,12 +800,12 @@ class CosmoFunctions:
         kvec = k[:, None]
 
         if tracer == "clustering":
-            Pk = self.Pcb(zvec, kvec, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pcb(kvec, zvec, nonlinear=nonlinear) * u.Mpc**3
         elif tracer == "matter":
-            Pk = self.Pmm(zvec, kvec, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pmm(kvec, zvec, nonlinear=nonlinear) * u.Mpc**3
         else:
             warn("Did not recognize tracer: reverted to matter")
-            Pk = self.Pmm(zvec, kvec, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pmm(kvec, zvec, nonlinear=nonlinear) * u.Mpc**3
 
         ###################################
         # Emulators and Fitting functions #
@@ -802,7 +824,7 @@ class CosmoFunctions:
         primordial = self.primordial_scalar_pow(k)[:, None]
         return np.squeeze(np.sqrt(P / primordial))
 
-    def Pmm(self, z, k, nonlinear=False):
+    def Pmm(self, k, z, nonlinear=False):
         """Compute the power spectrum of the total matter species  (MM) at a given redshift and wavenumber.
         Try to only use Matpow internaly as it is fully vecotrized and handles units correctly
 
@@ -815,12 +837,12 @@ class CosmoFunctions:
             float: The value of the MM power spectrum at the given redshift and wavenumber.
         """
         if nonlinear:
-            power = self.results.Pk_nl(z, k, grid=False)
+            power = self.Pk_nl(k, z, grid=False)
         else:
-            power = self.results.Pk_l(z, k, grid=False)
+            power = self.Pk_l(k, z, grid=False)
         return power
 
-    def Pcb(self, z, k, nonlinear=False):
+    def Pcb(self, k, z, nonlinear=False):
         """Compute the power spectrum of the clustering matter species  (CB) at a given redshift and wavenumber.
         Try to only use Matpow internaly as it is fully vecotrized and handles units correctly
 
@@ -833,28 +855,32 @@ class CosmoFunctions:
             The value of the CB power spectrum at the given redshift and wavenumber.
         """
         if nonlinear:
-            power = self.results.Pk_cb_nl(z, k, grid=False)
+            power = self.Pk_cb_nl(k, z, grid=False)
         else:
-            power = self.results.Pk_cb_l(z, k, grid=False)
+            power = self.Pk_cb_l(k, z, grid=False)
         return power
 
     def P_nw_shape(self, k):
         # Get cosmologyical quantities for the fit
-        h = (self.Hubble(0, physical=True) / (100 * u.km * u.s**-1 * u.Mpc**-1)).to(1).value
+        h = (
+            (self.Hubble(0, physical=True) / (100 * u.km * u.s**-1 * u.Mpc**-1))
+            .to(1)
+            .value
+        )
         Om = self.Omega(0, "matter")
         wm = Om * h**2
         wb = self.cosmopars["Omegab"] * h**2
 
         # This should be changed to the actuall CMB background temp
-        theta = 2.7255 / 2.7 
+        theta = 2.7255 / 2.7
         rb = wb / wm
         ns = self.cosmopars["ns"]
 
         k = k.to(u.Mpc**-1).value
-        s = 44.5 * np.log(9.83 / wm) / np.sqrt(1 + 10 * wb**(3/4))
+        s = 44.5 * np.log(9.83 / wm) / np.sqrt(1 + 10 * wb ** (3 / 4))
         alpha = 1 - 0.328 * np.log(431 * wm) * rb + 0.38 * np.log(22.3 * wm) * rb**2
 
-        Gamma = (wm / h) * (alpha + (1- alpha) / (1 + (0.43 * k * s)**4))
+        Gamma = (wm / h) * (alpha + (1 - alpha) / (1 + (0.43 * k * s) ** 4))
         q = k / h * theta**2 / Gamma
 
         L0 = np.log(2 * np.e + 1.8 * q)
@@ -911,7 +937,9 @@ class CosmoFunctions:
 
         Psmoothed = np.empty((*k.shape, *z.shape)) * uP
         for iz, zi in enumerate(z):
-            Pprime_inter = UnivariateSpline(logkgrid_savgol, P_shapeless[:, iz], s=0, k=polyorder).derivative(1)(logkgrid_savgol)
+            Pprime_inter = UnivariateSpline(
+                logkgrid_savgol, P_shapeless[:, iz], s=0, k=polyorder
+            ).derivative(1)(logkgrid_savgol)
 
             logkmin = np.argmin(np.abs(kgrid_savgol - kmin_loc * width))
             logkmax = np.argmin(np.abs(kgrid_savgol - kmax_loc / width))
@@ -919,15 +947,31 @@ class CosmoFunctions:
             logkpeaks, _ = find_peaks(Pprime_inter[:])
             logkvalleys, _ = find_peaks(-Pprime_inter[:])
 
-            ipeaks = [*range(logkmin), *logkpeaks[(logkpeaks > logkmin) & (logkpeaks < logkmax)], *range(logkmax, loc_samples)]
-            ivalleys = [*range(logkmin), *logkvalleys[(logkvalleys > logkmin) & (logkvalleys < logkmax)], *range(logkmax, loc_samples)]
+            ipeaks = [
+                *range(logkmin),
+                *logkpeaks[(logkpeaks > logkmin) & (logkpeaks < logkmax)],
+                *range(logkmax, loc_samples),
+            ]
+            ivalleys = [
+                *range(logkmin),
+                *logkvalleys[(logkvalleys > logkmin) & (logkvalleys < logkmax)],
+                *range(logkmax, loc_samples),
+            ]
 
-            Psl_peaks = UnivariateSpline(kgrid_savgol[ipeaks], P_shapeless[ipeaks, iz], s=0, k=polyorder)(k)
-            Psl_valleys = UnivariateSpline(kgrid_savgol[ivalleys], P_shapeless[ivalleys, iz], s=0, k=polyorder)(k)
+            Psl_peaks = UnivariateSpline(
+                kgrid_savgol[ipeaks], P_shapeless[ipeaks, iz], s=0, k=polyorder
+            )(k)
+            Psl_valleys = UnivariateSpline(
+                kgrid_savgol[ivalleys], P_shapeless[ivalleys, iz], s=0, k=polyorder
+            )(k)
             Psmoothed[:, iz] = 0.5 * (Psl_peaks + Psl_valleys) * P_reshape * uP
 
-        P_locked = np.reshape(self.matpow(k, z, nonlinear=nonlinear, tracer=tracer), (*k.shape, *z.shape))
-        Psmoothed[np.where((k<kmin_loc) | (k>kmax_loc)), :] = P_locked[np.where((k<kmin_loc) | (k>kmax_loc)), :]
+        P_locked = np.reshape(
+            self.matpow(k, z, nonlinear=nonlinear, tracer=tracer), (*k.shape, *z.shape)
+        )
+        Psmoothed[np.where((k < kmin_loc) | (k > kmax_loc)), :] = P_locked[
+            np.where((k < kmin_loc) | (k > kmax_loc)), :
+        ]
 
         return np.squeeze(Psmoothed)
 
@@ -1001,30 +1045,3 @@ class CosmoFunctions:
             )
 
         return growth_factor, growth_rate
-
-    def cmb_power(self, lmin, lmax, obs1, obs2):
-        if self.code == "camb":
-            if self.cambcosmopars.Want_CMB:
-                print("CMB Spectrum not computed")
-                return
-        elif self.code == "class":
-            if "tCl" in self.classcosmopars["output"]:
-                print("CMB Spectrum not computed")
-                return
-        else:
-            ells = np.arange(lmin, lmax)
-
-            norm_fac = 2 * np.pi / (ells * (ells + 1))
-
-            if obs1 + obs2 == "CMB_TCMB_T":
-                cls = norm_fac * self.results.camb_cmb[lmin:lmax, 0]
-            elif obs1 + obs2 == "CMB_ECMB_E":
-                cls = norm_fac * self.results.camb_cmb[lmin:lmax, 1]
-            elif obs1 + obs2 == "CMB_BCMB_B":
-                cls = norm_fac * self.results.camb_cmb[lmin:lmax, 2]
-            elif (obs1 + obs2 == "CMB_TCMB_E") or (obs1 + obs2 == "CMB_ECMB_T"):
-                cls = norm_fac * self.results.camb_cmb[lmin:lmax, 3]
-            else:
-                cls = np.array([0.0] * len(ells))
-
-            return cls

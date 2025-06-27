@@ -46,24 +46,8 @@ class HaloModel:
         self.Mmin = min(self.M)
         self.Mmax = max(self.M)
 
-        if self.cfg.settings["k_kind"] == "log":
-            k_edge = np.geomspace(
-                self.cfg.settings["kmin"],
-                self.cfg.settings["kmax"],
-                self.cfg.settings["nk"],
-            ).to(u.Mpc**-1)
-        else:
-            k_edge = np.linspace(
-                self.cfg.settings["kmin"],
-                self.cfg.settings["nk"],
-            ).to(u.Mpc**-1)
-        self.k = (k_edge[1:] + k_edge[:-1]) / 2.0
-
-        self.z = np.linspace(
-            self.cfg.settings["zmin"],
-            self.cfg.settings["zmax"],
-            self.cfg.settings["nz"],
-        )
+        self.k = cosmo.k
+        self.z = cosmo.z
 
         self.sigmaR_lut, self.dsigmaR_lut = self._create_sigmaR_lookuptable()
         self._init_halo_mass_function()

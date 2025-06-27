@@ -47,7 +47,7 @@ class Configuration:
         self.settings.setdefault("h-units", False)
         self.settings.setdefault("do_pheno_ncdm", False)
 
-        # Savgol numerics
+        # Dewiggeling numerics
         self.settings.setdefault("smooth_internal_kmin", 1e-3 * u.Mpc**-1)
         self.settings.setdefault("smooth_internal_kmax", 10 * u.Mpc**-1)
         self.settings.setdefault("smooth_internal_samples", 800)
@@ -56,7 +56,7 @@ class Configuration:
 
         # Pk numerics
         self.settings.setdefault("k_kind", "log")
-        self.settings.setdefault("kmin", 1.0e-3 * u.Mpc**-1)
+        self.settings.setdefault("kmin", 1.0e-5 * u.Mpc**-1)
         self.settings.setdefault("kmax", 50 * u.Mpc**-1)
         self.settings.setdefault("nk", 200)
         self.settings.setdefault("zmin", 0)
@@ -81,8 +81,9 @@ class Configuration:
         self.settings.setdefault("Smooth_window", False)
 
         # Pk FFTlog approximation
-        self.settings.setdefault("Log-extrap", 10)
-        self.settings.setdefault("LogN_modes", 10)
+        self.settings.setdefault("FFTlog_kmin", 1e-6 * u.Mpc**-1)
+        self.settings.setdefault("FFTlog_kmax", 300 * u.Mpc**-1)
+        self.settings.setdefault("FFTlog_LogN ", 10)
 
 
         # VID numerics
