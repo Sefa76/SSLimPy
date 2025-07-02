@@ -1,28 +1,33 @@
 import numpy as np
 from functools import partial
+from scipy.interpolate import UnivariateSpline as _UnivariateSpline
+
+UnivariateSpline = partial(_UnivariateSpline, s=0)
 
 # --- FFTLog Approximator class ---
 class FFTLog:
-    def __init__(self, f, xmin, xmax, logN=8, q=0.0, **kwags):
-
+    def __init__(self, f, xmin, xmax, logN=8, **kwags):
         # Fill function with additional key word arguments
-        pf = partial(f, **kwags)
-        self.f = pf
+        self.f = partial(f, **kwags)
 
         self.xmin = xmin
         self.xmax = xmax
         self.N = 2 ** logN
-        self.q = q
 
         # Log grid
         self.x = np.geomspace(xmin, xmax, self.N)
         self.logx = np.log(self.x)
         self.dlogx = self.logx[1] - self.logx[0]
         self.nu = np.fft.fftfreq(self.N, d=self.dlogx)
-        self.gamma = -self.q + 1j * 2 * np.pi * self.nu
+
+        f_unbiased = self.f(self.x)
+        dlogfdlogx = UnivariateSpline(self.logx, np.log(f_unbiased)).derivative(1)(self.logx)
+
+        self.q = np.mean(dlogfdlogx)
+        self.gamma = self.q + 1j * 2 * np.pi * self.nu
 
         # Apply bias and FFT
-        fx = self.f(self.x) * self.x**self.q
+        fx = self.f(self.x) * self.x**-self.q
         self.C = np.fft.fft(fx) / self.N * self.xmin**(-1j * 2 * np.pi * self.nu)
 
         # Sort frequencies
