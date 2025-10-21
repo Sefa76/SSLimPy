@@ -97,44 +97,25 @@ class nonGuassianCov:
         self.powerSpectrum = power_spectrum
         self.tracer = self.cfg.settings["TracerPowerSpectrum"]
         self.survey_specs = power_spectrum.survey_specs
-        self.k = power_spectrum.k
         self.mu = power_spectrum.mu
         self.z = power_spectrum.z
 
         # Get power spectra on grids for numerical computations
         # TODO: For now only works for scale-independent growth
-        self.kgrid = power_spectrum.k_numerics.to(u.Mpc**-1)
+        self.k = power_spectrum.k
+        self.Pk = self.cosmo.matpow(self.k, 0, nonlinear=False, tracer=self.tracer)
+        self.kgrid = self.cosmo.k.to(u.Mpc**-1)
         self.Pgrid = self.cosmo.matpow(self.kgrid, 0.0, nonlinear=False, tracer=self.tracer).to(u.Mpc**3)
-        self.Pk = self.cosmo.matpow(self.k, 0.0, nonlinear=False, tracer=self.tracer).to(u.Mpc**3)
 
         # FFTlog Approximation
-        kminebs = np.min(self.kgrid).to(u.Mpc**-1).value / self.cfg.settings["Log-extrap"]
-        kmaxebs = np.max(self.kgrid).to(u.Mpc**-1).value * self.cfg.settings["Log-extrap"]
+        kmin_fftlog = self.cfg.settings["FFTlog_kmin"].to(u.Mpc**-1).value
+        kmax_fftlog = self.cfg.settings["FFTlog_kmax"].to(u.Mpc**-1).value
+        LogN = self.cfg.settings["FFTlog_LogN"]
 
-        def extrap_pk(k, kgrid, Pkgrid):
-            logk = np.log(k)
-            logkgrid = np.log(kgrid)
-            logPkgrid = np.log(Pkgrid)
-            logPk = linear_interpolate(logkgrid, logPkgrid, logk)
-            return np.exp(logPk)
-
-        def p_rec(k, q):
-            tf = FFTLog(extrap_pk, kminebs, kmaxebs,
-                                    self.cfg.settings["LogN_modes"], q,
-                                    kgrid=self.kgrid.value, Pkgrid=self.Pgrid.value,
-                                    )
-            return tf(k).real
-
-        #find good numerical bias
-        q, _= curve_fit(p_rec, self.k.value, self.Pk.value, p0=[0.3], sigma=self.Pk.value)
-        q = q[0]
-        self.fftLog_Pofk = FFTLog(extrap_pk, kminebs, kmaxebs,
-                                  self.cfg.settings["LogN_modes"], q,
-                                  kgrid=self.kgrid.value, Pkgrid=self.Pgrid.value,
-                                  )
+        self.fftLog_Pofk = FFTLog(self.kgrid.value, self.Pgrid.value, kmin_fftlog, kmax_fftlog, LogN)
 
 
-    def integrate_4h(self, z=None):
+    def integrate_4h(self, z=None, return_ingredients=False):
         k = self.k
         if z is None:
             z = self.z
@@ -142,18 +123,32 @@ class nonGuassianCov:
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
         I11 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b1"), k, z)
-        I12 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
-        I1G2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
-        I13 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b3"), k, z)
-        I1dG2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bdG2"), k, z)
-        I1G3 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bG3"), k, z)
-        I1DG2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bDG2"), k, z)
+        I12 = np.zeros((*k.shape, *z.shape)) * u.K # restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
+        I1G2 = np.zeros((*k.shape, *z.shape)) * u.K # restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
+        I13 = np.zeros((*k.shape, *z.shape)) * u.K # restore_shape(self.astro.Thalo(z, k, p=1, beta="b3"), k, z)
+        I1dG2 = np.zeros((*k.shape, *z.shape)) * u.K # restore_shape(self.astro.Thalo(z, k, p=1, beta="bdG2"), k, z)
+        I1G3 = np.zeros((*k.shape, *z.shape)) * u.K # restore_shape(self.astro.Thalo(z, k, p=1, beta="bG3"), k, z)
+        I1DG2 = np.zeros((*k.shape, *z.shape)) * u.K # restore_shape(self.astro.Thalo(z, k, p=1, beta="bDG2"), k, z)
 
         kl = len(k)
         zl = len(z)
 
+        # construct masks
+        mask_k1ok2 = (k[:, None]/k[None, :]) < 5e-3
+        mask_k2ok1 = (k[None, :]/k[:, None]) < 5e-3
+        mask_diag = np.eye(kl, dtype=bool)
+        mask_norm = ~np.logical_or(np.logical_or(mask_k1ok2, mask_k2ok1), mask_diag)
+        mask_tril = np.logical_and(np.tril(np.ones((kl,kl), dtype=bool), k=-1), ~mask_k2ok1)
+
         # 3111 Terms
+        T_3111_masks = [mask_k1ok2, mask_k2ok1, mask_norm]
+        T_3111_funcs = [
+            ingredients_T0.T3111_s_k1ok2,
+            ingredients_T0.T3111_s_k2ok1,
+            ingredients_T0.T3111_kernel,
+        ]
         kernel_4h_3111 = np.empty((kl, kl, zl)) * u.uK**4
+
         for iz, zi in enumerate(z):
             I11_iz = I11[:, iz]
             I12_iz = I12[:, iz]
@@ -163,50 +158,76 @@ class nonGuassianCov:
             I1G3_iz = I1G3[:, iz]
             I1DG2_iz = I1DG2[:, iz]
 
-            kernel_4h_3111_iz = ingredients_T0.T3111_kernel(
-                k[:,None], k[None, :],
-                I11_iz[:, None], I11_iz[None, :], I12_iz[None, :], I1G2_iz[None, :], I13_iz[None, :], I1dG2_iz[None, :], I1G3_iz[None, :], I1DG2_iz[None, :])
-            squeezed_4h_3111_iz = ingredients_T0.T3111_squeezed(
-                I11_iz, I12_iz, I1G2_iz, I13_iz, I1dG2_iz, I1G3_iz, I1DG2_iz)
-            np.fill_diagonal(kernel_4h_3111_iz, squeezed_4h_3111_iz)
-            kernel_4h_3111[:, :, iz] = kernel_4h_3111_iz.real
+            for mask, func in zip(T_3111_masks, T_3111_funcs):
+                i, j = np.where(mask)
+                kernel_4h_3111[mask, iz] = func(
+                    k[i], k[j], I11_iz[i],
+                    I11_iz[j], I12_iz[j], I1G2_iz[j],
+                    I13_iz[j], I1dG2_iz[j], I1G3_iz[j], I1DG2_iz[j],
+                )
+            kernel_4h_3111[mask_diag, iz] = ingredients_T0.T3111_squeezed(
+                k, I11_iz, I12_iz, I1G2_iz, I13_iz, I1dG2_iz, I1G3_iz, I1DG2_iz
+            )
         T_3111 = 12 * self.Pk[:, None, None]**2 * self.Pk[None, :, None] * kernel_4h_3111 * D[None, None, :]**6
         T_3111 += np.transpose(T_3111, (1,0,2))
 
         # 2211 Terms
         gamma, coef = self.fftLog_Pofk.get_power_and_coef()
 
-        kernel_4h_2211_A = np.empty((kl, kl, zl)) * u.Mpc**3 * u.uK**4 
-        kernel_4h_2211_X = np.empty((kl, kl, zl)) * u.Mpc**3 * u.uK**4 
-        for iz, zi in enumerate(z):
-            kernel_4h_2211_A_iz = 0.0
-            squeezed_4h_2211_A_iz = 0.0
-            kernel_4h_2211_X_iz = 0.0
-            squeezed_4h_2211_X_iz = 0.0
+        T_2211_A_masks = [mask_k1ok2, mask_k2ok1, mask_norm]
+        T_2211_A_funcs = [
+            ingredients_T0.T2211_A_s_k1ok2,
+            ingredients_T0.T2211_A_s_k2ok1,
+            ingredients_T0.T2211_A_kernel,
+        ]
+        kernel_4h_2211_A = np.zeros((kl, kl, zl)) * u.Mpc**3 * u.uK**4
 
+        T_2211_X_masks = [mask_k2ok1, mask_tril]
+        T_2211_X_funcs = [
+            ingredients_T0.T2211_X_s_k2ok1,
+            ingredients_T0.T2211_X_kernel,
+        ]
+        kernel_4h_2211_X = np.zeros((kl, kl, zl)) * u.Mpc**3 * u.uK**4
+
+        for iz, zi in enumerate(z):
             I11_iz = I11[:, iz]
             I12_iz = I12[:, iz]
             I1G2_iz = I1G2[:, iz]
             for gammai, coefi in zip(gamma, coef):
-                kernel_4h_2211_A_iz += coefi * ingredients_T0.T2211_A_kernel(
-                    k[:,None], k[None,:],
-                    I11_iz[:, None], I11_iz[None, :], I12_iz[None, :], I1G2_iz[None, :], gammai)
-                squeezed_4h_2211_A_iz += coefi * ingredients_T0.T2211_A_squeezed(k, I11_iz, I12_iz, I1G2_iz, gammai)
-                kernel_4h_2211_X_iz += coefi * ingredients_T0.T2211_X_kernel(
-                    k[:,None], k[None,:],
-                    I11_iz[:, None], I12_iz[:, None], I1G2_iz[:, None],
-                    I11_iz[None, :], I12_iz[None, :], I1G2_iz[None, :],
-                    gammai)
-                squeezed_4h_2211_X_iz += coefi * ingredients_T0.T2211_X_squeezed(k, I11_iz, I12_iz, I1G2_iz, gammai)
-            np.fill_diagonal(kernel_4h_2211_A_iz, squeezed_4h_2211_A_iz)
-            np.fill_diagonal(kernel_4h_2211_X_iz, squeezed_4h_2211_X_iz)
-            kernel_4h_2211_A[:,:,iz] = kernel_4h_2211_A_iz.real * u.Mpc**3
-            kernel_4h_2211_X[:,:,iz] = kernel_4h_2211_X_iz.real * u.Mpc**3
+                
+                A_iz = np.empty((kl, kl), dtype=complex) * u.uK**4
+                for mask, func in zip(T_2211_A_masks, T_2211_A_funcs):
+                    i, j = np.where(mask)
+                    A_iz[mask] = func(
+                        k[i], k[j], I11_iz[i],
+                        I11_iz[j], I12_iz[j], I1G2_iz[j], gammai,
+                    )
+                A_iz[mask_diag] = ingredients_T0.T2211_A_squeezed(
+                    k, I11_iz, I12_iz, I1G2_iz, gammai
+                )
+                kernel_4h_2211_A[:, :, iz] += (coefi * A_iz).real * u.Mpc**3
+
+                X_iz = np.zeros((kl, kl), dtype=complex) * u.uK**4
+                for mask, func in zip(T_2211_X_masks, T_2211_X_funcs):
+                    i, j = np.where(mask)
+                    X_iz[mask] = func(
+                        k[i], k[j], I11_iz[i],
+                        I12_iz[i], I1G2_iz[i],
+                        I11_iz[j], I12_iz[j],
+                        I1G2_iz[j], gammai,
+                    )
+                X_iz[mask_diag] = ingredients_T0.T2211_X_squeezed(
+                    k, I11_iz, I12_iz, I1G2_iz, gammai
+                ) / 2 # The factor 1/2 is for the mirroring of the full expression
+                kernel_4h_2211_X[:, :, iz] += (coefi * X_iz).real * u.Mpc**3
+        kernel_4h_2211_X += kernel_4h_2211_X.transpose((1, 0, 2))
 
         T_2211_A = 8 * self.Pk[:, None, None]**2 * kernel_4h_2211_A * D[None, None, :]**6
         T_2211_A += np.transpose(T_2211_A, (1,0,2))
         T_2211_X = 16 * self.Pk[:, None, None] * self.Pk[None, :, None] * kernel_4h_2211_X * D[None, None, :]**6
 
+        if return_ingredients:
+            return T_3111, T_2211_X, T_2211_A
         T_4h = T_3111 + T_2211_X + T_2211_A
         return T_4h
 
@@ -218,11 +239,11 @@ class nonGuassianCov:
         D = np.atleast_1d(self.cosmo.growth_factor(1e-4*u.Mpc**-1, z, tracer=self.tracer))
 
         I11 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b1"), k, z)
-        I12 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
-        I1G2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
+        I12 = np.zeros((*k.shape, *z.shape)) * u.K # restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
+        I1G2 = np.zeros((*k.shape, *z.shape)) * u.K # restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
         I21 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b1"), k, k, z)
-        I22 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b2"), k, k, z)
-        I2G2 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="bG2"), k, k, z)
+        I22 = np.zeros((*k.shape, *k.shape, *z.shape)) * u.K**2 * u.Mpc**3 # restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b2"), k, k, z)
+        I2G2 = np.zeros((*k.shape, *k.shape, *z.shape)) * u.K**2 * u.Mpc**3 # restore_shape(self.astro.Thalo(z, k, k, p=2, beta="bG2"), k, k, z)
 
         kl = len(k)
         zl = len(z)

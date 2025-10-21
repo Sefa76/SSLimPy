@@ -302,7 +302,7 @@ class AstroFunctions:
     def bavg(self, beta, z, power, dc=None, k=None):
         Lbavg = self.Lbavg(beta, z, power, dc=dc, k=k)
         Lavg = self.Lavg(z, power)
-        return Lbavg / Lavg
+        return np.squeeze(Lbavg / Lavg).to(1).value
 
     ##################
     # Halo integrals #

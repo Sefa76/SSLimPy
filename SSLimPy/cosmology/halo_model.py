@@ -1,14 +1,17 @@
-import numpy as np
-import astropy.units as u
-
-from numba import njit, prange
 from copy import deepcopy
-from scipy.special import sici
+from functools import partial
 
+import astropy.units as u
+import numpy as np
+from numba import njit, prange
+from scipy.interpolate import RectBivariateSpline as _RectBivariateSpline
+from scipy.special import sici
 from SSLimPy.cosmology.cosmology import CosmoFunctions
 from SSLimPy.cosmology.fitting_functions import coevolution_bias as cb
 from SSLimPy.cosmology.fitting_functions import halo_mass_functions as HMF
 from SSLimPy.utils.utils import *
+
+RectBivariateSpline = partial(_RectBivariateSpline, s=0)
 
 
 class HaloModel:
@@ -453,12 +456,12 @@ class HaloModel:
         b1 = 1.82
         ca = 0.2
 
-        rhoM = self.rho_crit * self.cosmology.Omega(0, self.tracer)
-        R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
+        rho = self.rho_crit * self.cosmology.Omega(0.0, tracer=self.tracer)
+        R = (3.0 * M / (4.0 * np.pi * rho)) ** (1.0 / 3.0)
         R = R.to(u.Mpc)
 
         nu = self.delta_crit / np.reshape(
-            self.sigmaM(M, z, tracer="clustering"),
+            self.sigmaR_of_z(R, z, tracer=self.tracer),
             (*M.shape, *z.shape),
         )
         neff = np.reshape(
@@ -473,19 +476,8 @@ class HaloModel:
         C = 1.0 - ca * (1.0 - alpha_eff)
         rhs = np.log10(A / nu * (1.0 + nu**2 / B))
 
-        cbar = np.empty((*M.shape, *z.shape))
-        for iz, zi in enumerate(z):
-            rhs_ = rhs[:, iz]
-            ns_ = neff[:, iz]
-            cbar[:, iz] = np.power(10,
-                bilinear_interpolate(
-                    self.conc_G_lut,
-                    self.conc_n_lut,
-                    self.conc_logc_lut,
-                    rhs_,
-                    ns_,
-                )
-            )
+        interp = RectBivariateSpline(self.conc_G_lut, self.conc_n_lut, self.conc_logc_lut)
+        cbar = np.power(10, interp(rhs, neff, grid=False))
         c = cbar * C
         return np.squeeze(c)
 

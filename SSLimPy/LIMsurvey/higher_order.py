@@ -506,91 +506,23 @@ def TrispectrumL0(
     # Compute over all permutations of the 1113 diagrams
     if not any_close_to_zero([k2, k3, k4], atol=1e-12):
         Z31 = vZ3(
-            Lmb1,
-            Lmb2,
-            LmbG2,
-            Lmb3,
-            LmbdG2,
-            LmbG3,
-            LmbDG2,
-            f,
-            k2,
-            mu2,
-            ph2,
-            k3,
-            mu3,
-            ph3,
-            k4,
-            mu4,
-            ph4,
-        )
-        T2 += 6 * Z31 * vP[1] * vP[2] * vP[3]
+            Lmb1,Lmb2,LmbG2,Lmb3,LmbdG2,LmbG3,LmbDG2,f,k2,mu2,ph2,k3,mu3,ph3,k4,mu4,ph4)
+        T2 += 6 * Z31 * Z12 * Z13 * Z14 * vP[1] * vP[2] * vP[3]
 
     if not any_close_to_zero([k3, k4, k1], atol=1e-12):
         Z32 = vZ3(
-            Lmb1,
-            Lmb2,
-            LmbG2,
-            Lmb3,
-            LmbdG2,
-            LmbG3,
-            LmbDG2,
-            f,
-            k3,
-            mu3,
-            ph3,
-            k4,
-            mu4,
-            ph4,
-            k1,
-            mu1,
-            ph1,
-        )
-        T2 += 6 * Z32 * vP[0] * vP[2] * vP[3]
+            Lmb1,Lmb2,LmbG2,Lmb3,LmbdG2,LmbG3,LmbDG2,f,k3,mu3,ph3,k4,mu4,ph4,k1,mu1,ph1)
+        T2 += 6 * Z32 * Z11 * Z13 * Z14 * vP[0] * vP[2] * vP[3]
 
     if not any_close_to_zero([k4, k1, k2], atol=1e-12):
         Z33 = vZ3(
-            Lmb1,
-            Lmb2,
-            LmbG2,
-            Lmb3,
-            LmbdG2,
-            LmbG3,
-            LmbDG2,
-            f,
-            k4,
-            mu4,
-            ph4,
-            k1,
-            mu1,
-            ph1,
-            k2,
-            mu2,
-            ph2,
-        )
-        T2 += 6 * Z33 * vP[0] * vP[1] * vP[3]
+            Lmb1,Lmb2,LmbG2,Lmb3,LmbdG2,LmbG3,LmbDG2,f,k4,mu4,ph4,k1,mu1,ph1,k2,mu2,ph2)
+        T2 += 6 * Z33 * Z11 * Z12* Z14 * vP[0] * vP[1] * vP[3]
 
     if not any_close_to_zero([k1, k2, k3], atol=1e-12):
         Z34 = vZ3(
-            Lmb1,
-            Lmb2,
-            LmbG2,
-            Lmb3,
-            LmbdG2,
-            LmbG3,
-            LmbDG2,
-            f,
-            k1,
-            mu1,
-            ph1,
-            k2,
-            mu2,
-            ph2,
-            k3,
-            mu3,
-            ph3,
-        )
-        T2 += 6 * Z34 * vP[0] * vP[1] * vP[2]
+            Lmb1,Lmb2,LmbG2,Lmb3,LmbdG2,LmbG3,LmbDG2,f,k1,mu1,ph1,k2,mu2,ph2,k3,mu3,ph3)
+        T2 += 6 * Z34 * Z11 * Z12* Z13 * vP[0] * vP[1] * vP[2]
 
     if np.isnan(T1) or np.isnan(T2):
         print(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid, Pgrid)

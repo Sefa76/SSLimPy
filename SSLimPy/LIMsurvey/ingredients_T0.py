@@ -11,19 +11,20 @@ Log = np.log
 
 # 4 Halo terms
 def T3111_kernel(k1, k2, b1k1, b1k2, b2k2, bG2k2, b3k2, bdG2k2, bG3k2, bDG2k2):
+    Logq = Log(((k1 - k2)/(k1 + k2)).to(1).value**2)
     return (Power(b1k1,2)*b1k2*(3264*b2k2*Power(k1,5)*Power(k2,3) +
        1008*b3k2*Power(k1,5)*Power(k2,3) - 2688*bdG2k2*Power(k1,5)*Power(k2,3) -
        1344*bG3k2*Power(k1,3)*k2*(2*Power(k1,4) - 3*Power(k1,2)*Power(k2,2) +
           Power(k2,4)) + 168*bG2k2*Power(k1,2)*Power(k2,2)*
         (-4*(7*Power(k1,3)*k2 + 3*k1*Power(k2,3)) -
-          3*Power(Power(k1,2) - Power(k2,2),2)*(Log(Power(k1 - k2,2)) - 2*Log(k1 + k2)))\
+          3*Power(Power(k1,2) - Power(k2,2),2)*Logq)
         + bDG2k2*(48*k1*k2*(Power(k1,2) + Power(k2,2))*
            (3*Power(k1,4) - 14*Power(k1,2)*Power(k2,2) + 3*Power(k2,4)) +
-          36*Power(Power(k1,2) - Power(k2,2),4)*(Log(Power(k1 - k2,2)) - 2*Log(k1 + k2)))
+          36*Power(Power(k1,2) - Power(k2,2),4)*Logq)
          + b1k2*(4*k1*k2*(-21*Power(k1,6) + 50*Power(k1,4)*Power(k2,2) -
              79*Power(k1,2)*Power(k2,4) + 6*Power(k2,6)) -
           3*Power(Power(k1,2) - Power(k2,2),3)*(7*Power(k1,2) + 2*Power(k2,2))*
-           (Log(Power(k1 - k2,2)) - 2*Log(k1 + k2)))))/(6048.*Power(k1,5)*Power(k2,3))
+           Logq)))/(6048.*Power(k1,5)*Power(k2,3))
 
 def T3111_s_k2ok1(k1, k2, b1k1, b1k2, b2k2, bG2k2, b3k2, bdG2k2, bG3k2, bDG2k2):
     eps = k2/k1
@@ -123,63 +124,55 @@ def T2211_X_kernel(k1, k2, b1k1, b2k1, bG2k1, b1k2, b2k2, bG2k2, an):
     k1 = np.asarray(k1, dtype=complex)
     k2 = np.asarray(k2, dtype=complex)
 
-    return(b1k1*b1k2 * (-7*(-2 + an)*(6 + an)*b1k1*b2k2*np.power(k1,2)*
-        (np.power(k1 + k2,1 + an)*(-((8 + 7*an)*np.power(k1,3)) +
-             (1 + an)*(8 + 7*an)*np.power(k1,2)*k2 - 20*(1 + an)*k1*np.power(k2,2) +
-             20*np.power(k2,3)) + (k1 - k2)*
-           ((8 + 7*an)*np.power(k1,3) + (1 + an)*(8 + 7*an)*np.power(k1,2)*k2 +
-             20*(1 + an)*k1*np.power(k2,2) + 20*np.power(k2,3))*np.power(np.abs(k1 - k2),an)) -
-       7*(-2 + an)*(6 + an)*b1k2*b2k1*np.power(k2,2)*
-        (np.power(k1 + k2,1 + an)*(20*np.power(k1,3) - 20*(1 + an)*np.power(k1,2)*k2 +
-             (1 + an)*(8 + 7*an)*k1*np.power(k2,2) - (8 + 7*an)*np.power(k2,3)) -
-          (k1 - k2)*(20*np.power(k1,3) + 20*(1 + an)*np.power(k1,2)*k2 +
-             (1 + an)*(8 + 7*an)*k1*np.power(k2,2) + (8 + 7*an)*np.power(k2,3))*
-           np.power(np.abs(k1 - k2),an)) +
-       28*b1k1*bG2k2*(np.power(k1 + k2,1 + an)*
-           (3*(2 + 7*an)*np.power(k1,5) - 3*(1 + an)*(2 + 7*an)*np.power(k1,4)*k2 +
-             (1 + an)*(42 + an*(9 + 7*an))*np.power(k1,3)*np.power(k2,2) -
-             (1 + an)*(42 + 47*an)*np.power(k1,2)*np.power(k2,3) +
-             120*(1 + an)*k1*np.power(k2,4) - 120*np.power(k2,5)) -
-          (k1 - k2)*(3*(2 + 7*an)*np.power(k1,5) + 3*(1 + an)*(2 + 7*an)*np.power(k1,4)*k2 +
-             (1 + an)*(42 + an*(9 + 7*an))*np.power(k1,3)*np.power(k2,2) +
-             (1 + an)*(42 + 47*an)*np.power(k1,2)*np.power(k2,3) +
-             120*(1 + an)*k1*np.power(k2,4) + 120*np.power(k2,5))*np.power(np.abs(k1 - k2),an)) +
-       b1k2*bG2k1*(-28*np.power(k1 + k2,1 + an)*
-           (120*np.power(k1,5) - 120*(1 + an)*np.power(k1,4)*k2 +
-             (1 + an)*(42 + 47*an)*np.power(k1,3)*np.power(k2,2) -
-             (1 + an)*(42 + an*(9 + 7*an))*np.power(k1,2)*np.power(k2,3) +
-             3*(1 + an)*(2 + 7*an)*k1*np.power(k2,4) - 3*(2 + 7*an)*np.power(k2,5)) +
-          28*(k1 - k2)*(120*np.power(k1,5) + 120*(1 + an)*np.power(k1,4)*k2 +
-             (1 + an)*(42 + 47*an)*np.power(k1,3)*np.power(k2,2) +
-             (1 + an)*(42 + an*(9 + 7*an))*np.power(k1,2)*np.power(k2,3) +
-             3*(1 + an)*(2 + 7*an)*k1*np.power(k2,4) + 3*(2 + 7*an)*np.power(k2,5))*
-           np.power(np.abs(k1 - k2),an)) +
-       b1k1*b1k2*(-(np.power(k1 + k2,an)*
-             (60*(2 + 7*an)*np.power(k1,6) - 60*an*(2 + 7*an)*np.power(k1,5)*k2 +
-               (-120 + an*(676 + an*(250 + 189*an)))*np.power(k1,4)*np.power(k2,2) -
-               an*(-80 + an*(816 + 7*an*(30 + 7*an)))*np.power(k1,3)*np.power(k2,3) +
-               (-120 + an*(676 + an*(250 + 189*an)))*np.power(k1,2)*np.power(k2,4) -
-               60*an*(2 + 7*an)*k1*np.power(k2,5) + 60*(2 + 7*an)*np.power(k2,6))) +
-          (60*(2 + 7*an)*np.power(k1,6) + 60*an*(2 + 7*an)*np.power(k1,5)*k2 +
-             (-120 + an*(676 + an*(250 + 189*an)))*np.power(k1,4)*np.power(k2,2) +
-             an*(-80 + an*(816 + 7*an*(30 + 7*an)))*np.power(k1,3)*np.power(k2,3) +
-             (-120 + an*(676 + an*(250 + 189*an)))*np.power(k1,2)*np.power(k2,4) +
-             60*an*(2 + 7*an)*k1*np.power(k2,5) + 60*(2 + 7*an)*np.power(k2,6))*
-           np.power(np.abs(k1 - k2),an)) +
-       49*(-2 + an)*an*(4 + an)*(6 + an)*b2k1*b2k2*np.power(k1,2)*np.power(k2,2)*
-        (np.power(k1 + k2,2 + an) - np.power(np.abs(k1 - k2),2 + an)) -
-       196*(-2 + an)*(6 + an)*b2k2*bG2k1*np.power(k1,2)*
-        (-(np.power(k1 + k2,2 + an)*(np.power(k1,2) - (2 + an)*k1*k2 + np.power(k2,2))) +
-          (np.power(k1,2) + (2 + an)*k1*k2 + np.power(k2,2))*np.power(np.abs(k1 - k2),2 + an)) -
-       196*(-2 + an)*(6 + an)*b2k1*bG2k2*np.power(k2,2)*
-        (-(np.power(k1 + k2,2 + an)*(np.power(k1,2) - (2 + an)*k1*k2 + np.power(k2,2))) +
-          (np.power(k1,2) + (2 + an)*k1*k2 + np.power(k2,2))*np.power(np.abs(k1 - k2),2 + an)) +
-       1568*bG2k1*bG2k2*(np.power(k1 + k2,2 + an)*
-           (3*np.power(k1,4) - 3*(2 + an)*np.power(k1,3)*k2 +
-             (6 + an*(4 + an))*np.power(k1,2)*np.power(k2,2) - 3*(2 + an)*k1*np.power(k2,3) +
-             3*np.power(k2,4)) - (3*np.power(k1,4) + 3*(2 + an)*np.power(k1,3)*k2 +
-             (6 + an*(4 + an))*np.power(k1,2)*np.power(k2,2) + 3*(2 + an)*k1*np.power(k2,3) +
-             3*np.power(k2,4))*np.power(np.abs(k1 - k2),2 + an))))/(392.*(-2 + an)*an*(2 + an)*(4 + an)*(6 + an)*np.power(k1,3)*np.power(k2,3))
+    return -(
+        b1k1*b1k2*(
+            49*(2 - an)*an*(4 + an)*(6 + an)*b2k1*b2k2*Power(k1,2)*Power(k2,2)
+            *(Power(k1 + k2,2 + an) - Power(k1 - k2,2)*Power(Abs(k1 - k2),an))
+            + 196*(2 - an)*(6 + an)*b2k2*bG2k1*Power(k1,2)*(Power(k1 + k2,2 + an)*(Power(k1,2) - (2 + an)*k1*k2 + Power(k2,2))- 
+           Power(k1 - k2,2)*(Power(k1,2) + (2 + an)*k1*k2 + Power(k2,2))*Power(Abs(k1 - k2),an))
+           + 196*(2 - an)*(6 + an)*b2k1*bG2k2*Power(k2,2)*(Power(k1 + k2,2 + an)*(Power(k1,2) - (2 + an)*k1*k2 + Power(k2,2)) - 
+           Power(k1 - k2,2)*(Power(k1,2) + (2 + an)*k1*k2 + Power(k2,2))*Power(Abs(k1 - k2),an)) + 
+        7*(2 - an)*(6 + an)*b1k1*b2k2*Power(k1,2)*(Power(k1 + k2,1 + an)*
+            ((8 + 7*an)*Power(k1,3) - (8 + 15*an + 7*Power(an,2))*Power(k1,2)*k2 + 20*(1 + an)*k1*Power(k2,2) - 20*Power(k2,3)) - 
+           (k1 - k2)*((8 + 7*an)*Power(k1,3) + (8 + 15*an + 7*Power(an,2))*Power(k1,2)*k2 + 20*(1 + an)*k1*Power(k2,2) + 20*Power(k2,3))*Power(Abs(k1 - k2),an)) - 
+        7*(2 - an)*(6 + an)*b1k2*b2k1*Power(k2,2)*(Power(k1 + k2,1 + an)*
+            (20*Power(k1,3) - 20*(1 + an)*Power(k1,2)*k2 + (8 + 15*an + 7*Power(an,2))*k1*Power(k2,2) - (8 + 7*an)*Power(k2,3)) - 
+           (k1 - k2)*(20*Power(k1,3) + 20*(1 + an)*Power(k1,2)*k2 + (8 + 15*an + 7*Power(an,2))*k1*Power(k2,2) + (8 + 7*an)*Power(k2,3))*Power(Abs(k1 - k2),an)) - 
+        1568*bG2k1*bG2k2*(Power(k1 + k2,2 + an)*(3*Power(k1,4) - 3*(2 + an)*Power(k1,3)*k2 + (6 + 4*an + Power(an,2))*Power(k1,2)*Power(k2,2) - 
+              3*(2 + an)*k1*Power(k2,3) + 3*Power(k2,4)) - Power(k1 - k2,2)*
+            (3*Power(k1,4) + 3*(2 + an)*Power(k1,3)*k2 + (6 + 4*an + Power(an,2))*Power(k1,2)*Power(k2,2) + 3*(2 + an)*k1*Power(k2,3) + 3*Power(k2,4))*
+            Power(Abs(k1 - k2),an)) - 28*b1k1*bG2k2*(Power(k1 + k2,1 + an)*
+            (3*(2 + 7*an)*Power(k1,5) - 3*(2 + 9*an + 7*Power(an,2))*Power(k1,4)*k2 + (42 + 51*an + 16*Power(an,2) + 7*Power(an,3))*Power(k1,3)*Power(k2,2) - 
+              (42 + 89*an + 47*Power(an,2))*Power(k1,2)*Power(k2,3) + 120*(1 + an)*k1*Power(k2,4) - 120*Power(k2,5)) - 
+           (k1 - k2)*(3*(2 + 7*an)*Power(k1,5) + 3*(2 + 9*an + 7*Power(an,2))*Power(k1,4)*k2 + (42 + 51*an + 16*Power(an,2) + 7*Power(an,3))*Power(k1,3)*Power(k2,2) + 
+              (42 + 89*an + 47*Power(an,2))*Power(k1,2)*Power(k2,3) + 120*(1 + an)*k1*Power(k2,4) + 120*Power(k2,5))*Power(Abs(k1 - k2),an)) + 
+        28*b1k2*bG2k1*(Power(k1 + k2,1 + an)*(120*Power(k1,5) - 120*(1 + an)*Power(k1,4)*k2 + (42 + 89*an + 47*Power(an,2))*Power(k1,3)*Power(k2,2) - 
+              (42 + 51*an + 16*Power(an,2) + 7*Power(an,3))*Power(k1,2)*Power(k2,3) + 3*(2 + 9*an + 7*Power(an,2))*k1*Power(k2,4) - 3*(2 + 7*an)*Power(k2,5)) - 
+           (k1 - k2)*(120*Power(k1,5) + 120*(1 + an)*Power(k1,4)*k2 + (42 + 89*an + 47*Power(an,2))*Power(k1,3)*Power(k2,2) + 
+              (42 + 51*an + 16*Power(an,2) + 7*Power(an,3))*Power(k1,2)*Power(k2,3) + 3*(2 + 9*an + 7*Power(an,2))*k1*Power(k2,4) + 3*(2 + 7*an)*Power(k2,5))*
+            Power(Abs(k1 - k2),an))
+            + b1k1*b1k2*(
+                Power(k1 + k2,an)*(
+                    60*(2 + 7*an)*Power(k1,6)
+                    - 60*an*(2 + 7*an)*Power(k1,5)*k2
+                    + (-120 + 676*an + 250*Power(an,2) + 189*Power(an,3))*Power(k1,4)*Power(k2,2)
+                    - an*(-80 + 816*an + 210*Power(an,2) + 49*Power(an,3))*Power(k1,3)*Power(k2,3)
+                    + (-120 + 676*an + 250*Power(an,2) + 189*Power(an,3))*Power(k1,2)*Power(k2,4)
+                    - 60*an*(2 + 7*an)*k1*Power(k2,5)
+                    + 60*(2 + 7*an)*Power(k2,6)
+                    )
+                - Power(Abs(k1 - k2),an)*(
+                    60*(2 + 7*an)*Power(k1,6)
+                    + 60*an*(2 + 7*an)*Power(k1,5)*k2
+                    + (-120 + 676*an + 250*Power(an,2)+ 189*Power(an,3))*Power(k1,4)*Power(k2,2)
+                    + an*(-80 + 816*an + 210*Power(an,2) + 49*Power(an,3))*Power(k1,3)*Power(k2,3)
+                    + (-120 + 676*an + 250*Power(an,2) + 189*Power(an,3))*Power(k1,2)*Power(k2,4)
+                    + 60*an*(2 + 7*an)*k1*Power(k2,5)
+                    + 60*(2 + 7*an)*Power(k2,6)
+                    )
+                )
+            )
+        )/(392 * (-2 + an)*an*(2 + an)*(4 + an)*(6 + an)*Power(k1,3)*Power(k2,3))
 
 def T2211_X_s_k2ok1(k1, k2, b1k1, b2k1, bG2k1, b1k2, b2k2, bG2k2, an):
     k1 = np.asarray(k1, dtype=complex)
