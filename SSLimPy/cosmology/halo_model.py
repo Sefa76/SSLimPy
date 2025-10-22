@@ -34,9 +34,7 @@ class HaloModel:
 
         # Densities and collapse tracer
         self.tracer = self.haloparams["halo_tracer"]
-        self.rho_crit = 2.77536627e11 * (self.Msunh * self.Mpch**-3).to(
-            u.Msun * u.Mpc**-3
-        )
+        self.rho_crit = 2.77536627e11 * (self.Msunh * self.Mpch**-3)
         self.rho_tracer = self.rho_crit * self.cosmology.Omega(0, tracer=self.tracer)
 
         # Internal grids
@@ -296,6 +294,14 @@ class HaloModel:
                 self._compute_sigma(R, z, sigma_integrand, tracer=tracer, moment=0.0)
             )
 
+    def lagrangianR(self, M, tracer="matter"):
+        """Lagrangian radius of a halo as a function of Mass.
+        Conversion is independent of mass definition but the result is.
+        """
+        rho = self.rho_crit * self.cosmology.Omega(0.0, tracer)
+        R = (3 * M.to(self.Msunh) / (4 * np.pi * rho))**(1/3)
+        return R
+
     def sigma8_of_z(self, z, tracer="matter"):
         """Cosmological quantity known as sigma8.
         Will have a slight missmatch with the input sigma8 because
@@ -358,8 +364,7 @@ class HaloModel:
         """
         Mass (or CDM+baryon) variance at target redshift as a function of collapsed Mass
         """
-        rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
-        R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
+        R = self.lagrangianR(M, tracer)
 
         return self.sigmaR_of_z(R, z, tracer)
 
@@ -369,8 +374,7 @@ class HaloModel:
         """
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
-        rhoM = self.rho_crit * self.cosmology.Omega(0, tracer)
-        R = (3.0 * M / (4.0 * np.pi * rhoM)) ** (1.0 / 3.0)
+        R = self.lagrangianR(M, tracer)
 
         np.reshape(self.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape)).unit
         dsigma = (
@@ -464,9 +468,7 @@ class HaloModel:
         b1 = 1.82
         ca = 0.2
 
-        rho = self.rho_crit * self.cosmology.Omega(0.0, tracer=self.tracer)
-        R = (3.0 * M / (4.0 * np.pi * rho)) ** (1.0 / 3.0)
-        R = R.to(u.Mpc)
+        R = self.lagrangianR(M, self.tracer).to(u.Mpc)
 
         nu = self.delta_crit / np.reshape(
             self.sigmaR_of_z(R, z, tracer=self.tracer),
