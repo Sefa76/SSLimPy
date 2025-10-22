@@ -254,28 +254,36 @@ class HaloModel:
         zs = np.atleast_1d(z).shape
         logR = np.log(np.atleast_1d(R).flatten().to(u.Mpc).value)
         z = np.atleast_1d(z).flatten().astype(float)
-        vlogR = np.repeat(logR, len(z))
-        vz = np.tile(z, len(logR))
 
         mlogR = np.log(self.R.to(u.Mpc).value)
         mz = self.z
+
+        # Create 2D mesh for interpolation
+        RR, ZZ = np.meshgrid(logR, z, indexing="ij")
+
+        # Interpolation mask: only values within LUT bounds
+        mask_R = (RR >= np.min(mlogR)) & (RR <= np.max(mlogR))
+        mask_z = (ZZ >= np.min(mz)) & (ZZ <= np.max(mz))
+        mask = mask_R & mask_z
+
         result = dict()
         if "sigma" in output or "both" in output:
-            sigma = np.exp(
-                bilinear_interpolate(mlogR, mz, np.log(self.sigmaR_lut), vlogR, vz)
-            )
+            sigma = np.empty((*logR.shape, *z.shape))
+            sigma_interp = RectBivariateSpline(mlogR, mz, np.log(self.sigmaR_lut))(RR[mask], ZZ[mask], grid=False)
+            sigma[mask] = np.exp(sigma_interp)
+
+            sigma_extrap = bilinear_interpolate(mlogR, mz, np.log(self.sigmaR_lut), RR[~mask], ZZ[~mask])
+            sigma[~mask] = np.exp(sigma_extrap)
             result["sigma"] = np.reshape(sigma, (*Rs, *zs))
 
         if "dsigma" in output or "both" in output:
-            dsigma = (
-                -np.exp(
-                    bilinear_interpolate(
-                        mlogR, mz, np.log(-self.dsigmaR_lut), vlogR, vz
-                    )
-                )
-                * u.Mpc**-1
-            )
-            result["dsigma"] = np.reshape(dsigma, (*Rs, *zs))
+            dsigma = np.empty((*logR.shape, *z.shape))
+            dsigma_interp = RectBivariateSpline(mlogR, mz, np.log(-self.dsigmaR_lut))(RR[mask], ZZ[mask], grid=False)
+            dsigma[mask] = -np.exp(dsigma_interp)
+
+            dsigma_extrap = bilinear_interpolate(mlogR, mz, np.log(-self.dsigmaR_lut), RR[~mask], ZZ[~mask])
+            dsigma[~mask] = -np.exp(dsigma_extrap)
+            result["dsigma"] = np.reshape(dsigma, (*Rs, *zs)) * u.Mpc**-1
         return result
 
     def sigmaR_of_z(self, R, z, tracer="matter"):
