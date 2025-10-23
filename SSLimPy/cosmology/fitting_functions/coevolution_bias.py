@@ -17,65 +17,14 @@ class coevolution_bias(bias_fitting_functions):
 
     def __init__(self, halomodel):
         super().__init__(halomodel)
-        self.p = self.bias_par.get("HO_p", 0.3)
-        self.alpha = self.bias_par.get("HO_alpha", 0.707)
-        self.A = self.bias_par.get("HO_A", 0.3222)
-
-    def set_model(self, p, alpha, A=None):
-        self.p = p
-        self.alpha = alpha
-
-        if A is not None:
-            self.A = A
-        else:
-            Xi = np.geomspace(1e-12, 1e3, num=2000)  # Eh... its good enough
-            F = self.unnorm_collapsefunction(Xi)
-            self.A = 1 / np.trapz(F, np.log(Xi))
-
-    ###########################
-    # Base Halo Mass Function #
-    ###########################
-    # Underlying halo mass function to compute b1, b2, b3 from. Assumes spherical collapse
-
-    def unnorm_collapsefunction(self, Xi):
-        """Universal function for the collapsed matter appearing in spherical collapse models
-        This function should used to normalize the actual function (i.E find the value for A)
-        Xi is nu^2 from the rest of this function package.
-        """
-        F = (
-            (1 + 1 / (self.alpha * Xi) ** self.p)
-            * np.sqrt(self.alpha * Xi / (2 * np.pi))
-            * np.exp(-self.alpha * Xi / 2)
-        )
-        return F
-
-    def sc_hmf(self, M, z, dc):
-        M = np.atleast_1d(M)
-        z = np.atleast_1d(z)
-
-        nu = np.reshape(dc / self.sigmaM(M, z), (*M.shape, *z.shape))
-
-        sigmaM = np.reshape(self.sigmaM(M, z), (*M.shape, *z.shape))
-        dsigmaM_dM = np.reshape(
-            self.dsigmaM_dM(M, z).to(self.halomodel.Msunh**-1), (*M.shape, *z.shape)
-        )
-        dlogsigmaM_dM = dsigmaM_dM / sigmaM
-
-        rho_over_M = self.halomodel.rho_tracer / M[:, None]
-
-        dndM = (
-            -2
-            * self.A
-            * rho_over_M
-            * dlogsigmaM_dM
-            * self.unnorm_collapsefunction(nu**2)
-        )
-        return dndM.to(u.Msun**-1 * u.Mpc**-3)
+        self._alpha = self.bias_par.get("SMT_alpha", 0.707)
+        self._b = self.bias_par.get("SMTb", 0.5)
+        self._c = self.bias_par.get("SMTc", 0.6)
 
     ##############
     # Local Bias #
     ##############
-    # Obtained from completeness relations
+    # Obtained from Lazeyras, T. et al. (2016)
 
     def b0(self, M, z, dc):
         """dummy function
@@ -83,44 +32,29 @@ class coevolution_bias(bias_fitting_functions):
         return np.ones_like(M.value)
 
     def b1(self, M, z, dc):
-        nu = dc / self.sigmaM(M, z)
-
-        eps1 = (self.alpha * nu**2 - 1) / dc
-        E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)
-        return 1 + eps1 + E1
+        anu2 = self._alpha * (dc / self.sigmaM(M, z))**2
+        b1 = (
+            1 / (np.sqrt(self._alpha) * dc)
+            * (
+                np.sqrt(self._alpha) * (anu2)
+                + np.sqrt(self._alpha) * self._b * anu2**(1- self._c)
+                - anu2**self._c / (
+                    anu2**self._c
+                    + self._b * (1 - self._c) * (1 - self._c / 2)
+                )
+            )
+        )
+        return 1 + b1
 
     def b2(self, M, z, dc):
-        nu = dc / self.sigmaM(M, z)
-
-        eps1 = (self.alpha * nu**2 - 1) / dc
-        E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)
-        eps2 = self.alpha * nu**2 / dc**2 * (self.alpha * nu**2 - 3)
-        E2 = ((1 + 2 * self.p) / dc + 2 * eps1) * E1
-        return 2 * (1 - 17 / 21) * (eps1 + E1) + eps2 + E2
+        b1 = self.b1(M, z, dc)
+        b2 = 0.412 - 2.143 * b1 + 0.929 * b1**2 + 0.008 * b1**3
+        return b2
 
     def b3(self, M, z, dc):
-        nu = dc / self.sigmaM(M, z)
-
-        eps1 = (self.alpha * nu**2 - 1) / dc
-        E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)
-        eps2 = self.alpha * nu**2 / dc**2 * (self.alpha * nu**2 - 3)
-        E2 = ((1 + 2 * self.p) / dc + 2 * eps1) * E1
-        eps3 = (
-            self.alpha
-            * nu**2
-            / dc**3
-            * (self.alpha**2 * nu**4 - 6 * self.alpha * nu**2 + 3)
-        )
-        E3 = (
-            (4 * (self.p**2 - 1) + 6 * self.p * self.alpha * nu**2) / dc**2
-            + 3 * eps1**2
-        ) * E1
-        return (
-            6 * (-17 / 21 + 341 / 567) * (eps1 + E1)
-            + 3 * (1 + 2 * 341 / 567) * (eps2 + E2)
-            + eps3
-            + E3
-        )
+        b1 = self.b1(M, z, dc)
+        b3 = -1.028 + 7.646 * b1 - 6.227 * b1**2 + 0.912 * b1**3
+        return b3
 
     ##################
     # Non-Local Bias #

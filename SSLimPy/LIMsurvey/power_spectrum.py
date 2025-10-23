@@ -19,7 +19,7 @@ class PowerSpectra:
         self.cfg = self.cosmology.cfg
         self.halomodel = astro.halomodel
         # Nu enters into the Mass-Luminosity and Luminosity-Temperature relations
-        self.survey_specs = astro.survey_specs 
+        self.survey_specs = astro.survey_specs
         self.astro = astro
 
         self.BAOpars = copy(BAOpars)
@@ -107,7 +107,7 @@ class PowerSpectra:
 
     def dewiggled_pdd(self, k, mu, z, BAOpars=dict()):
         """ "
-        Calculates the normalized dewiggled powerspectrum
+        Calculates the dewiggled powerspectrum
 
         Args:
         z : float
@@ -243,18 +243,13 @@ class PowerSpectra:
             else:
                 Tmean = restore_shape(self.astro.Thalo(z, k, mu, p=1), k, mu, z)
 
-            Biasterm = (
-                bmean[:, None, :]
-                * Tmean
-                * np.atleast_1d(self.halomodel.sigma8_of_z(z, tracer=self.tracer))[
-                    None, None, :
-                ]
-            )
+            Biasterm = bmean[:, None, :] * Tmean
         else:
-            Biasterm = (
-                restore_shape(self.astro.Thalo(z, k, mu, p=1, scale=(1,), beta=1), k, mu, z)
-                * np.reshape(self.halomodel.sigma8_of_z(z, tracer=self.tracer), z.shape)[None, None, :]
+            Biasterm = restore_shape(
+                self.astro.Thalo(z, k, mu, p=1, scale=(1,), beta=1),
+                k, mu, z,
             )
+
         return np.squeeze(Biasterm)
 
     def f_term(self, k, mu, z, BAOpars=dict()):
@@ -273,10 +268,11 @@ class PowerSpectra:
         else:
             Tmean = restore_shape(self.astro.Thalo(z, k, mu, p=1), k, mu, z)
 
-        fs8 = np.reshape(
-            self.halomodel.fsigma8_of_z(k, z, tracer=self.tracer), (*k.shape, *z.shape)
+        f = np.reshape(
+            self.cosmology.growth_rate(k, z, tracer=self.tracer),
+            (*k.shape, *z.shape),
         )
-        Kaiser_RSD = Tmean * fs8[:, None, :] * np.power(mu, 2)[None, :, None]
+        Kaiser_RSD = Tmean * f[:, None, :] * np.power(mu, 2)[None, :, None]
         return np.squeeze(Kaiser_RSD)
 
     def Kaiser_Term(self, k, mu, z, BAOpars=dict()):
@@ -322,6 +318,7 @@ class PowerSpectra:
             sp = sigmap * f_scaleindependent
         else:
             sp = np.atleast_1d(halomodel.sigmaV_of_z(z, moment=2))
+
         FoG_damp = self.cfg.settings["FoG_damp"]
         if FoG_damp == "Lorentzian":
             FoG = np.power(
@@ -413,7 +410,7 @@ class PowerSpectra:
                 Ps = restore_shape(self.astro.Thalo(z, k, mu,p=1, scale=(2,)), k, mu, z)
             else:
                 Ps = self.astro.Tavg(z, p=2)[None, None, :]
-        
+
         if self.halomodel.haloparams["onehalo_damping"]:
             Ps = Ps * np.reshape(
                 self.halomodel.one_halo_dampening(k, z),
@@ -454,9 +451,7 @@ class PowerSpectra:
             # Obtain redshiftspace distortions
             rsd = restore_shape(
                 self.Kaiser_Term(k, mu, z, BAOpars=self.BAOpars),
-                k,
-                mu,
-                z,
+                k, mu, z,
             )
             if self.cfg.settings["nonlinearRSD"]:
                 rsd = rsd * np.reshape(
@@ -467,9 +462,7 @@ class PowerSpectra:
             rsd = np.power(
                 restore_shape(
                 self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),
-                k,
-                mu,
-                z,
+                k, mu, z,
             ),
             2)
 
