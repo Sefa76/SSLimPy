@@ -32,6 +32,8 @@ class coevolution_bias(bias_fitting_functions):
         return np.ones_like(M.value)
 
     def b1(self, M, z, dc):
+        """Sheth, Mo, Torman (2001)
+        """
         anu2 = self._alpha * (dc / self.sigmaM(M, z))**2
         b1 = (
             1 / (np.sqrt(self._alpha) * dc)
@@ -47,12 +49,22 @@ class coevolution_bias(bias_fitting_functions):
         return 1 + b1
 
     def b2(self, M, z, dc):
-        b1 = self.b1(M, z, dc)
+        """Schmidt et al. fitting formula for b_2
+        """
+        b1 = getattr(
+            self, self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
         b2 = 0.412 - 2.143 * b1 + 0.929 * b1**2 + 0.008 * b1**3
         return b2
 
     def b3(self, M, z, dc):
-        b1 = self.b1(M, z, dc)
+        """Schmidt et al. fitting formula for b_3
+        """
+        b1 = getattr(
+            self, self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
         b3 = -1.028 + 7.646 * b1 - 6.227 * b1**2 + 0.912 * b1**3
         return b3
 

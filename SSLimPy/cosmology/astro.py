@@ -234,13 +234,11 @@ class AstroFunctions:
             # Add L scatter
             Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)
             if "TonyLi" == self.model_name:
-                # LCO is nolonger conserved
-                Lpbar *= np.exp(0.5 * p * (self.sigma_scatter * log10) ** 2)
 
                 alpha = self.model_par["alpha"]
                 sig_SFR = self.model_par["sig_SFR"]
                 # SFR scatter
-                Lpbar *= np.exp(0.5 * p * (p - 1) * (sig_SFR / alpha * log10) ** 2)
+                Lpbar *= np.exp(0.5 * p/alpha * (p/alpha - 1) * (sig_SFR * log10) ** 2)
         else:
             L = self.L
             haloluminosity = np.reshape(
@@ -251,7 +249,7 @@ class AstroFunctions:
                 L[:, None] ** (p + 1) * haloluminosity, np.log(L.value), axis=0
             )
 
-        return Lpbar * self.fduty
+        return (Lpbar * self.fduty).to(u.uK**p)
 
     def Tavg(self, z, p=1):
         return self.CLT(z) ** p * self.Lavg(z, p=p)

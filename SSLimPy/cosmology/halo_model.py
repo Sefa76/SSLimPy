@@ -456,7 +456,7 @@ class HaloModel:
 
         return np.squeeze(dndM).to(u.Mpc**-3 * u.Msun**-1)
 
-    def concentration(self, M, z):
+    def concentration_Diemer(self, M, z):
         """Halo concentration red from look up table using log extrapolation in M"""
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
@@ -509,6 +509,22 @@ class HaloModel:
         c = 5.196 * (1 + zf) / (1 + z[None, :])
         return np.squeeze(c)
 
+    def concentration_Duffy(self, M, z):
+        M = np.atleast_1d(M)
+        z = np.atleast_1d(z)
+
+        A = 7.85
+        alpha = -0.081
+        beta = -0.71
+
+        c = A * (M[:, None].to(1e12 * self.Msunh).value)**alpha * (1 + z[None, :])**beta
+        return np.squeeze(c)
+
+    def concentration(self, M, z):
+        """Code default
+        """
+        return self.concentration_Diemer(M, z)
+
     def one_halo_dampening(self, k, z):
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
@@ -538,7 +554,9 @@ class HaloModel:
         if self.haloparams["concentration"] == "Bullock01":
             c = np.reshape(self.concentration_Bullock(M, z), (*M.shape, *z.shape))[None, :, :]
         elif self.haloparams["concentration"] == "Diemer19":
-            c = np.reshape(self.concentration(M, z), (*M.shape, *z.shape))[None, :, :]
+            c = np.reshape(self.concentration_Diemer(M, z), (*M.shape, *z.shape))[None, :, :]
+        elif self.haloparams["concentration"] == "Duffy08":
+            c = np.reshape(self.concentration_Duffy(M, z), (*M.shape, *z.shape))[None, :, :]
         else:
             raise ValueError("Concentraion relation not found")
         r_s = R_NFW[None, :, None] / c

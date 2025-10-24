@@ -362,6 +362,8 @@ class SuperSampleCovariance:
         return np.squeeze(sigma2 / V)
 
     def halo_sample_variance(self, k, z):
+        """The standard  result for halo sample variance
+        """
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
@@ -369,47 +371,45 @@ class SuperSampleCovariance:
 
         return b1_L2
 
-    def linear_dilation(self, k , z):
+    def linear_growth_response(self, k, z):
+        """Corresponds to P * C21 in Wadekar et al.
+        """
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        b1_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
+        Pk = np.reshape(self.cosmology.matpow(k, z), (*k.shape, *z.shape))
+        Delta = 4 * np.pi / (2 * np.pi)**3 * k**3 * Pk
+        gamma = []
+        for iz, zi in enumerate(z):
+            gamma.append(
+                UnivariateSpline(np.log(k.value), np.log(Delta[:, iz].to(1).value)).derivative(1)(np.log(k.value))
+            )
+        gamma = np.array(gamma).T
 
-        Pk = np.reshape(self.cosmology.matpow(self.kgrid, z, nonlinear=False, tracer=self.halomodel.tracer),
-                        (*self.kgrid.shape, *z.shape))
+        b1_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta=1), (*k.shape, *z.shape))
+        return b1_L1**2 * Pk * (68 / 21 - gamma / 3) 
 
-        logDeltam = np.log((self.kgrid[:,None]**3*Pk).to(1).value)
-        neff = np.empty((*k.shape, *z.shape))
-        for iz in range(len(z)):
-            neff[:, iz] = UnivariateSpline(np.log(self.kgrid.to(k.unit).value), logDeltam[:, iz]).derivative(1)(np.log(k.value))
-
-        linear_dilation = -neff / 3 * b1_L1**2
-        return linear_dilation
-
-    def beat_coupling(self, k, z):
+    def biased_clustering_response(self, k, z):
+        """Corresponds to the spherical average second order bias 
+        """
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        b1_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b1"), (*k.shape, *z.shape))
+        Pk = np.reshape(self.cosmology.matpow(k, z), (*k.shape, *z.shape))
+
+        b1_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta=1), (*k.shape, *z.shape))
         b2_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2"), (*k.shape, *z.shape))
         bG2_L1 = np.reshape(self.astro.Thalo(z, k, p=1, scale=(1,), beta="bG2"), (*k.shape, *z.shape))
-
-        local_secondorder_bias = b2_L1 - 4 / 3 * bG2_L1
-
-        beat_coupling = (68 / 21 * b1_L1**2 + 2 * b1_L1 * local_secondorder_bias)
-        return beat_coupling
+        bsph = b2_L1 - 4 / 3 * bG2_L1
+        return b1_L1 * bsph * Pk
 
     def response(self, k, z):
-        k = np.atleast_1d(k)
-        z = np.atleast_1d(z)
-
-        Pk = np.reshape(self.cosmology.matpow(k, z, nonlinear=False, tracer=self.halomodel.tracer),
-                        (*k.shape, *z.shape))
-
-        beat_coupling = np.reshape(self.beat_coupling(k, z), (*k.shape, *z.shape))
-        linear_dilation = np.reshape(self.linear_dilation(k, z), (*k.shape, *z.shape))
-        halo_sample_variance = np.reshape(self.halo_sample_variance(k, z), (*k.shape, *z.shape))
-        return (beat_coupling + linear_dilation) * Pk + halo_sample_variance
+        response = (
+            self.linear_growth_response(k, z)
+            + self.biased_clustering_response(k, z)
+            + self.halo_sample_variance(k, z)
+        )
+        return response 
 
     def compute_SSC(self):
         k = self.k
