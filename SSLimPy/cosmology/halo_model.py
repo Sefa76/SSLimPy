@@ -34,7 +34,7 @@ class HaloModel:
 
         # Densities and collapse tracer
         self.tracer = self.haloparams["halo_tracer"]
-        self.rho_crit = 2.77536627e11 * (self.Msunh * self.Mpch**-3)
+        self.rho_crit = 2.77536627e11 * (self.Msunh * self.Mpch**-3).to(u.Mpc**-3 * u.Msun)
         self.rho_tracer = self.rho_crit * self.cosmology.Omega(0, tracer=self.tracer)
 
         # Internal grids
@@ -115,7 +115,7 @@ class HaloModel:
         Create the sigmaR, dsigmaR look up table used to obtain quantities on interpolated grid
         """
         # Unitless linear power spectrum
-        R = self.R
+        R = self.R.to(u.Mpc)
         z = self.z
         kinter = self.k.to(u.Mpc**-1)
         Dkinter = (
@@ -299,8 +299,8 @@ class HaloModel:
         Conversion is independent of mass definition but the result is.
         """
         rho = self.rho_crit * self.cosmology.Omega(0.0, tracer)
-        R = (3 * M.to(self.Msunh) / (4 * np.pi * rho))**(1/3)
-        return R
+        R = (3 * M / (4 * np.pi * rho))**(1/3)
+        return R.to(u.Mpc)
 
     def sigma8_of_z(self, z, tracer="matter"):
         """Cosmological quantity known as sigma8.
@@ -350,6 +350,11 @@ class HaloModel:
         n_eff[n_eff > ns] = ns
         return n_eff
 
+    def neff_NL(self, z, delta_crit=1.686):
+        M_NL = self.mass_non_linear(z, delta_crit=delta_crit)
+        R_NL = np.power((3 * M_NL) / (4 * np.pi * self.rho_tracer), 1 / 3)
+        return np.squeeze(self.n_eff_of_z(R_NL, z, tracer=self.tracer))
+
     def sigmaV_of_z(self, z, tracer="matter", moment=0):
         """Real space variance of velocity dispercion field Theta."""
         R = np.atleast_1d(
@@ -376,7 +381,6 @@ class HaloModel:
         z = np.atleast_1d(z)
         R = self.lagrangianR(M, tracer)
 
-        np.reshape(self.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape)).unit
         dsigma = (
             np.reshape(self.dsigmaR_of_z(R, z, tracer), (*M.shape, *z.shape))
             * (R / (3 * M))[:, None]
@@ -385,12 +389,12 @@ class HaloModel:
 
     def mass_non_linear(self, z, delta_crit=1.686):
         """
-        Get (roughly) the mass corresponding to the nonlinear scale in units of Msun h
+        Get (roughly) the mass corresponding to the nonlinear scale.
         """
         sigmaM_z = self.sigmaM(self.M, z, self.tracer)
         mass_non_linear = self.M[np.argmin(np.power(sigmaM_z - delta_crit, 2), axis=0)]
 
-        return mass_non_linear.to(self.Msunh)
+        return mass_non_linear.to(u.Msun)
 
     def sigmav_broadening(self, M, z):
         """Computes the physical scale of the line broadening due to
@@ -443,18 +447,19 @@ class HaloModel:
         """
         This function is a wrapper to obtain the halo mass function with all correction and as a function of standard inputs
         """
-        M = np.atleast_1d(M).to(self.Msunh)
+        M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        rho_input = self.rho_tracer
-
-        dndM = np.reshape(self._dn_dM_of_M(M, rho_input, z), (*M.shape, *z.shape))
-
+        dndM = np.reshape(self._dn_dM_of_M(M, z), (*M.shape, *z.shape))
         if "f_NL" in self.cosmology.fullcosmoparams:
             Delta_HMF = np.reshape(self.Delta_HMF(M, z), (*M.shape, *z.shape))
             dndM *= 1 + Delta_HMF
 
-        return np.squeeze(dndM).to(u.Mpc**-3 * u.Msun**-1)
+        return np.squeeze(dndM)
+
+    #################################
+    # Halo concentraition relations #
+    #################################
 
     def concentration_Diemer(self, M, z):
         """Halo concentration red from look up table using log extrapolation in M"""
@@ -521,21 +526,9 @@ class HaloModel:
         return np.squeeze(c)
 
     def concentration(self, M, z):
-        """Code default
+        """Code default is concentration_Diemer
         """
         return self.concentration_Diemer(M, z)
-
-    def one_halo_dampening(self, k, z):
-        k = np.atleast_1d(k)
-        z = np.atleast_1d(z)
-
-        kstar = (
-            0.05618
-            * np.atleast_1d(self.sigma8_of_z(z, tracer=self.tracer))**-1.013
-            * self.Mpch**-1
-            )
-        x = (k[:, None] / kstar[None, :]).to(1).value
-        return np.squeeze(x**4/(1 + x**4))
 
     def ft_NFW(self, k, M, z):
         """
@@ -583,10 +576,17 @@ class HaloModel:
         )
         return np.squeeze(u_km / gc)
 
-    def neff_NL(self, z, delta_crit=1.686):
-        M_NL = self.mass_non_linear(z, delta_crit=delta_crit)
-        R_NL = np.power((3 * M_NL) / (4 * np.pi * self.rho_tracer), 1 / 3)
-        return np.squeeze(self.n_eff_of_z(R_NL, z, tracer=self.tracer))
+    def one_halo_dampening(self, k, z):
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        kstar = (
+            0.05618
+            * np.atleast_1d(self.sigma8_of_z(z, tracer=self.tracer))**-1.013
+            * self.Mpch**-1
+            )
+        x = (k[:, None] / kstar[None, :]).to(1).value
+        return np.squeeze(x**4/(1 + x**4))
 
     #########################################
     # f_NL corrections to HMF and halo bias #
@@ -804,7 +804,7 @@ class HaloModel:
         return b
 
     def bavg(self, beta, z, power, dc=None, k=None):
-        M = self.M.to(self.Msunh)
+        M = self.M.to(u.Msun)
         z = np.atleast_1d(z)
 
         M_over_rho = self.M[None, :, None] / self.rho_tracer

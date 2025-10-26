@@ -155,7 +155,7 @@ class AstroFunctions:
             dn_dM_of_M_and_z = np.reshape(
                 self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape)
             )
-            L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape))
+            L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape)).to(u.Lsun)
 
             flognorm = lognormal(
                 L[None, :, None],
@@ -222,7 +222,7 @@ class AstroFunctions:
         z = np.atleast_1d(z)
         if "ML" in self.model_type:
             log10 = np.log(10)
-            M = self.M
+            M = self.M.to(u.Msun)
             Lp = (
                 np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape)) ** p
             )
@@ -240,7 +240,7 @@ class AstroFunctions:
                 # SFR scatter
                 Lpbar *= np.exp(0.5 * p/alpha * (p/alpha - 1) * (sig_SFR * log10) ** 2)
         else:
-            L = self.L
+            L = self.L.to(u.Lsun)
             haloluminosity = np.reshape(
                 self.haloluminosityfunction(L, z),
                 (*L.shape, *z.shape),
@@ -249,7 +249,7 @@ class AstroFunctions:
                 L[:, None] ** (p + 1) * haloluminosity, np.log(L.value), axis=0
             )
 
-        return (Lpbar * self.fduty).to(u.uK**p)
+        return (Lpbar * self.fduty)
 
     def Tavg(self, z, p=1):
         return self.CLT(z) ** p * self.Lavg(z, p=p)
@@ -260,7 +260,7 @@ class AstroFunctions:
 
         Pass which bias you want as a string present in bias_coevolution
         """
-        M = self.M.to(self.Msunh)
+        M = self.M.to(u.Msun)
         z = np.atleast_1d(z)
 
         L_of_M = np.reshape(
@@ -277,10 +277,10 @@ class AstroFunctions:
             k, M, z
         )
 
-        logM = np.log(M.value)
+        logM = np.log(M.to(u.Msun).value)
 
         itgrnd1 = (
-            b * M[None, :, None]
+            b * M.to(u.Msun)[None, :, None]
             * L_of_M[None, :, :]**power * dndM[None, :, :]
         )
         bavg = np.trapz(itgrnd1, logM, axis=1)
