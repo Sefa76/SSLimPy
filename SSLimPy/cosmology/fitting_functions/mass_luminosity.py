@@ -229,8 +229,8 @@ class mass_luminosity:
 
         # Compute IR luminosity in Lsun
         LIR = SFR / (dMF * 1e-10)
-        logL = np.log10((LIR / u.Lsun).to(1).value)
 
+        logL = np.log10(LIR.to(u.Lsun).value)
         LCOprime = np.power(10, alpha**-1 * (logL - beta))# * u.K * u.km * u.s**-1 * u.pc**2
         J = (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)).to(1).value
 

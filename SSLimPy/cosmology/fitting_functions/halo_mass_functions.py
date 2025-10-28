@@ -37,7 +37,8 @@ class halo_mass_functions:
 
     def ST_nuf(self, sigma, z):
         """Sheth--Torman functon in natural units."""
-        nu = self.halomodel.delta_crit / sigma
+        dc = self.halomodel.delta_crit * self.halomodel.cosmology.Omega(z, "matter")**0.0055
+        nu = dc / sigma
 
         A = 0.3222
         a = 0.707
