@@ -74,13 +74,29 @@ class coevolution_bias(bias_fitting_functions):
     # Obtained from co-evolution of the Lagrangian bias expansion
 
     def bG2(self, M, z, dc):
-        return -2 / 7 * (self.b1(M, z, dc) - 1)
+        b1 = getattr(
+            self, self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        return -2 / 7 * (b1 - 1)
 
     def bG3(self, M, z, dc):
-        return -22 / 63 * (self.b1(M, z, dc) - 1)
+        b1 = getattr(
+            self, self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        return -22 / 63 * (b1 - 1)
 
     def bDG2(self, M, z, dc):
-        return 23 / 42 * (self.b1(M, z, dc) - 1)
+        b1 = getattr(
+            self, self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        return 23 / 42 * (b1 - 1)
 
     def bdG2(self, M, z, dc):
-        return -2 / 7 * 2 * (self.b2(M, z, dc) - 4 / 21 * self.b1(M, z, dc))
+        b1 = getattr(
+            self, self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        return -2 / 7 * 2 * (self.b2(M, z, dc) - 4 / 21 * b1)

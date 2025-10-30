@@ -377,12 +377,20 @@ class SuperSampleCovariance:
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        Pk = np.reshape(self.cosmology.matpow(k, z), (*k.shape, *z.shape))
-        Delta = 4 * np.pi / (2 * np.pi)**3 * k**3 * Pk
+        Pk = np.reshape(self.cosmology.matpow(k, z, self.power_spectrum.tracer), (*k.shape, *z.shape))
+        Delta = 4 * np.pi / (2 * np.pi)**3 * self.k[:, None]**3 * np.reshape(
+            self.cosmology.matpow(self.k, z, self.power_spectrum.tracer),
+            (*self.k.shape, *z.shape),
+        )
         gamma = []
         for iz, zi in enumerate(z):
             gamma.append(
-                UnivariateSpline(np.log(k.value), np.log(Delta[:, iz].to(1).value)).derivative(1)(np.log(k.value))
+                UnivariateSpline(
+                    np.log(self.k.value),
+                    np.log(Delta[:, iz].to(1).value),
+                ).derivative(1)(
+                    np.log(k.to(self.k.unit).value),
+                )
             )
         gamma = np.array(gamma).T
 
@@ -409,14 +417,17 @@ class SuperSampleCovariance:
             + self.biased_clustering_response(k, z)
             + self.halo_sample_variance(k, z)
         )
-        return response 
+        return np.squeeze(response) 
 
     def compute_SSC(self):
         k = self.k
         z = self.z
 
         V = np.atleast_1d(self.survey_specs.Vfield())
-        response = self.response(k, z)
+        response = np.reshape(
+            self.response(k, z),
+            (*k.shape, *z.shape),
+        )
         sigma = np.atleast_1d(self.sigma_survey())
 
         SSC = (sigma / V)[None, None, :] * response[:, None, :] * response[None, :, :]
