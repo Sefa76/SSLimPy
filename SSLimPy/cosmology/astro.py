@@ -84,6 +84,7 @@ class AstroFunctions:
         self.astroparams.setdefault("nL", 5000)
         self.astroparams.setdefault("sigma_scatter", 0)
         self.astroparams.setdefault("fduty", 1)
+        self.astroparams.setdefault("meanperserve_scatter", True)
 
     def _init_model(self):
         """
@@ -233,12 +234,18 @@ class AstroFunctions:
 
             # Add L scatter
             Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)
+            if not self.astroparams["meanperserve_scatter"]:
+                Lpbar *= np.exp(0.5 * p * (self.sigma_scatter * log10) ** 2)
+
             if "TonyLi" == self.model_name:
 
                 alpha = self.model_par["alpha"]
                 sig_SFR = self.model_par["sig_SFR"]
                 # SFR scatter
                 Lpbar *= np.exp(0.5 * p/alpha * (p/alpha - 1) * (sig_SFR * log10) ** 2)
+                if not self.astroparams["meanperserve_scatter"]:
+                    Lpbar *= np.exp(0.5 * p/alpha * (sig_SFR * log10) ** 2)
+
         else:
             L = self.L.to(u.Lsun)
             haloluminosity = np.reshape(
