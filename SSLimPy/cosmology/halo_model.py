@@ -43,9 +43,11 @@ class HaloModel:
             self.haloparams["Rmax"],
             self.haloparams["nR"],
         ).to(u.Mpc)
-        self.M = (4 * np.pi / 3 * self.rho_tracer * self.R**3).to(u.Msun)
-        self.Mmin = min(self.M)
-        self.Mmax = max(self.M)
+        self.Rmin, self.Rmax = np.min(self.R), np.max(self.R)
+
+        self.Mmin = np.maximum((4 * np.pi / 3 * self.rho_tracer * self.Rmin**3).to(u.Msun), 1e9 * u.Msun)
+        self.Mmax = np.minimum((4 * np.pi / 3 * self.rho_tracer * self.Rmax**3).to(u.Msun), 1e15 * u.Msun)
+        self.M = np.geomspace(self.Mmin, self.Mmax, self.haloparams["nR"])
 
         self.k = cosmo.k
         self.z = cosmo.z

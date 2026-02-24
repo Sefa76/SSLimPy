@@ -344,7 +344,7 @@ class SuperSampleCovariance:
         z = np.atleast_1d(self.z)
 
         V = self.survey_specs.Vfield()
-        W, Vapprox= self.survey_specs.Wsurvey(self.kgrid, self.mu)
+        W = self.survey_specs.Wsurvey(self.kgrid, self.mu)
         W = np.reshape(W, (*k.shape, *mu.shape, *z.shape))
 
         P = np.reshape(

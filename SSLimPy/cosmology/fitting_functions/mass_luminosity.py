@@ -791,7 +791,7 @@ class mass_luminosity:
         logSFRb = x[:, 2].reshape(len(zb), len(logMb), order="F")
 
         logSFR_interp = RegularGridInterpolator(
-            (zb, logMb), logSFRb, bounds_error=False, fill_value=-40.0
+            (zb, logMb), logSFRb, bounds_error=False, fill_value=-np.inf
         )
 
         logM_grid = np.log10((M_grid.to(u.Msun)).value)
