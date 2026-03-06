@@ -34,7 +34,9 @@ class HaloModel:
 
         # Densities and collapse tracer
         self.tracer = self.haloparams["halo_tracer"]
-        self.rho_crit = 2.77536627e11 * (self.Msunh * self.Mpch**-3).to(u.Mpc**-3 * u.Msun)
+        self.rho_crit = 2.77536627e11 * (self.Msunh * self.Mpch**-3).to(
+            u.Mpc**-3 * u.Msun
+        )
         self.rho_tracer = self.rho_crit * self.cosmology.Omega(0, tracer=self.tracer)
 
         # Internal grids
@@ -45,8 +47,12 @@ class HaloModel:
         ).to(u.Mpc)
         self.Rmin, self.Rmax = np.min(self.R), np.max(self.R)
 
-        self.Mmin = np.maximum((4 * np.pi / 3 * self.rho_tracer * self.Rmin**3).to(u.Msun), 1e9 * u.Msun)
-        self.Mmax = np.minimum((4 * np.pi / 3 * self.rho_tracer * self.Rmax**3).to(u.Msun), 1e15 * u.Msun)
+        self.Mmin = np.maximum(
+            (4 * np.pi / 3 * self.rho_tracer * self.Rmin**3).to(u.Msun), 1e9 * u.Msun
+        )
+        self.Mmax = np.minimum(
+            (4 * np.pi / 3 * self.rho_tracer * self.Rmax**3).to(u.Msun), 1e15 * u.Msun
+        )
         self.M = np.geomspace(self.Mmin, self.Mmax, self.haloparams["nR"])
 
         self.k = cosmo.k
@@ -157,13 +163,13 @@ class HaloModel:
         c = np.geomspace(0.1, 1e3, n_c)
 
         mu = np.log(1 + c) - c / (1.0 + c)
-        lhs = np.log10(c[:, None] / mu[:, None]**((5.0 + n) / 6.0))
+        lhs = np.log10(c[:, None] / mu[:, None] ** ((5.0 + n) / 6.0))
 
         # At very low concentration and shallow slopes, the LHS begins to rise again. This will cause
         # issues with the inversion. We set those parts of the curve to the minimum concentration of
         # a given n bin.
         mask_ascending = np.ones_like(lhs, bool)
-        mask_ascending[:-1, :] = (np.diff(lhs, axis = 0) > 0.0)
+        mask_ascending[:-1, :] = np.diff(lhs, axis=0) > 0.0
 
         # Create a table of c as a function of G and n. First, use the absolute min and max of G as
         # the table range
@@ -188,9 +194,9 @@ class HaloModel:
             logc_table[mask, i] = interp
 
             # Do constant extrapolation
-            mask_low = (G < mins[i])
+            mask_low = G < mins[i]
             logc_table[mask_low, i] = np.min(interp)
-            mask_high = (G > maxs[i])
+            mask_high = G > maxs[i]
             logc_table[mask_high, i] = np.max(interp)
 
         return G, n, logc_table
@@ -235,10 +241,11 @@ class HaloModel:
                     0,
                     1,
                     ingrnd,
-                    args=(r,
-                    kinter.value,
-                    Dkinter[:, iz],
-                    self.haloparams["alpha_iSigma"],
+                    args=(
+                        r,
+                        kinter.value,
+                        Dkinter[:, iz],
+                        self.haloparams["alpha_iSigma"],
                     ),
                     eps=self.haloparams["tol_sigma"],
                 )
@@ -269,19 +276,27 @@ class HaloModel:
         result = dict()
         if "sigma" in output or "both" in output:
             sigma = np.empty((*logR.shape, *z.shape))
-            sigma_interp = RectBivariateSpline(mlogR, mz, np.log(self.sigmaR_lut))(RR[mask], ZZ[mask], grid=False)
+            sigma_interp = RectBivariateSpline(mlogR, mz, np.log(self.sigmaR_lut))(
+                RR[mask], ZZ[mask], grid=False
+            )
             sigma[mask] = np.exp(sigma_interp)
 
-            sigma_extrap = bilinear_interpolate(mlogR, mz, np.log(self.sigmaR_lut), RR[~mask], ZZ[~mask])
+            sigma_extrap = bilinear_interpolate(
+                mlogR, mz, np.log(self.sigmaR_lut), RR[~mask], ZZ[~mask]
+            )
             sigma[~mask] = np.exp(sigma_extrap)
             result["sigma"] = np.reshape(sigma, (*Rs, *zs))
 
         if "dsigma" in output or "both" in output:
             dsigma = np.empty((*logR.shape, *z.shape))
-            dsigma_interp = RectBivariateSpline(mlogR, mz, np.log(-self.dsigmaR_lut))(RR[mask], ZZ[mask], grid=False)
+            dsigma_interp = RectBivariateSpline(mlogR, mz, np.log(-self.dsigmaR_lut))(
+                RR[mask], ZZ[mask], grid=False
+            )
             dsigma[mask] = -np.exp(dsigma_interp)
 
-            dsigma_extrap = bilinear_interpolate(mlogR, mz, np.log(-self.dsigmaR_lut), RR[~mask], ZZ[~mask])
+            dsigma_extrap = bilinear_interpolate(
+                mlogR, mz, np.log(-self.dsigmaR_lut), RR[~mask], ZZ[~mask]
+            )
             dsigma[~mask] = -np.exp(dsigma_extrap)
             result["dsigma"] = np.reshape(dsigma, (*Rs, *zs)) * u.Mpc**-1
         return result
@@ -301,7 +316,7 @@ class HaloModel:
         Conversion is independent of mass definition but the result is.
         """
         rho = self.rho_crit * self.cosmology.Omega(0.0, tracer)
-        R = (3 * M / (4 * np.pi * rho))**(1/3)
+        R = (3 * M / (4 * np.pi * rho)) ** (1 / 3)
         return R.to(u.Mpc)
 
     def sigma8_of_z(self, z, tracer="matter"):
@@ -493,7 +508,9 @@ class HaloModel:
         C = 1.0 - ca * (1.0 - alpha_eff)
         rhs = np.log10(A / nu * (1.0 + nu**2 / B))
 
-        interp = RectBivariateSpline(self.conc_G_lut, self.conc_n_lut, self.conc_logc_lut)
+        interp = RectBivariateSpline(
+            self.conc_G_lut, self.conc_n_lut, self.conc_logc_lut
+        )
         cbar = np.power(10, interp(rhs, neff, grid=False))
         c = cbar * C
         return np.squeeze(c)
@@ -502,14 +519,19 @@ class HaloModel:
         M = np.atleast_1d(M)
         z = np.atleast_1d(z)
 
-        growthnu = self.delta_crit / np.reshape(
-            self.sigmaM(0.01 * M, z, tracer=self.tracer),
-            (*M.shape, *z.shape)
-        ) * self.cosmology.growth_factor(1e-3*u.Mpc**-1, z, tracer=self.tracer)
+        growthnu = (
+            self.delta_crit
+            / np.reshape(
+                self.sigmaM(0.01 * M, z, tracer=self.tracer), (*M.shape, *z.shape)
+            )
+            * self.cosmology.growth_factor(1e-3 * u.Mpc**-1, z, tracer=self.tracer)
+        )
         gs = growthnu.shape
         growthnu = growthnu.flatten()
 
-        growth = self.cosmology.growth_factor(1e-3*u.Mpc**-1, self.z, tracer=self.tracer)
+        growth = self.cosmology.growth_factor(
+            1e-3 * u.Mpc**-1, self.z, tracer=self.tracer
+        )
         zf = np.reshape(linear_interpolate(growth, self.z, growthnu), gs)
         for im in range(len(M)):
             zf[im, :] = np.maximum(zf[im, :], z)
@@ -524,12 +546,15 @@ class HaloModel:
         alpha = -0.081
         beta = -0.71
 
-        c = A * (M[:, None].to(1e12 * self.Msunh).value)**alpha * (1 + z[None, :])**beta
+        c = (
+            A
+            * (M[:, None].to(1e12 * self.Msunh).value) ** alpha
+            * (1 + z[None, :]) ** beta
+        )
         return np.squeeze(c)
 
     def concentration(self, M, z):
-        """Code default is concentration_Diemer
-        """
+        """Code default is concentration_Diemer"""
         return self.concentration_Diemer(M, z)
 
     def ft_NFW(self, k, M, z):
@@ -547,11 +572,17 @@ class HaloModel:
 
         # get characteristic radius
         if self.haloparams["concentration"] == "Bullock01":
-            c = np.reshape(self.concentration_Bullock(M, z), (*M.shape, *z.shape))[None, :, :]
+            c = np.reshape(self.concentration_Bullock(M, z), (*M.shape, *z.shape))[
+                None, :, :
+            ]
         elif self.haloparams["concentration"] == "Diemer19":
-            c = np.reshape(self.concentration_Diemer(M, z), (*M.shape, *z.shape))[None, :, :]
+            c = np.reshape(self.concentration_Diemer(M, z), (*M.shape, *z.shape))[
+                None, :, :
+            ]
         elif self.haloparams["concentration"] == "Duffy08":
-            c = np.reshape(self.concentration_Duffy(M, z), (*M.shape, *z.shape))[None, :, :]
+            c = np.reshape(self.concentration_Duffy(M, z), (*M.shape, *z.shape))[
+                None, :, :
+            ]
         else:
             raise ValueError("Concentraion relation not found")
         r_s = R_NFW[None, :, None] / c
@@ -560,14 +591,18 @@ class HaloModel:
         x = (k[:, None, None] * r_s).to(1).value
 
         if self.haloparams["bloating"] == "Mead20":
-            nu  = self.delta_crit / np.reshape(
-                self.sigmaM(M, z, tracer=self.tracer),
-                (*M.shape, *z.shape)
+            nu = self.delta_crit / np.reshape(
+                self.sigmaM(M, z, tracer=self.tracer), (*M.shape, *z.shape)
             )
-            eta = 0.1281 * np.reshape(
-                self.sigma8_of_z(z, tracer=self.tracer), z.shape,
-            )**-0.3644
-            x = x * nu[None, :, :]**eta[None, None, :]
+            eta = (
+                0.1281
+                * np.reshape(
+                    self.sigma8_of_z(z, tracer=self.tracer),
+                    z.shape,
+                )
+                ** -0.3644
+            )
+            x = x * nu[None, :, :] ** eta[None, None, :]
 
         si_x, ci_x = sici(x)
         si_cx, ci_cx = sici((1.0 + c) * x)
@@ -584,11 +619,11 @@ class HaloModel:
 
         kstar = (
             0.05618
-            * np.atleast_1d(self.sigma8_of_z(z, tracer=self.tracer))**-1.013
+            * np.atleast_1d(self.sigma8_of_z(z, tracer=self.tracer)) ** -1.013
             * self.Mpch**-1
-            )
+        )
         x = (k[:, None] / kstar[None, :]).to(1).value
-        return np.squeeze(x**4/(1 + x**4))
+        return np.squeeze(x**4 / (1 + x**4))
 
     #########################################
     # f_NL corrections to HMF and halo bias #
@@ -796,11 +831,11 @@ class HaloModel:
         if dc == None:
             dc = self.delta_crit
 
-        if beta==1:
+        if beta == 1:
             b = self.halobias(M, z, k=k, dc=dc)
         else:
-            if beta==0:
-                beta = "b0" # Dummy function
+            if beta == 0:
+                beta = "b0"  # Dummy function
             b = getattr(self._bias_function, beta)(M, z, dc=dc)
 
         return b
@@ -817,7 +852,9 @@ class HaloModel:
 
         b = restore_shape(
             self.get_bias(M, z, beta=beta, dc=dc, k=k),
-            k, M, z,
+            k,
+            M,
+            z,
         )
 
         itgrnd1 = M[None, :, None] * M_over_rho**power * dndM * b
@@ -845,7 +882,9 @@ class HaloModel:
         # Dependent on k
         b = restore_shape(
             self.get_bias(M, z, beta=beta, dc=dc, k=kd[0]),
-            kd[0], M, z,
+            kd[0],
+            M,
+            z,
         )
         b = np.expand_dims(b, (*range(1, 2 * p),))
 
@@ -855,7 +894,7 @@ class HaloModel:
             U = np.reshape(
                 self.ft_NFW(k, M, z),
                 (*k.shape, *M.shape, *z.shape),
-             )
+            )
             U = np.expand_dims(U, (*range(ik), *range(ik + 1, p)))
             U = np.expand_dims(U, (*range(p, 2 * p),))
             normhaloprofile.append(np.power(U * M_over_rho, alpha[ik]))
@@ -894,14 +933,16 @@ class HaloModel:
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
-        P = np.reshape(self.cosmology.matpow(k, z, tracer=self.tracer),
-                       (*k.shape, *z.shape),
+        P = np.reshape(
+            self.cosmology.matpow(k, z, tracer=self.tracer),
+            (*k.shape, *z.shape),
         )
-        Pnw = np.reshape(self.cosmology.nonwiggle_pow(k, z, tracer=self.tracer),
-                         (*k.shape, *z.shape),
+        Pnw = np.reshape(
+            self.cosmology.nonwiggle_pow(k, z, tracer=self.tracer),
+            (*k.shape, *z.shape),
         )
-        eta = (k[:, None]* self.sigmaV_of_z(z, tracer="matter", moment=0)).to(1).value
-        gd = np.exp(-eta**2)
+        eta = (k[:, None] * self.sigmaV_of_z(z, tracer="matter", moment=0)).to(1).value
+        gd = np.exp(-(eta**2))
         P_QNL = P * gd + Pnw * (1 - gd)
         return np.squeeze(P_QNL)
 
@@ -921,18 +962,28 @@ class HaloModel:
         alpha = 1
         if self.haloparams["transition_smoothing"]:
             neff_NL = np.atleast_1d(self.neff_NL(z))
-            alpha = 1.875 * (1.603)**neff_NL[None, None, :]
+            alpha = 1.875 * (1.603) ** neff_NL[None, None, :]
 
         onehalo_damping = 1
         if self.haloparams["onehalo_damping"]:
-            onehalo_damping = np.reshape(self.one_halo_dampening(k, z),
-                                         (*k.shape, 1, *z.shape))
+            onehalo_damping = np.reshape(
+                self.one_halo_dampening(k, z), (*k.shape, 1, *z.shape)
+            )
 
-        D1h = ((k[:, None, None] / (2 * np.pi))**3 * onehalo_damping * I0_2).to(1).value
-        D2h = ((k[:, None, None] / (2 * np.pi))**3 * I1_1**2 * P_QNL[:, None, :]).to(1).value
+        D1h = (
+            ((k[:, None, None] / (2 * np.pi)) ** 3 * onehalo_damping * I0_2).to(1).value
+        )
+        D2h = (
+            ((k[:, None, None] / (2 * np.pi)) ** 3 * I1_1**2 * P_QNL[:, None, :])
+            .to(1)
+            .value
+        )
 
-        P = (D1h**alpha + D2h**alpha)**(1/alpha) * (k[:, None, None] / (2 * np.pi))**-3
+        P = (D1h**alpha + D2h**alpha) ** (1 / alpha) * (
+            k[:, None, None] / (2 * np.pi)
+        ) ** -3
         return np.squeeze(P)
+
 
 ##############
 # Numba Part #
@@ -942,7 +993,7 @@ class HaloModel:
 @njit("(float64, float64, float64[::1], float64[:], uint64)", fastmath=True)
 def sigma_integrand(t, R, kinter, Dkinter, alpha):
     # mask out region where integrand is 0
-    if t<=0 or t>=1:
+    if t <= 0 or t >= 1:
         return 0.0
 
     Rk = (1 / t - 1) ** alpha
@@ -963,7 +1014,7 @@ def sigma_integrand(t, R, kinter, Dkinter, alpha):
 @njit("(float64, float64, float64[::1], float64[:], uint64)", fastmath=True)
 def dsigma_integrand(t, R, kinter, Dkinter, alpha):
     # mask out region where integrand is 0
-    if t<=0 or t>=1:
+    if t <= 0 or t >= 1:
         return 0.0
 
     Rk = (1 / t - 1) ** alpha
@@ -985,7 +1036,7 @@ def dsigma_integrand(t, R, kinter, Dkinter, alpha):
 @njit("(float64, float64, float64[::1], float64[:], uint64)", fastmath=True)
 def sigmav_integrand(t, R, kinter, Dkinter, alpha):
     # mask out region where integrand is 0
-    if t<=0 or t>=1:
+    if t <= 0 or t >= 1:
         return 0.0
 
     if np.isclose(R, 0):
@@ -1007,6 +1058,7 @@ def sigmav_integrand(t, R, kinter, Dkinter, alpha):
     )[0]
     return alpha * Dk * W**2 / (3 * k**2 * t * (1 - t))
 
+
 @njit(
     "(float64[::1], float64[::1], float64[::1], float64[:,:], uint64, float64)",
     parallel=True,
@@ -1020,11 +1072,19 @@ def sigmas_of_R_and_z(R, z, kinter, Dkinter, alpha, eps):
     for iz in prange(zl):
         for iR in prange(Rl):
             sintegral = adaptive_mesh_integral(
-                0, 1, sigma_integrand, args=(R[iR], kinter, Dkinter[:, iz], alpha), eps=eps,
+                0,
+                1,
+                sigma_integrand,
+                args=(R[iR], kinter, Dkinter[:, iz], alpha),
+                eps=eps,
             )
             sigma[iR, iz] = np.sqrt(sintegral)
             dsintegral = adaptive_mesh_integral(
-                0, 1, dsigma_integrand, args=(R[iR], kinter, Dkinter[:, iz], alpha), eps=eps,
+                0,
+                1,
+                dsigma_integrand,
+                args=(R[iR], kinter, Dkinter[:, iz], alpha),
+                eps=eps,
             )
             dsigma[iR, iz] = dsintegral / (2 * sigma[iR, iz])
     return sigma, dsigma

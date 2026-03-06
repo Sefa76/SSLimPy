@@ -78,13 +78,13 @@ def legendre_4(mu):
 
 @njit
 def get_legendre(ell, mu):
-    if ell==0:
+    if ell == 0:
         return legendre_0(mu)
-    if ell==2:
+    if ell == 2:
         return legendre_2(mu)
-    if ell==4:
+    if ell == 4:
         return legendre_4(mu)
-    
+
 
 @njit
 def smooth_W(x):
@@ -160,13 +160,13 @@ def addVectors(
     k12 = np.sqrt(radicant)
     if np.isclose(k12, 0, atol=1e-12):
         return 0.0, 0.0, 0.0
-    
+
     mu12 = (k1 * mu1 + k2 * mu2) / k12
     mu12 = min(np.abs(mu12), 1.0) * np.sign(mu12)
 
     if np.isclose(np.abs(mu12), 1):
         return k12, mu12, 0
-    
+
     s1s = max(0, 1 - mu1**2)
     s2s = max(0, 1 - mu2**2)
 

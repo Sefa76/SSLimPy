@@ -6,7 +6,7 @@ from astropy import units as u
 from numba import njit, prange
 from scipy.integrate import simpson
 from scipy.interpolate import RectBivariateSpline
-from scipy.special import legendre
+from scipy.special import legendre, roots_legendre
 
 from SSLimPy.cosmology.astro import AstroFunctions
 from SSLimPy.utils.utils import *
@@ -64,11 +64,14 @@ class PowerSpectra:
         self.dk = np.diff(k_edge)
         self.k_numerics = self.halomodel.k
 
-        nmu = settings.get("nmu", 128)
-
-        mu_edge = np.linspace(-1, 1, nmu + 1)
-        self.mu = (mu_edge[:-1] + mu_edge[1:]) / 2.0
-        self.dmu = np.diff(mu_edge)
+        self.mu_kind = settings.get("mu_kind", "linear")
+        if self.mu_kind == "linear":
+            nmu = settings.get("nmu", 128)
+            mu_edge = np.linspace(-1, 1, nmu + 1)
+            self.mu = (mu_edge[:-1] + mu_edge[1:]) / 2.0
+        elif settings.get("mu_kind", "linear") == "gauss":
+            nmu = settings.get("nmu", 12)
+            self.mu, self.w = roots_legendre(nmu)
 
     ###############
     # De-Wiggling #
@@ -247,7 +250,9 @@ class PowerSpectra:
         else:
             Biasterm = restore_shape(
                 self.astro.Thalo(z, k, mu, p=1, scale=(1,), beta=1),
-                k, mu, z,
+                k,
+                mu,
+                z,
             )
 
         return np.squeeze(Biasterm)
@@ -407,14 +412,16 @@ class PowerSpectra:
             Ps = Pshot[None, None, :]
         else:
             if self.cfg.settings["halo_model_PS"]:
-                Ps = restore_shape(self.astro.Thalo(z, k, mu,p=1, scale=(2,)), k, mu, z)
+                Ps = restore_shape(
+                    self.astro.Thalo(z, k, mu, p=1, scale=(2,)), k, mu, z
+                )
             else:
                 Ps = self.astro.Tavg(z, p=2)[None, None, :]
 
         if self.halomodel.haloparams["onehalo_damping"]:
             Ps = Ps * np.reshape(
-                self.halomodel.one_halo_dampening(k, z),
-                (*k.shape, 1, *z.shape))
+                self.halomodel.one_halo_dampening(k, z), (*k.shape, 1, *z.shape)
+            )
 
         return np.squeeze(Ps)
 
@@ -451,7 +458,9 @@ class PowerSpectra:
             # Obtain redshiftspace distortions
             rsd = restore_shape(
                 self.Kaiser_Term(k, mu, z, BAOpars=self.BAOpars),
-                k, mu, z,
+                k,
+                mu,
+                z,
             )
             if self.cfg.settings["nonlinearRSD"]:
                 rsd = rsd * np.reshape(
@@ -461,10 +470,13 @@ class PowerSpectra:
         else:
             rsd = np.power(
                 restore_shape(
-                self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),
-                k, mu, z,
-            ),
-            2)
+                    self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),
+                    k,
+                    mu,
+                    z,
+                ),
+                2,
+            )
 
         if self.cfg.settings["verbosity"] > 1:
             trsd = time()
@@ -485,7 +497,7 @@ class PowerSpectra:
         logPk_ref = np.log(Pk_ref.value)
         logk = np.log(k.to(u.Mpc**-1).value)
 
-        #kompute using survey k's
+        # kompute using survey k's
         k = self.k
         outputshape = (*k.shape, *mu.shape, *z.shape)
         Pk_Obs = np.empty(outputshape)
@@ -564,13 +576,24 @@ class PowerSpectra:
         mu = self.mu
         Pobs = self.Pk_Obs
 
-        def Pk_ell_moments(ell):
-            norm = (2 * ell + 1) / 2
-            L_ell = legendre(ell)
-            return (
-                simpson(y=Pobs * norm * L_ell(mu)[None, :, None], x=mu, axis=1)
-                * Pobs.unit
-            )
+        if self.mu_kind == "linear":
+
+            def Pk_ell_moments(ell):
+                norm = (2 * ell + 1) / 2
+                L_ell = legendre(ell)(mu)
+                return (
+                    simpson(y=Pobs * norm * L_ell[None, :, None], x=mu, axis=1)
+                    * Pobs.unit
+                )
+
+        elif self.mu_kind == "gauss":
+
+            def Pk_ell_moments(ell):
+                norm = (2 * ell + 1) / 2
+                L_ell = legendre(ell)(mu)
+                return np.sum(
+                    Pobs * norm * L_ell[None, :, None] * self.w[None, :, None], axis=1
+                )
 
         self.Pk_0bs = Pk_ell_moments(0)
         self.Pk_2bs = Pk_ell_moments(2)

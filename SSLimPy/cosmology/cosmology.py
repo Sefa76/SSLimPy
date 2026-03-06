@@ -999,6 +999,9 @@ class CosmoFunctions:
     def create_growth(self):
         k = self.results.kgrid * 1 / u.Mpc
         z = self.results.zgrid
+        a = 1 / (1 + z)
+
+        loga = np.log(a)
         logk = np.log(k.to(1 / u.Mpc).value)
 
         Pm0 = self.matpow(k, 0, tracer="matter")[:, None]
@@ -1009,26 +1012,33 @@ class CosmoFunctions:
         logDm = np.log(np.sqrt((Pm / Pm0).to(1).value))
         logDc = np.log(np.sqrt((Pc / Pc0).to(1).value))
 
-        logDm_inter = RectBivariateSpline(logk, z, logDm)
-        logDc_inter = RectBivariateSpline(logk, z, logDc)
+        logDm_inter = RectBivariateSpline(logk, loga[::-1], logDm[:, ::-1])
+        logDc_inter = RectBivariateSpline(logk, loga[::-1], logDc[:, ::-1])
 
         def growth_factor(k, z, tracer="matter"):
             k = np.atleast_1d(k)
             z = np.atleast_1d(z)
+
             logk = np.log(k.to(1 / u.Mpc).value)
+            loga = np.log(1 / (1 + z))
+
             if tracer == "clustering":
-                D = np.squeeze(np.exp(logDc_inter(logk, z)))
+                logdfunc = logDc_inter
             elif tracer == "matter":
-                D = np.squeeze(np.exp(logDm_inter(logk, z)))
+                logdfunc = logDm_inter
             else:
                 warn("Did not recognize tracer: reverted to matter")
-                D = np.squeeze(np.exp(logDm_inter(logk, z)))
-            return D
+                logdfunc = logDm_inter
+
+            return np.squeeze(np.exp(logdfunc(logk, loga[::-1]))[:, ::-1])
 
         def growth_rate(k, z, tracer="matter"):
             k = np.atleast_1d(k)
             z = np.atleast_1d(z)
+
             logk = np.log(k.to(1 / u.Mpc).value)
+            loga = np.log(1 / (1 + z))
+
             if tracer == "clustering":
                 logdfunc = logDc_inter
             elif tracer == "matter":
@@ -1038,7 +1048,7 @@ class CosmoFunctions:
                 logdfunc = logDm_inter
 
             return np.squeeze(
-                -1 * (1 + z)[None, :] * logdfunc.partial_derivative(0, 1)(logk, z)
+                logdfunc.partial_derivative(0, 1)(logk, loga[::-1])[:, ::-1]
             )
 
         return growth_factor, growth_rate

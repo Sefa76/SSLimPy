@@ -45,7 +45,7 @@ class SurveySpecifications(ABC):
     @property
     @abstractmethod
     def cosmology(self) -> CosmoFunctions: ...
-    
+
     @cosmology.setter
     @abstractmethod
     def cosmology(self, pcosmology: CosmoFunctions) -> None: ...

@@ -156,7 +156,9 @@ class AstroFunctions:
             dn_dM_of_M_and_z = np.reshape(
                 self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape)
             )
-            L_of_M = np.reshape(self.massluminosityfunction(M, z), (*M.shape, *z.shape)).to(u.Lsun)
+            L_of_M = np.reshape(
+                self.massluminosityfunction(M, z), (*M.shape, *z.shape)
+            ).to(u.Lsun)
 
             flognorm = lognormal(
                 L[None, :, None],
@@ -230,7 +232,9 @@ class AstroFunctions:
             dndM = np.reshape(
                 self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape)
             )
-            Lpbar = np.trapz(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(u.Lsun**p * u.Mpc**-3)
+            Lpbar = np.trapz(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(
+                u.Lsun**p * u.Mpc**-3
+            )
 
             # Add L scatter
             Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)
@@ -242,9 +246,11 @@ class AstroFunctions:
                 alpha = self.model_par["alpha"]
                 sig_SFR = self.model_par["sig_SFR"]
                 # SFR scatter
-                Lpbar *= np.exp(0.5 * p/alpha * (p/alpha - 1) * (sig_SFR * log10) ** 2)
+                Lpbar *= np.exp(
+                    0.5 * p / alpha * (p / alpha - 1) * (sig_SFR * log10) ** 2
+                )
                 if not self.astroparams["meanperserve_scatter"]:
-                    Lpbar *= np.exp(0.5 * p/alpha * (sig_SFR * log10) ** 2)
+                    Lpbar *= np.exp(0.5 * p / alpha * (sig_SFR * log10) ** 2)
 
         else:
             L = self.L.to(u.Lsun)
@@ -256,7 +262,7 @@ class AstroFunctions:
                 L[:, None] ** (p + 1) * haloluminosity, np.log(L.value), axis=0
             )
 
-        return (Lpbar * self.fduty)
+        return Lpbar * self.fduty
 
     def Tavg(self, z, p=1):
         return self.CLT(z) ** p * self.Lavg(z, p=p)
@@ -274,25 +280,21 @@ class AstroFunctions:
             self.massluminosityfunction(M, z),
             (*M.shape, *z.shape),
         )
-        dndM = np.reshape(
-            self.halomodel.halomassfunction(M, z),
-            (*M.shape, *z.shape)
-        )
+        dndM = np.reshape(self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape))
 
-        b = restore_shape(
-            self.halomodel.get_bias(M, z, beta=beta, dc=dc, k=k),
-            k, M, z
-        )
+        b = restore_shape(self.halomodel.get_bias(M, z, beta=beta, dc=dc, k=k), k, M, z)
 
         logM = np.log(M.to(u.Msun).value)
 
         itgrnd1 = (
-            b * M.to(u.Msun)[None, :, None]
-            * L_of_M[None, :, :]**power * dndM[None, :, :]
+            b
+            * M.to(u.Msun)[None, :, None]
+            * L_of_M[None, :, :] ** power
+            * dndM[None, :, :]
         )
         bavg = np.trapz(itgrnd1, logM, axis=1)
 
-        #Compute constant correcton factor (ML -> ML/LF)
+        # Compute constant correcton factor (ML -> ML/LF)
         Intgrnd = dndM * L_of_M**power * M[:, None]
         L_MF = np.trapz(Intgrnd, logM, axis=0)
         L_model = np.atleast_1d(self.Lavg(z, p=power))
@@ -302,7 +304,7 @@ class AstroFunctions:
 
     def Tbavg(self, beta, z, power, dc=None, k=None):
         Lbavg = self.Lbavg(beta, z, power, dc=dc, k=k)
-        return self.CLT(z)**power * Lbavg
+        return self.CLT(z) ** power * Lbavg
 
     def bavg(self, beta, z, power, dc=None, k=None):
         Lbavg = self.Lbavg(beta, z, power, dc=dc, k=k)
@@ -339,8 +341,7 @@ class AstroFunctions:
 
         # Dependent on k
         b = restore_shape(
-            self.halomodel.get_bias(M, z, beta=beta, dc=dc, k=kd[0]),
-            kd[0], M, z
+            self.halomodel.get_bias(M, z, beta=beta, dc=dc, k=kd[0]), kd[0], M, z
         )
         b = np.expand_dims(b, (*range(1, 2 * p),))
 
@@ -382,20 +383,22 @@ class AstroFunctions:
         logM = np.log(M.value)
         Umean = np.trapz(Intgrnd, logM, axis=-2)
 
-        #Compute constant correcton factor (ML -> ML/LF)
-        Intgrnd = dndM * L_of_M**np.sum(alpha) * M[:, None]
+        # Compute constant correcton factor (ML -> ML/LF)
+        Intgrnd = dndM * L_of_M ** np.sum(alpha) * M[:, None]
         L_MF = np.trapz(Intgrnd, logM, axis=-2)
         L_model = np.atleast_1d(self.Lavg(z, np.sum(alpha)))
         corr = (L_model / L_MF).to(1).value
 
         return np.squeeze(corr * Umean)
 
-    def Thalo(self, z, *args, p=1, scale=(), beta=0,  dc=None):
+    def Thalo(self, z, *args, p=1, scale=(), beta=0, dc=None):
         if scale:
             alpha = np.sum(scale)
         else:
             alpha = p
-        return self.CLT(z) ** alpha * self.Lhalo(z, *args, p=p, scale=scale, beta=beta, dc=dc)
+        return self.CLT(z) ** alpha * self.Lhalo(
+            z, *args, p=p, scale=scale, beta=beta, dc=dc
+        )
 
     def recap_astro(self):
         print("Astronomical Parameters:")

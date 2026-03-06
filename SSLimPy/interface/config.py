@@ -5,6 +5,7 @@ import yaml
 from astropy import units as u
 from copy import copy
 
+
 class Configuration:
     def __init__(
         self,
@@ -117,7 +118,9 @@ class Configuration:
                 if os.path.exists(camb_yaml_file):
                     file_content_camb = yaml.safe_load(open(camb_yaml_file))
                 else:
-                    print("You asked for CAMB but the yaml path you passed did not exist")
+                    print(
+                        "You asked for CAMB but the yaml path you passed did not exist"
+                    )
                     raise ValueError
             else:
                 file_content_camb = yaml.safe_load(
@@ -134,7 +137,9 @@ class Configuration:
                 if os.path.exists(class_yaml_file):
                     file_content_class = yaml.safe_load(open(class_yaml_file))
                 else:
-                    print("You asked for CLASS but the yaml path you passed did not exist")
+                    print(
+                        "You asked for CLASS but the yaml path you passed did not exist"
+                    )
                     raise ValueError
             else:
                 file_content_class = yaml.safe_load(
@@ -155,7 +160,9 @@ class Configuration:
         self.fiducialnuiscancelikeparams = dict()
         for key in cosmopars:
             if key in self.nuiscance_like_params_names:
-                self.fiducialnuiscancelikeparams[key] = self.fiducialcosmoparams.pop(key)
+                self.fiducialnuiscancelikeparams[key] = self.fiducialcosmoparams.pop(
+                    key
+                )
 
         self.fiducialfullcosmoparams = {
             **self.fiducialcosmoparams,
@@ -177,7 +184,7 @@ class Configuration:
         from SSLimPy.cosmology import cosmology
 
         self.fiducialcosmo = cosmology.CosmoFunctions(
-            cfg = self,
+            cfg=self,
             cosmopars=self.fiducialcosmoparams,
             nuiscance_like=self.fiducialnuiscancelikeparams,
             input_type=self.input_type,
@@ -187,23 +194,23 @@ class Configuration:
         from SSLimPy.cosmology import halo_model
 
         self.fiducialhalomodel = halo_model.HaloModel(
-            cosmo= self.fiducialcosmo,
-            halopars= self.fiducialhaloparams,
+            cosmo=self.fiducialcosmo,
+            halopars=self.fiducialhaloparams,
         )
 
     def initialize_fiducialspecs(self):
         from SSLimPy.interface import survey_specs
 
         self.fiducialspecs = survey_specs.LIMSuvey(
-            obspars= self.fiducialspecparams,
-            cosmo= self.fiducialcosmo,
+            obspars=self.fiducialspecparams,
+            cosmo=self.fiducialcosmo,
         )
 
     def initialize_fiducialastro(self):
         from SSLimPy.cosmology import astro
 
         self.fiducialastro = astro.AstroFunctions(
-            halomodel= self.fiducialhalomodel,
-            survey_specs= self.fiducialspecs,
-            astropars= self.fiducialastroparams
+            halomodel=self.fiducialhalomodel,
+            survey_specs=self.fiducialspecs,
+            astropars=self.fiducialastroparams,
         )
