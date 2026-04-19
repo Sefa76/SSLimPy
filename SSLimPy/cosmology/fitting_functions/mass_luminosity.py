@@ -659,6 +659,25 @@ class mass_luminosity:
         L = CLM * M_HI
         return np.squeeze(L)
 
+    def L_from_MHI_VN(self, Mvec, z):
+        lm = cu.c / self.astro.nu
+        hunit = 100 * u.km * u.s**-1 * u.Mpc**-1
+
+        # This number is slightly different than the normal; ~ 6.5 Lsun / Msun
+        CML = (8 * np.pi * cu.k_B * lm**-3 * self.astro.rho_crit**-1 * self.astro.hubble**2 * hunit * 189 * u.mK).to(u.Lsun * u.Msun**-1)
+        # CLM = 6.25e-9 * u.Lsun / u.Msun  # Conversion factor btw MHI and LHI
+
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
+
+        M0 = self.model_par["M0"]
+        Mmin = self.model_par["Mmin"]
+        alpha = self.model_par["alpha"]
+
+        M_HI = M0 * (M_grid / Mmin) ** alpha * np.exp(-Mmin / M_grid)
+        L = CML * M_HI * np.ones_like(z_grid)
+        return np.squeeze(L)
+
     def MHI_21cm_Obuljen(self, Mvec, z):
         """
         Obuljen et al. (2018) 21cm MHI(M) model, relates MHI to halo mass by

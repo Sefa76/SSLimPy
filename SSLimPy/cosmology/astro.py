@@ -28,6 +28,7 @@ class AstroFunctions:
         self.hubble = halomodel.hubble
         self.Mpch = halomodel.Mpch
         self.Msunh = halomodel.Msunh
+        self.rho_crit = self.halomodel.rho_crit
 
         self.astroparams = deepcopy(astropars)
         self._set_astrophysics_defaults()
@@ -167,7 +168,7 @@ class AstroFunctions:
             )
 
             CFL = flognorm * dn_dM_of_M_and_z[:, None, :]
-            dn_dL_of_L = np.trapz(CFL, self.M, axis=0)
+            dn_dL_of_L = np.trapezoid(CFL, self.M, axis=0)
 
         elif "LF" in self.model_type:
             dn_dL_of_L_func = getattr(
@@ -232,7 +233,7 @@ class AstroFunctions:
             dndM = np.reshape(
                 self.halomodel.halomassfunction(M, z), (*M.shape, *z.shape)
             )
-            Lpbar = np.trapz(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(
+            Lpbar = np.trapezoid(M[:, None] * Lp * dndM, np.log(M.value), axis=0).to(
                 u.Lsun**p * u.Mpc**-3
             )
 
@@ -258,7 +259,7 @@ class AstroFunctions:
                 self.haloluminosityfunction(L, z),
                 (*L.shape, *z.shape),
             )
-            Lpbar = np.trapz(
+            Lpbar = np.trapezoid(
                 L[:, None] ** (p + 1) * haloluminosity, np.log(L.value), axis=0
             )
 
@@ -292,11 +293,11 @@ class AstroFunctions:
             * L_of_M[None, :, :] ** power
             * dndM[None, :, :]
         )
-        bavg = np.trapz(itgrnd1, logM, axis=1)
+        bavg = np.trapezoid(itgrnd1, logM, axis=1)
 
         # Compute constant correcton factor (ML -> ML/LF)
         Intgrnd = dndM * L_of_M**power * M[:, None]
-        L_MF = np.trapz(Intgrnd, logM, axis=0)
+        L_MF = np.trapezoid(Intgrnd, logM, axis=0)
         L_model = np.atleast_1d(self.Lavg(z, p=power))
         corr = (L_model / L_MF).to(1).value
 
@@ -381,11 +382,11 @@ class AstroFunctions:
         for ik in range(p):
             Intgrnd = Intgrnd * Fv[ik] * normhaloprofile[ik]
         logM = np.log(M.value)
-        Umean = np.trapz(Intgrnd, logM, axis=-2)
+        Umean = np.trapezoid(Intgrnd, logM, axis=-2)
 
         # Compute constant correcton factor (ML -> ML/LF)
         Intgrnd = dndM * L_of_M ** np.sum(alpha) * M[:, None]
-        L_MF = np.trapz(Intgrnd, logM, axis=-2)
+        L_MF = np.trapezoid(Intgrnd, logM, axis=-2)
         L_model = np.atleast_1d(self.Lavg(z, np.sum(alpha)))
         corr = (L_model / L_MF).to(1).value
 

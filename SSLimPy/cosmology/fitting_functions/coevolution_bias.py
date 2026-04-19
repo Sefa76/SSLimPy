@@ -31,33 +31,55 @@ class coevolution_bias(bias_fitting_functions):
         return np.ones_like(M.value)
 
     def b1(self, M, z, dc):
-        """Sheth, Mo, Torman (2001)"""
-        warn("I am not sure if this function is correct")
-        anu2 = self._alpha * (dc / self.sigmaM(M, z)) ** 2
-        b1 = (
-            1
-            / (np.sqrt(self._alpha) * dc)
-            * (
-                np.sqrt(self._alpha) * (anu2)
-                + np.sqrt(self._alpha) * self._b * anu2 ** (1 - self._c)
-                - anu2**self._c
-                / (anu2**self._c + self._b * (1 - self._c) * (1 - self._c / 2))
-            )
-        )
-        return 1 + b1
+        """Sheth, Mo, Torman (2001) from collosus"""
+        nu = dc / self.sigmaM(M, z)
+        a = self._alpha
+        b = self._b
+        c = self._c
 
-    def b2(self, M, z, dc):
-        """Schmidt et al. fitting formula for b_2"""
+        roota = np.sqrt(a)
+        anu2 = a * nu**2
+        anu2c = anu2**c
+        t1 = b * (1.0 - c) * (1.0 - 0.5 * c)
+        bias = 1.0 +  1.0 / (roota * dc) * (roota * anu2 + roota * b * anu2**(1.0 - c) - anu2c / (anu2c + t1))
+        return bias
+
+    def b2sph_SMT(self, M, z, dc):
+        """b2 from extended ps model presented in Sheth, Mo, Torman (2001)
+        """
+        nu = dc / self.sigmaM(M, z)
+        a = self._alpha
+        b = self._b
+        c = self._c
+        
+
+    def b2_fitted(self, M, z, dc):
+        """b2 from assuming Lazeyras et al fitting + coevolution
+        """
+        return self.b2sph_lazeyras(M, z, dc) + 4 / 3 * self.bG2(M, z, dc)
+
+    def b2sph_lazeyras(self, M, z, dc):
+        """Lazeyras et al. fitting formula for b_2 - 4/3 b_G2"""
         b1 = getattr(
             self,
             self.halomodel.haloparams["bias_model"],
             self.b1,
         )(M, z, dc)
-        b2 = 0.412 - 2.143 * b1 + 0.929 * b1**2 + 0.008 * b1**3
-        return b2
+        b2sph = 0.412 - 2.143 * b1 + 0.929 * b1**2 + 0.008 * b1**3
+        return b2sph
+
+    def b2sph_euclid(self, M, z, dc):
+        """Fitting formula for b_2 - 4/3 b_G2 from Euclid DR1-JC6"""
+        b1 = getattr(
+            self,
+            self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        bias =  -0.015 - 1.58 * b1 + 0.809 * b1**2 + 0.025 * b1**3
+        return bias
 
     def b3(self, M, z, dc):
-        """Schmidt et al. fitting formula for b_3"""
+        """Lazeyras et al. fitting formula for b_3"""
         b1 = getattr(
             self,
             self.halomodel.haloparams["bias_model"],
@@ -101,4 +123,4 @@ class coevolution_bias(bias_fitting_functions):
             self.halomodel.haloparams["bias_model"],
             self.b1,
         )(M, z, dc)
-        return -2 / 7 * 2 * (self.b2(M, z, dc) - 4 / 21 * b1)
+        return -2 / 7 * 2 * (self.b2_fitted(M, z, dc) - 4 / 21 * b1)

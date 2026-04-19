@@ -685,7 +685,7 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
                         * (np.abs(W[iq, imuq]) ** 2)
                         * np.exp(logPkminusq[iq, imuq, :])
                     )
-                    muq_integrand[imuq] = np.trapz(phi_integrand, deltaphi)
-                q_integrand[iq] = np.trapz(muq_integrand, muq)
-            Pconv[ik, imu] = np.trapz(q_integrand * q, np.log(q))
+                    muq_integrand[imuq] = np.trapezoid(phi_integrand, deltaphi)
+                q_integrand[iq] = np.trapezoid(muq_integrand, muq)
+            Pconv[ik, imu] = np.trapezoid(q_integrand * q, np.log(q))
     return Pconv

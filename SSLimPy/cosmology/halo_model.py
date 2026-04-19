@@ -743,12 +743,12 @@ class HaloModel:
         )
 
         # The integration
-        S3 = np.trapz(integ_S3, k, axis=0)
-        S3 = np.trapz(S3, k, axis=0)
-        S3 = np.trapz(S3, mu, axis=0)
-        dS3_dM = np.trapz(integ_dS3_dM, k, axis=0)
-        dS3_dM = np.trapz(dS3_dM, k, axis=0)
-        dS3_dM = np.trapz(dS3_dM, mu, axis=0)
+        S3 = np.trapezoid(integ_S3, k, axis=0)
+        S3 = np.trapezoid(S3, k, axis=0)
+        S3 = np.trapezoid(S3, mu, axis=0)
+        dS3_dM = np.trapezoid(integ_dS3_dM, k, axis=0)
+        dS3_dM = np.trapezoid(dS3_dM, k, axis=0)
+        dS3_dM = np.trapezoid(dS3_dM, mu, axis=0)
 
         fac = self.cosmology.fullcosmoparams["f_NL"] * 6 / 8 / np.pi**4
         S3 = -1 * fac * np.squeeze(S3)
@@ -858,7 +858,7 @@ class HaloModel:
         )
 
         itgrnd1 = M[None, :, None] * M_over_rho**power * dndM * b
-        bavg = np.trapz(itgrnd1, np.log(M.value), axis=1)
+        bavg = np.trapezoid(itgrnd1, np.log(M.value), axis=1)
         return np.squeeze(bavg)
 
     def Ihalo(self, z, *args, p=1, scale=(), beta=0, dc=1.6865):
@@ -925,7 +925,7 @@ class HaloModel:
         for ik in range(p):
             Intgrnd = Intgrnd * Fv[ik] * normhaloprofile[ik]
         logM = np.log(M.value)
-        Umean = np.trapz(Intgrnd, logM, axis=-2)
+        Umean = np.trapezoid(Intgrnd, logM, axis=-2)
 
         return np.squeeze(Umean)
 

@@ -36,7 +36,7 @@ class halo_mass_functions:
         return f
 
     def ST_nuf(self, sigma, z):
-        """Sheth--Torman functon in natural units."""
+        """Sheth--Mo--Torman functon in natural units."""
         dc = (
             self.halomodel.delta_crit
             * self.halomodel.cosmology.Omega(z, "matter") ** 0.0055

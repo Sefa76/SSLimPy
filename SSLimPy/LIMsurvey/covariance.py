@@ -145,25 +145,13 @@ class nonGuassianCov:
             self.cosmo.growth_factor(1e-4 * u.Mpc**-1, z, tracer=self.tracer)
         )
 
-        I11 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b1"), k, z)
-        I12 = (
-            np.zeros((*k.shape, *z.shape)) * u.K
-        )  # restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
-        I1G2 = (
-            np.zeros((*k.shape, *z.shape)) * u.K
-        )  # restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
-        I13 = (
-            np.zeros((*k.shape, *z.shape)) * u.K
-        )  # restore_shape(self.astro.Thalo(z, k, p=1, beta="b3"), k, z)
-        I1dG2 = (
-            np.zeros((*k.shape, *z.shape)) * u.K
-        )  # restore_shape(self.astro.Thalo(z, k, p=1, beta="bdG2"), k, z)
-        I1G3 = (
-            np.zeros((*k.shape, *z.shape)) * u.K
-        )  # restore_shape(self.astro.Thalo(z, k, p=1, beta="bG3"), k, z)
-        I1DG2 = (
-            np.zeros((*k.shape, *z.shape)) * u.K
-        )  # restore_shape(self.astro.Thalo(z, k, p=1, beta="bDG2"), k, z)
+        I11 =   restore_shape(self.astro.Thalo(z, k, p=1, beta=1), k, z)
+        I12 =   restore_shape(self.astro.Thalo(z, k, p=1, beta="b2_fitted"), k, z)
+        I1G2 =  restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
+        I13 =   restore_shape(self.astro.Thalo(z, k, p=1, beta="b3"), k, z)
+        I1dG2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bdG2"), k, z)
+        I1G3 =  restore_shape(self.astro.Thalo(z, k, p=1, beta="bG3"), k, z)
+        I1DG2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bDG2"), k, z)
 
         kl = len(k)
         zl = len(z)
@@ -308,20 +296,12 @@ class nonGuassianCov:
             self.cosmo.growth_factor(1e-4 * u.Mpc**-1, z, tracer=self.tracer)
         )
 
-        I11 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b1"), k, z)
-        I12 = (
-            np.zeros((*k.shape, *z.shape)) * u.K
-        )  # restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
-        I1G2 = (
-            np.zeros((*k.shape, *z.shape)) * u.K
-        )  # restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
-        I21 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b1"), k, k, z)
-        I22 = (
-            np.zeros((*k.shape, *k.shape, *z.shape)) * u.K**2 * u.Mpc**3
-        )  # restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b2"), k, k, z)
-        I2G2 = (
-            np.zeros((*k.shape, *k.shape, *z.shape)) * u.K**2 * u.Mpc**3
-        )  # restore_shape(self.astro.Thalo(z, k, k, p=2, beta="bG2"), k, k, z)
+        I11 =   restore_shape(self.astro.Thalo(z, k, p=1, beta=1), k, z)
+        I12 =   restore_shape(self.astro.Thalo(z, k, p=1, beta="b2_fitted"), k, z)
+        I1G2 =  restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
+        I21 =   restore_shape(self.astro.Thalo(z, k, p=1, scale=(2,), beta=1), k, k, z)
+        I22 =   restore_shape(self.astro.Thalo(z, k, p=1, scale=(2,), beta="b2_fitted"), k, k, z)
+        I2G2 =  restore_shape(self.astro.Thalo(z, k, p=1, scale=(2,), beta="bG2"), k, k, z)
 
         kl = len(k)
         zl = len(z)
@@ -377,10 +357,10 @@ class nonGuassianCov:
             self.cosmo.growth_factor(1e-4 * u.Mpc**-1, z, tracer=self.tracer)
         )
 
-        I1 = restore_shape(self.astro.Thalo(z, k, p=1, beta="b1"), k, z)
-        I2 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta="b1"), k, k, z)
+        I1 = restore_shape(self.astro.Thalo(z, k, p=1, beta=1), k, z)
+        I2 = restore_shape(self.astro.Thalo(z, k, k, p=2, beta=1), k, k, z)
         I3 = restore_shape(
-            self.astro.Thalo(z, k, k, p=2, scale=(2, 1), beta="b1"), k, k, z
+            self.astro.Thalo(z, k, k, p=2, scale=(2, 1), beta=1), k, k, z
         )
 
         kl = len(k)
@@ -443,24 +423,19 @@ class SuperSampleCovariance:
         z = np.atleast_1d(self.z)
 
         V = self.survey_specs.Vfield()
-        W = self.survey_specs.Wsurvey(self.kgrid, self.mu)
+        W = (self.survey_specs.Wsurvey(self.kgrid, self.mu) / V).to(1).value
         W = np.reshape(W, (*k.shape, *mu.shape, *z.shape))
 
         P = np.reshape(
             self.cosmology.matpow(k, z, nonlinear=False, tracer=self.halomodel.tracer),
             (*k.shape, *z.shape),
         )
+        D = (4 * np.pi * (self.kgrid[:, None, None] / (2 * np.pi))**3 * P[:, None, :]).to(1).value
+        sigma2_intgrnd = D * W**2
 
-        sigma2_intgrnd = (
-            2
-            * np.pi
-            * (self.kgrid[:, None, None] / (2 * np.pi)) ** 3
-            * W**2
-            * P[:, None, :]
-        )
-        sigma2_intgrnd = np.trapz(sigma2_intgrnd, x=mu, axis=1)
-        sigma2 = np.trapz(sigma2_intgrnd, x=np.log(k.value), axis=0)
-        return np.squeeze(sigma2 / V)
+        sigma2_intgrnd = np.trapezoid(sigma2_intgrnd, x=mu, axis=1) / 2
+        sigma2 = np.trapezoid(sigma2_intgrnd, x=np.log(k.value), axis=0)
+        return sigma2.squeeze()
 
     def halo_sample_variance(self, k, z):
         """The standard  result for halo sample variance"""
@@ -526,13 +501,18 @@ class SuperSampleCovariance:
         b1_L1 = np.reshape(
             self.astro.Thalo(z, k, p=1, scale=(1,), beta=1), (*k.shape, *z.shape)
         )
-        b2_L1 = np.reshape(
-            self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2"), (*k.shape, *z.shape)
+        # b2_L1 = np.reshape(
+        #     self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2"), (*k.shape, *z.shape)
+        # )
+        # bG2_L1 = np.reshape(
+        #     self.astro.Thalo(z, k, p=1, scale=(1,), beta="bG2"), (*k.shape, *z.shape)
+        # )
+        # bsph = b2_L1 - 4 / 3 * bG2_L1
+
+        bsph = np.reshape(
+            self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2sph_lazeyras"), (*k.shape, *z.shape)
         )
-        bG2_L1 = np.reshape(
-            self.astro.Thalo(z, k, p=1, scale=(1,), beta="bG2"), (*k.shape, *z.shape)
-        )
-        bsph = b2_L1 - 4 / 3 * bG2_L1
+
         return 2 * b1_L1 * bsph * Pk
 
     def response(self, k, z):
@@ -554,7 +534,7 @@ class SuperSampleCovariance:
         )
         sigma = np.atleast_1d(self.sigma_survey())
 
-        SSC = (sigma / V)[None, None, :] * response[:, None, :] * response[None, :, :]
+        SSC = sigma[None, None, :] * response[:, None, :] * response[None, :, :]
         return SSC
 
 

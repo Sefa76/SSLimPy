@@ -10,8 +10,9 @@ from typing import Protocol, Union
 import astropy.units as u
 import numpy as np
 from astropy.units import Quantity
-from scipy.special import spherical_jn
+from scipy.special import spherical_jn, jn
 
+from SSLimPy.interface.config import Configuration
 from SSLimPy.cosmology.cosmology import CosmoFunctions
 from SSLimPy.utils.utils import *
 
@@ -112,20 +113,10 @@ class SurveyWindowMixin:
 
         Sfield = self.Sfield()
         Lperp = np.sqrt(Sfield / np.pi)
-        Lparr = self.Lfield()
-
         xperp = (qperp * Lperp).to(1).value
-        Wperp = (
-            2
-            * np.pi
-            * Lperp
-            * np.reshape(
-                smooth_W(xperp.flatten()),
-                xperp.shape,
-            )
-            / qperp
-        )
+        Wperp = Sfield * 2 / xperp * jn(1, xperp)
 
+        Lparr = self.Lfield()
         xparr = (qparr * Lparr).to(1).value
         Wparr = Lparr * spherical_jn(0, xparr / 2)
 
@@ -137,6 +128,7 @@ class GalaxySurvey(SurveyWindowMixin, SurveySpecifications):
     def __init__(self, obspars: dict, cosmo: CosmoFunctions) -> None:
         self._obsparams = copy(obspars)
         self._cosmology = cosmo
+        self._settings = cosmo.cfg
 
         self.set_survey_defaults()
 
@@ -155,6 +147,14 @@ class GalaxySurvey(SurveyWindowMixin, SurveySpecifications):
     @obsparams.setter
     def obsparams(self, pobsparams: dict) -> None:
         self._obsparams = pobsparams
+
+    @property
+    def settings(self) -> Configuration:
+        return self._settings
+
+    @settings.setter
+    def settings(self, psettings: Configuration) -> None:
+        self._settings = psettings
 
     def set_survey_defaults(self) -> None:
         self.obsparams.setdefault("Omega_field", 4 * u.deg**2)
@@ -218,6 +218,7 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
     def __init__(self, obspars: dict, cosmo: CosmoFunctions) -> None:
         self._obsparams = copy(obspars)
         self._cosmology = cosmo
+        self._settings = cosmo.settings
 
         self.set_survey_defaults()
 
@@ -228,6 +229,14 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
     @cosmology.setter
     def cosmology(self, pcosmology: CosmoFunctions) -> None:
         self._cosmology = pcosmology
+
+    @property
+    def settings(self) -> Configuration:
+        return self._settings
+
+    @settings.setter
+    def settings(self, psettings: Configuration) -> None:
+        self._settings = psettings
 
     @property
     def obsparams(self) -> dict:
@@ -275,6 +284,8 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
 
     def sigma_perp(self) -> Quantity:
         _, z, _ = self.get_redshifts()
+
+        # convert to gaussian variance
         x = self.obsparams["beam_FWHM"].to(u.rad).value / np.sqrt(8 * np.log(2))
         y = self.cosmology.angdist(z) * (1 + z)
         return np.squeeze(x * y)
@@ -319,7 +330,54 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
 
         return np.squeeze(np.exp(logF))
 
+    ########################
+    # Noise Specifications #
+    ########################
+
+    def Npix(self):
+        ang_res = self.obsparams["beam_FWHM"]
+        Omega_field = self.obsparams["Omega_field"]
+
+        Npix = (Omega_field / ang_res**2).to(1).value
+        return np.floor(Npix)
+
+    def tpix(self):
+        """Observation time of a single pixel
+        observed by one instrument
+        """
+        Npix = self.Npix()
+        tobs = self.obsparams["tobs"]
+        return tobs / Npix
+
+    def Vvox(self):
+        Npix = self.Npix()
+        dnu_FWHM = self.obsparams["dnu"] * np.sqrt(8 * np.log(2))
+        Nch = np.floor(self.obsparams["Delta_nu"] / dnu_FWHM).to(1).value
+        Nvox = Npix * Nch
+        Vvox = self.Vfield() / Nvox
+        return Vvox
+
+    def simga_Noise(self) -> Quantity:
+        integrated_tobs = (
+            self.obsparams["nFeeds"] * self.self.obsparams["nD"] * self.tpix()
+        )
+
+        if self.settings.settings["do_Jysr"]:
+            sigma_pix = self.obsparams["Tsys_NEFD"] / self.obsparams["beam_FWHM"] ** 2
+            return (sigma_pix / np.sqrt(integrated_tobs)).to(u.Jy / u.sr)
+        else:
+            dnu_FWHM = self.obsparams["dnu"] * np.sqrt(8 * np.log(2))
+            sigma_N = (
+                self.obsparams["Tsys_NEFD"]
+                / np.sqrt(integrated_tobs * dnu_FWHM).to(1).value
+            )
+            return sigma_N
+
     def detector_noise(self) -> Quantity:
+        return self.simga_Noise() ** 2 * self.Vvox
+
+    def detector_noise_old(self) -> Quantity:
+        self.settings.settings["do_Jysr"]
         _, z, _ = self.get_redshifts()
         F1 = (
             self.obsparams["Tsys_NEFD"] ** 2
