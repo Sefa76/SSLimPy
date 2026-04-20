@@ -523,15 +523,33 @@ class SuperSampleCovariance:
         )
         return np.squeeze(response)
 
+    def logresponse(self, k, z):
+        # TODO: Add proper handling of RSD in response functions
+        assert self.cosmology.settings["do_RSD"] == False
+        
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
+        response = self.response(k, z).reshape((*k.shape, *z.shape))
+
+        Pk_response = self.cosmology.matpow(
+            k, z, tracer=self.power_spectrum.tracer, nonlinear=False,
+            ).reshape(*k.shape, *z.shape)
+        I11 = self.astro.Thalo(z, k, p=1, scale=(1,), beta=1).reshape((*k.shape, *z.shape))
+        I02 = self.astro.Thalo(z, k, p=1, scale=(2,), beta=0).reshape((*k.shape, *z.shape))
+        Pk_halo = I11**2 * Pk_response + I02
+
+        return np.squeeze(response / Pk_halo)
+
     def compute_SSC(self):
         k = self.k
         z = self.z
 
-        V = np.atleast_1d(self.survey_specs.Vfield())
-        response = np.reshape(
-            self.response(k, z),
-            (*k.shape, *z.shape),
-        )
+        # It is done this way to approimate the effect of survey resolution etc as beeing independent of backgoundmodes
+        P = self.power_spectrum.Pk_0bs.reshape((*k.shape, *z.shape))
+        logR = self.logresponse(self.k, z).reshape((*k.shape, *z.shape))
+        response = P * logR
+
         sigma = np.atleast_1d(self.sigma_survey())
 
         SSC = sigma[None, None, :] * response[:, None, :] * response[None, :, :]
