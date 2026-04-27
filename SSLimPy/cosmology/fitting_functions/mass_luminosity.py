@@ -138,9 +138,9 @@ class mass_luminosity:
             pass
 
         # Compute IR luminosity in Lsun from Kennicutt 1998, arXiv:9807187
-        LIR = (SFR * (1 / 4.5e-44) * u.erg / u.s).to(u.Lsun)
+        LIR = (SFR / (1 * u.Msun / u.yr) * (1 / 4.5e-44) * u.erg / u.s).to(u.Lsun)
         Lp = np.power(10, ((np.log10(LIR.value) - beta) / alpha))
-        L = (4.9e-5 * u.Lsun) * Lp * (self.astro.nu[None, :] / (115.27 * u.GHz)) ** 3
+        L = (4.9e-5 * u.Lsun) * Lp * (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)) ** 3
 
         return np.squeeze(L)
 
