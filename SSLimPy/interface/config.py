@@ -68,7 +68,7 @@ class Configuration:
         self.settings.setdefault("nnodes_legendre", 9)
 
         # Pk specifications
-        self.settings.setdefault("do_Jysr", False)
+        # self.settings.setdefault("do_Jysr", False) #This should have to do with astro
         self.settings.setdefault("fix_cosmo_nl_terms", True)
 
         # Pk contributions

@@ -247,6 +247,7 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
         self._obsparams = pobsparams
 
     def set_survey_defaults(self) -> None:
+        self.obsparams.setdefault("do_Jysr", False)
         self.obsparams.setdefault("Tsys_NEFD", 40 * u.uK)
         self.obsparams.setdefault("Nfeeds", 19)
         self.obsparams.setdefault("beam_FWHM", 4.1 * u.arcmin)
@@ -362,7 +363,7 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
             self.obsparams["nFeeds"] * self.self.obsparams["nD"] * self.tpix()
         )
 
-        if self.settings.settings["do_Jysr"]:
+        if self.obsparams["do_Jysr"]:
             sigma_pix = self.obsparams["Tsys_NEFD"] / self.obsparams["beam_FWHM"] ** 2
             return (sigma_pix / np.sqrt(integrated_tobs)).to(u.Jy / u.sr)
         else:
@@ -377,7 +378,7 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
         return self.simga_Noise() ** 2 * self.Vvox
 
     def detector_noise_old(self) -> Quantity:
-        self.settings.settings["do_Jysr"]
+        self.obsparams["do_Jysr"]
         _, z, _ = self.get_redshifts()
         F1 = (
             self.obsparams["Tsys_NEFD"] ** 2

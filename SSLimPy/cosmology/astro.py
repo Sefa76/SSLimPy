@@ -197,7 +197,7 @@ class AstroFunctions:
     ###################
 
     def CLT(self, z):
-        if self.cfg.settings["do_Jysr"]:
+        if self.survey_specs.obsparams["do_Jysr"]:
             x = c.c / (
                 4.0
                 * np.pi
