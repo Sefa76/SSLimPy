@@ -10,7 +10,6 @@ NUMERICS:
 COSMO_SETTINGS:
   'kmax' : 50
   'share_delta_neff' : True
-  'halofit_version' : 'takahashi'
   'dark_energy_model' : 'ppf'
   'num_nu_massive' : 1
   'num_nu_massless' : 2
@@ -24,3 +23,5 @@ COSMO_SETTINGS:
   'Want_cl_2D_array' : False
   'DoLateRadTruncation': True
   'DoLensing': False
+NON_LINEAR:
+  'halofit_version' : 'takahashi'

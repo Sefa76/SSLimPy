@@ -358,7 +358,7 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
         Vvox = self.Vfield() / Nvox
         return Vvox
 
-    def simga_Noise(self) -> Quantity:
+    def sigma_Noise(self) -> Quantity:
         integrated_tobs = (
             self.obsparams["Nfeeds"] * self.obsparams["nD"] * self.tpix()
         )
@@ -375,7 +375,7 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
             return sigma_N
 
     def detector_noise(self) -> Quantity:
-        return self.simga_Noise() ** 2 * self.Vvox()
+        return self.sigma_Noise() ** 2 * self.Vvox()
 
     def detector_noise_old(self) -> Quantity:
         self.obsparams["do_Jysr"]

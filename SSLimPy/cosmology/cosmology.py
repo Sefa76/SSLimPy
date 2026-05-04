@@ -287,6 +287,11 @@ class BoltzmannCode:
             **self.boltzmann_cambpars["ACCURACY"],
             **self.boltzmann_cambpars["COSMO_SETTINGS"],
         }.copy()
+        if self.cfg.settings["nonlinearMatpow"]:
+            input_cambcosmopars.update(
+                self.boltzmann_cambpars["NON_LINEAR"]
+            )
+
         input_cambcosmopars.update(cosmopars)
         self.cambcosmopars = self.basechange_camb(input_cambcosmopars, camb)
 
@@ -319,6 +324,11 @@ class BoltzmannCode:
             **self.boltzmann_classpars["ACCURACY"],
             **self.boltzmann_classpars["COSMO_SETTINGS"],
         }.copy()
+        if self.cfg.settings["nonlinearMatpow"]:
+            input_classcosmopars.update(
+                self.boltzmann_classpars["NON_LINEAR"]
+            )
+
         input_classcosmopars.update(cosmopars)
         self.classcosmopars = self.basechange_class(input_classcosmopars)
 
@@ -353,72 +363,6 @@ class BoltzmannCode:
         self.results = types.SimpleNamespace()
         cambres, cambinstance = self.ready_camb(cosmopars, camb)
 
-        Pk_l, self.results.zgrid, self.results.kgrid = (
-            cambres.get_matter_power_interpolator(
-                hubble_units=False,
-                k_hunit=False,
-                var1="delta_tot",
-                var2="delta_tot",
-                nonlinear=False,
-                extrap_kmax=100,
-                return_z_k=True,
-            )
-        )
-        self.results.Pk_l = Pk_l.P(self.results.zgrid, self.results.kgrid).T
-
-        Pk_cb_l, _, _ = cambres.get_matter_power_interpolator(
-            hubble_units=False,
-            k_hunit=False,
-            var1="delta_nonu",
-            var2="delta_nonu",
-            nonlinear=False,
-            extrap_kmax=100,
-            return_z_k=True,
-        )
-        self.results.Pk_cb_l = Pk_cb_l.P(self.results.zgrid, self.results.kgrid).T
-
-        Pk_nl, _, _ = cambres.get_matter_power_interpolator(
-            hubble_units=False,
-            k_hunit=False,
-            var1="delta_tot",
-            var2="delta_tot",
-            nonlinear=True,
-            extrap_kmax=100,
-            return_z_k=True,
-        )
-        self.results.Pk_nl = Pk_nl.P(self.results.zgrid, self.results.kgrid).T
-
-        pk_prim = (
-            cambinstance.scalar_power(self.results.kgrid)
-            * (2.0 * np.pi**2)
-            / np.power(self.results.kgrid, 3)
-        )
-        lgpk_prim = np.log10(pk_prim)
-        lgk = np.log10(self.results.kgrid)
-        self.results.P_scalar = UnivariateSpline(lgk, lgpk_prim)
-
-        Pk_cross_l = cambres.get_matter_power_interpolator(
-            hubble_units=False,
-            k_hunit=False,
-            var1="delta_nonu",
-            var2="delta_nu",
-            nonlinear=False,
-            extrap_kmax=100,
-            return_z_k=False,
-        )
-        Pk_cross_l = Pk_cross_l.P(self.results.zgrid, self.results.kgrid).T
-
-        Pk_nunu_l = cambres.get_matter_power_interpolator(
-            hubble_units=False,
-            k_hunit=False,
-            var1="delta_nu",
-            var2="delta_nu",
-            nonlinear=False,
-            extrap_kmax=100,
-            return_z_k=False,
-        )
-        Pk_nunu_l = Pk_nunu_l.P(self.results.zgrid, self.results.kgrid).T
-
         self.results.h_of_z = UnivariateSpline(
             self.results.zgrid, cambres.h_of_z(self.results.zgrid)
         )
@@ -446,15 +390,82 @@ class BoltzmannCode:
             ),
         )
 
-        # Calculate the Matter fractions for CB Powerspectrum
-        f_cdm = cambres.get_Omega("cdm", z=0) / self.results.Om_m(0)
-        f_b = cambres.get_Omega("baryon", z=0) / self.results.Om_m(0)
-        f_cb = f_cdm + f_b
-        f_nu = 1 - f_cb
+        Pk_l, self.results.zgrid, self.results.kgrid = (
+            cambres.get_matter_power_interpolator(
+                hubble_units=False,
+                k_hunit=False,
+                var1="delta_tot",
+                var2="delta_tot",
+                nonlinear=False,
+                extrap_kmax=100,
+                return_z_k=True,
+            )
+        )
+        self.results.Pk_l = Pk_l.P(self.results.zgrid, self.results.kgrid).T
 
-        self.results.Pk_cb_nl = (
-            self.results.Pk_nl - 2 * Pk_cross_l * f_cb * f_nu - Pk_nunu_l * f_nu**2
-        ) / f_cb**2
+        Pk_cb_l, _, _ = cambres.get_matter_power_interpolator(
+            hubble_units=False,
+            k_hunit=False,
+            var1="delta_nonu",
+            var2="delta_nonu",
+            nonlinear=False,
+            extrap_kmax=100,
+            return_z_k=True,
+        )
+        self.results.Pk_cb_l = Pk_cb_l.P(self.results.zgrid, self.results.kgrid).T
+
+        if self.cfg.settings["nonlinearMatpow"]:
+            Pk_nl, _, _ = cambres.get_matter_power_interpolator(
+                hubble_units=False,
+                k_hunit=False,
+                var1="delta_tot",
+                var2="delta_tot",
+                nonlinear=True,
+                extrap_kmax=100,
+                return_z_k=True,
+            )
+            self.results.Pk_nl = Pk_nl.P(self.results.zgrid, self.results.kgrid).T
+
+            pk_prim = (
+                cambinstance.scalar_power(self.results.kgrid)
+                * (2.0 * np.pi**2)
+                / np.power(self.results.kgrid, 3)
+            )
+            lgpk_prim = np.log10(pk_prim)
+            lgk = np.log10(self.results.kgrid)
+            self.results.P_scalar = UnivariateSpline(lgk, lgpk_prim)
+
+            Pk_cross_l = cambres.get_matter_power_interpolator(
+                hubble_units=False,
+                k_hunit=False,
+                var1="delta_nonu",
+                var2="delta_nu",
+                nonlinear=False,
+                extrap_kmax=100,
+                return_z_k=False,
+            )
+            Pk_cross_l = Pk_cross_l.P(self.results.zgrid, self.results.kgrid).T
+
+            Pk_nunu_l = cambres.get_matter_power_interpolator(
+                hubble_units=False,
+                k_hunit=False,
+                var1="delta_nu",
+                var2="delta_nu",
+                nonlinear=False,
+                extrap_kmax=100,
+                return_z_k=False,
+            )
+            Pk_nunu_l = Pk_nunu_l.P(self.results.zgrid, self.results.kgrid).T
+
+            # Calculate the Matter fractions for CB Powerspectrum
+            f_cdm = cambres.get_Omega("cdm", z=0) / self.results.Om_m(0)
+            f_b = cambres.get_Omega("baryon", z=0) / self.results.Om_m(0)
+            f_cb = f_cdm + f_b
+            f_nu = 1 - f_cb
+
+            self.results.Pk_cb_nl = (
+                self.results.Pk_nl - 2 * Pk_cross_l * f_cb * f_nu - Pk_nunu_l * f_nu**2
+            ) / f_cb**2
 
     def class_results(self, Class, cosmopars):  # Get your CLASS results from here
         self.results = types.SimpleNamespace()
@@ -488,32 +499,33 @@ class BoltzmannCode:
         self.results.Pk_cb_l = Pk_cb_l[:, ::-1]
 
         ## interpolating function Pk_nl (k,z)
-        Pk_nl, _, _ = classres.get_pk_and_k_and_z(
-            nonlinear=self.cfg.settings["nonlinearMatpow"]
-        )
-        self.results.Pk_nl = Pk_nl[:, ::-1]
+        if self.cfg.settings["nonlinearMatpow"]:
+            Pk_nl, _, _ = classres.get_pk_and_k_and_z(
+                nonlinear=True
+            )
+            self.results.Pk_nl = Pk_nl[:, ::-1]
 
-        tk, _, _ = classres.get_transfer_and_k_and_z()
-        T_cb = (f_b * tk["d_b"] + f_cdm * tk["d_cdm"]) / f_cb
-        T_nu = tk["d_ncdm[0]"]
+            tk, _, _ = classres.get_transfer_and_k_and_z()
+            T_cb = (f_b * tk["d_b"] + f_cdm * tk["d_cdm"]) / f_cb
+            T_nu = tk["d_ncdm[0]"]
 
-        pm = classres.get_primordial()
-        pk_prim = (
-            UnivariateSpline(pm["k [1/Mpc]"], pm["P_scalar(k)"])(self.results.kgrid)
-            * (2.0 * np.pi**2)
-            / np.power(self.results.kgrid, 3)
-        )
+            pm = classres.get_primordial()
+            pk_prim = (
+                UnivariateSpline(pm["k [1/Mpc]"], pm["P_scalar(k)"])(self.results.kgrid)
+                * (2.0 * np.pi**2)
+                / np.power(self.results.kgrid, 3)
+            )
 
-        lgpk_prim = np.log10(pk_prim)
-        lgk = np.log10(self.results.kgrid)
-        self.results.P_scalar = UnivariateSpline(lgk, lgpk_prim)
+            lgpk_prim = np.log10(pk_prim)
+            lgk = np.log10(self.results.kgrid)
+            self.results.P_scalar = UnivariateSpline(lgk, lgpk_prim)
 
-        Pk_cross_l = T_nu[:, ::-1] * T_cb[:, ::-1] * pk_prim[:, None]
-        Pk_nunu_l = T_nu[:, ::-1] * T_nu[:, ::-1] * pk_prim[:, None]
+            Pk_cross_l = T_nu[:, ::-1] * T_cb[:, ::-1] * pk_prim[:, None]
+            Pk_nunu_l = T_nu[:, ::-1] * T_nu[:, ::-1] * pk_prim[:, None]
 
-        self.results.Pk_cb_nl = (
-            self.results.Pk_nl - 2 * Pk_cross_l * f_nu * f_cb - Pk_nunu_l * f_nu * f_nu
-        ) / f_cb**2
+            self.results.Pk_cb_nl = (
+                self.results.Pk_nl - 2 * Pk_cross_l * f_nu * f_cb - Pk_nunu_l * f_nu * f_nu
+            ) / f_cb**2
 
 
 class CosmoFunctions:
@@ -749,9 +761,10 @@ class CosmoFunctions:
             return RectBivariateSpline(self.k, self.z, np.exp(logP_interp))
 
         self.Pk_l = extract(self.results.Pk_l)
-        self.Pk_nl = extract(self.results.Pk_nl)
         self.Pk_cb_l = extract(self.results.Pk_cb_l)
-        self.Pk_cb_nl = extract(self.results.Pk_cb_nl)
+        if self.cfg.settings["nonlinearMatpow"]:
+            self.Pk_nl = extract(self.results.Pk_nl)
+            self.Pk_cb_nl = extract(self.results.Pk_cb_nl)
 
     def primordial_scalar_pow(self, k):
         lgk = np.log10(k.to(u.Mpc**-1).value)
@@ -834,7 +847,10 @@ class CosmoFunctions:
             float: The value of the MM power spectrum at the given redshift and wavenumber.
         """
         if nonlinear:
-            power = self.Pk_nl(k, z, grid=False)
+            if self.cfg.settings["nonlinearMatpow"]:
+                power = self.Pk_nl(k, z, grid=False)
+            else:
+                raise AttributeError("Non-linear power spectrum was not asked for from EBS")
         else:
             power = self.Pk_l(k, z, grid=False)
         return power
@@ -852,7 +868,10 @@ class CosmoFunctions:
             The value of the CB power spectrum at the given redshift and wavenumber.
         """
         if nonlinear:
-            power = self.Pk_cb_nl(k, z, grid=False)
+            if self.cfg.settings["nonlinearMatpow"]:
+                power = self.Pk_cb_nl(k, z, grid=False)
+            else:
+                raise AttributeError("Non-linear power spectrum was not asked for from EBS")
         else:
             power = self.Pk_cb_l(k, z, grid=False)
         return power
