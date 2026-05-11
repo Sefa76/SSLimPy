@@ -840,7 +840,7 @@ class HaloModel:
 
         return b
 
-    def bavg(self, beta, z, power, dc=None, k=None):
+    def bavg(self, beta, z, power, dc=None, k=None, Norm=True):
         M = self.M.to(u.Msun)
         z = np.atleast_1d(z)
 
@@ -859,6 +859,13 @@ class HaloModel:
 
         itgrnd1 = M[None, :, None] * M_over_rho**power * dndM * b
         bavg = np.trapezoid(itgrnd1, np.log(M.value), axis=1)
+        if Norm:
+            itgrnd2 = M[None, :, None] * M_over_rho**power * dndM
+            bavg = (
+                bavg
+                /  np.trapezoid(itgrnd2, np.log(M.value), axis=1)
+            ).to(1).value
+        
         return np.squeeze(bavg)
 
     def Ihalo(self, z, *args, p=1, scale=(), beta=0, dc=1.6865):
@@ -954,7 +961,7 @@ class HaloModel:
         P_QNL = np.reshape(self.P_QNL(k, z), (*k.shape, *z.shape))
 
         I1_1 = restore_shape(self.Ihalo(z, k, mu, p=1, scale=(1,), beta=1), k, mu, z)
-        I1_norm = restore_shape(self.bavg(1, z, 1, k=k), k, z)
+        I1_norm = restore_shape(self.bavg(1, z, 1, k=k, Norm=False), k, z)
         I1_1 = I1_1 / I1_norm[:, None, :]
 
         I0_2 = restore_shape(self.Ihalo(z, k, mu, p=1, scale=(2,), beta=0), k, mu, z)

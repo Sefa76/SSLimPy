@@ -353,7 +353,7 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
     def Vvox(self):
         Npix = self.Npix()
         dnu_FWHM = self.obsparams["dnu"] * np.sqrt(8 * np.log(2))
-        Nch = np.floor(self.obsparams["Delta_nu"] / dnu_FWHM).to(1).value
+        Nch = np.floor((self.obsparams["Delta_nu"] / dnu_FWHM).to(1).value)
         Nvox = Npix * Nch
         Vvox = self.Vfield() / Nvox
         return Vvox
@@ -383,7 +383,7 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
         F1 = (
             self.obsparams["Tsys_NEFD"] ** 2
             * self.obsparams["Omega_field"].to(u.sr).value
-            / (self.obsparams["nD"] * self.obsparams["tobs"])
+            / (self.obsparams["Nfeeds"] * self.obsparams["nD"] * self.obsparams["tobs"])
         )
         F2 = self.cosmology.CELERITAS / self.obsparams["nu"]
         F3 = (

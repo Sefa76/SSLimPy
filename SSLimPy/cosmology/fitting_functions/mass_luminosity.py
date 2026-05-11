@@ -16,17 +16,18 @@ Add in models from Matlab code
 
 import os
 from copy import deepcopy
+from functools import partial
 
 import astropy.constants as cu
 import astropy.units as u
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator, interp1d
+from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import interp1d as _interp1d
 
 import astropy.units as u
 import numpy as np
 
-from scipy.interpolate import RegularGridInterpolator, interp1d
-
+interp1d = partial(_interp1d, kind="cubic")
 
 class mass_luminosity:
 

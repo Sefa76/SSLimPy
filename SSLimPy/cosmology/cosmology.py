@@ -1023,13 +1023,13 @@ class CosmoFunctions:
         loga = np.log(a)
         logk = np.log(k.to(1 / u.Mpc).value)
 
-        Pm0 = self.matpow(k, 0, tracer="matter")[:, None]
-        Pm = self.matpow(k, z, tracer="matter")
-        Pc0 = self.matpow(k, 0, tracer="clustering")[:, None]
-        Pc = self.matpow(k, z, tracer="clustering")
+        Pm = self.results.Pk_l
+        Pm0 = Pm[:, 0][:, None]
+        Pc = self.results.Pk_cb_l
+        Pc0 = Pc[:, 0][:, None]
 
-        logDm = np.log(np.sqrt((Pm / Pm0).to(1).value))
-        logDc = np.log(np.sqrt((Pc / Pc0).to(1).value))
+        logDm = np.log(np.sqrt((Pm / Pm0)))
+        logDc = np.log(np.sqrt((Pc / Pc0)))
 
         logDm_inter = RectBivariateSpline(logk, loga[::-1], logDm[:, ::-1])
         logDc_inter = RectBivariateSpline(logk, loga[::-1], logDc[:, ::-1])
