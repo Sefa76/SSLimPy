@@ -1,4 +1,4 @@
-""" The functions here will update the different cosmology and survey classes using a ladder system.
+"""The functions here will update the different cosmology and survey classes using a ladder system.
 All constructors of the classes get as an argument an Object of the previous classes as well as new parameters.
 Like this the update is done heirachially from bottom to top.
 """
@@ -45,11 +45,15 @@ def update_cosmo(
     if cosmopars == current_cosmopars:
         cosmo = current_cosmo
         if nuiscance_like != current_nuiscance_like:
-            cosmo = cosmology.CosmoFunctions(cfg, cosmology=current_cosmo, nuiscance_like=nuiscance_like)
+            cosmo = cosmology.CosmoFunctions(
+                cfg, cosmology=current_cosmo, nuiscance_like=nuiscance_like
+            )
     elif cosmopars == cfg.fiducialcosmoparams:
         cosmo = cfg.fiducialcosmo
         if nuiscance_like != cfg.fiducialnuiscancelikeparams:
-            cosmo = cosmology.CosmoFunctions(cfg, cosmology=cfg.fiducialcosmo, nuiscance_like=nuiscance_like)
+            cosmo = cosmology.CosmoFunctions(
+                cfg, cosmology=cfg.fiducialcosmo, nuiscance_like=nuiscance_like
+            )
     else:
         cosmo = cosmology.CosmoFunctions(cfg, cosmopars, nuiscance_like)
     return cosmo
@@ -104,7 +108,9 @@ def update_astro(
                 return current_astro
             else:
                 survey_specs = update_surveySpecs(obspars, cfg)
-                return astro.AstroFunctions(current_halomodel, survey_specs, current_astoparams)
+                return astro.AstroFunctions(
+                    current_halomodel, survey_specs, current_astoparams
+                )
         else:
             survey_specs = update_surveySpecs(obspars, cfg)
             return astro.AstroFunctions(current_halomodel, survey_specs, astropars)
@@ -114,7 +120,9 @@ def update_astro(
                 return cfg.fiducialastro
             else:
                 survey_specs = update_surveySpecs(obspars, cfg)
-                return astro.AstroFunctions(cfg.fiducialhalomodel, survey_specs, cfg.fiducialastroparams)
+                return astro.AstroFunctions(
+                    cfg.fiducialhalomodel, survey_specs, cfg.fiducialastroparams
+                )
         else:
             survey_specs = update_surveySpecs(obspars, cfg)
             return astro.AstroFunctions(cfg.fiducialhalomodel, survey_specs, astropars)

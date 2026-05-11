@@ -16,17 +16,18 @@ Add in models from Matlab code
 
 import os
 from copy import deepcopy
+from functools import partial
 
 import astropy.constants as cu
 import astropy.units as u
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator, interp1d
+from scipy.interpolate import RegularGridInterpolator
+from scipy.interpolate import interp1d as _interp1d
 
 import astropy.units as u
 import numpy as np
 
-from scipy.interpolate import RegularGridInterpolator, interp1d
-
+interp1d = partial(_interp1d, kind="cubic")
 
 class mass_luminosity:
 
@@ -138,9 +139,9 @@ class mass_luminosity:
             pass
 
         # Compute IR luminosity in Lsun from Kennicutt 1998, arXiv:9807187
-        LIR = (SFR * (1 / 4.5e-44) * u.erg / u.s).to(u.Lsun)
+        LIR = (SFR / (1 * u.Msun / u.yr) * (1 / 4.5e-44) * u.erg / u.s).to(u.Lsun)
         Lp = np.power(10, ((np.log10(LIR.value) - beta) / alpha))
-        L = (4.9e-5 * u.Lsun) * Lp * (self.astro.nu[None, :] / (115.27 * u.GHz)) ** 3
+        L = (4.9e-5 * u.Lsun) * Lp * (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)) ** 3
 
         return np.squeeze(L)
 
@@ -230,15 +231,14 @@ class mass_luminosity:
         # Compute IR luminosity in Lsun
         LIR = SFR / (dMF * 1e-10)
 
-        # Compute L'_CO in K km/s pc^2
-        Lprime = (10.0**-beta * LIR) ** (1.0 / alpha)
+        logL = np.log10(LIR.to(u.Lsun).value)
+        LCOprime = np.power(
+            10, alpha**-1 * (logL - beta)
+        )  # * u.K * u.km * u.s**-1 * u.pc**2
+        J = (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)).to(1).value
 
         # Compute LCO
-        L = (
-            (4.9e-5 * u.Lsun)
-            * Lprime
-            * (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)) ** 3
-        )
+        L = 4.9e-5 * u.Lsun * J**3 * LCOprime
 
         return np.squeeze(L)
 
@@ -660,6 +660,25 @@ class mass_luminosity:
         L = CLM * M_HI
         return np.squeeze(L)
 
+    def L_from_MHI_VN(self, Mvec, z):
+        lm = cu.c / self.astro.nu
+        hunit = 100 * u.km * u.s**-1 * u.Mpc**-1
+
+        # This number is slightly different than the normal; ~ 6.5 Lsun / Msun
+        CML = (8 * np.pi * cu.k_B * lm**-3 * self.astro.rho_crit**-1 * self.astro.hubble**2 * hunit * 189 * u.mK).to(u.Lsun * u.Msun**-1)
+        # CLM = 6.25e-9 * u.Lsun / u.Msun  # Conversion factor btw MHI and LHI
+
+        z_grid = np.atleast_1d(z)[None, :]
+        M_grid = np.atleast_1d(Mvec)[:, None]
+
+        M0 = self.model_par["M0"]
+        Mmin = self.model_par["Mmin"]
+        alpha = self.model_par["alpha"]
+
+        M_HI = M0 * (M_grid / Mmin) ** alpha * np.exp(-Mmin / M_grid)
+        L = CML * M_HI * np.ones_like(z_grid)
+        return np.squeeze(L)
+
     def MHI_21cm_Obuljen(self, Mvec, z):
         """
         Obuljen et al. (2018) 21cm MHI(M) model, relates MHI to halo mass by
@@ -794,7 +813,7 @@ class mass_luminosity:
         logSFRb = x[:, 2].reshape(len(zb), len(logMb), order="F")
 
         logSFR_interp = RegularGridInterpolator(
-            (zb, logMb), logSFRb, bounds_error=False, fill_value=-40.0
+            (zb, logMb), logSFRb, bounds_error=False, fill_value=-np.inf
         )
 
         logM_grid = np.log10((M_grid.to(u.Msun)).value)

@@ -5,6 +5,7 @@ import yaml
 from astropy import units as u
 from copy import copy
 
+
 class Configuration:
     def __init__(
         self,
@@ -47,7 +48,7 @@ class Configuration:
         self.settings.setdefault("h-units", False)
         self.settings.setdefault("do_pheno_ncdm", False)
 
-        # Savgol numerics
+        # Dewiggeling numerics
         self.settings.setdefault("smooth_internal_kmin", 1e-3 * u.Mpc**-1)
         self.settings.setdefault("smooth_internal_kmax", 10 * u.Mpc**-1)
         self.settings.setdefault("smooth_internal_samples", 800)
@@ -56,9 +57,9 @@ class Configuration:
 
         # Pk numerics
         self.settings.setdefault("k_kind", "log")
-        self.settings.setdefault("kmin", 1.0e-3 * u.Mpc**-1)
-        self.settings.setdefault("kmax", 50 * u.Mpc**-1)
-        self.settings.setdefault("nk", 200)
+        self.settings.setdefault("kmin", 1.0e-4 * u.Mpc**-1)
+        self.settings.setdefault("kmax", 10 * u.Mpc**-1)
+        self.settings.setdefault("nk", 250)
         self.settings.setdefault("zmin", 0)
         self.settings.setdefault("zmax", 5)
         self.settings.setdefault("nz", 32)
@@ -67,7 +68,7 @@ class Configuration:
         self.settings.setdefault("nnodes_legendre", 9)
 
         # Pk specifications
-        self.settings.setdefault("do_Jysr", False)
+        # self.settings.setdefault("do_Jysr", False) #This should have to do with astro
         self.settings.setdefault("fix_cosmo_nl_terms", True)
 
         # Pk contributions
@@ -81,9 +82,9 @@ class Configuration:
         self.settings.setdefault("Smooth_window", False)
 
         # Pk FFTlog approximation
-        self.settings.setdefault("Log-extrap", 10)
-        self.settings.setdefault("LogN_modes", 10)
-
+        self.settings.setdefault("FFTlog_kmin", 1e-6 * u.Mpc**-1)
+        self.settings.setdefault("FFTlog_kmax", 1000 * u.Mpc**-1)
+        self.settings.setdefault("FFTlog_LogN", 10)
 
         # VID numerics
         self.settings.setdefault("Tmin_VID", 1e-2 * u.uK)
@@ -117,7 +118,9 @@ class Configuration:
                 if os.path.exists(camb_yaml_file):
                     file_content_camb = yaml.safe_load(open(camb_yaml_file))
                 else:
-                    print("You asked for CAMB but the yaml path you passed did not exist")
+                    print(
+                        "You asked for CAMB but the yaml path you passed did not exist"
+                    )
                     raise ValueError
             else:
                 file_content_camb = yaml.safe_load(
@@ -134,7 +137,9 @@ class Configuration:
                 if os.path.exists(class_yaml_file):
                     file_content_class = yaml.safe_load(open(class_yaml_file))
                 else:
-                    print("You asked for CLASS but the yaml path you passed did not exist")
+                    print(
+                        "You asked for CLASS but the yaml path you passed did not exist"
+                    )
                     raise ValueError
             else:
                 file_content_class = yaml.safe_load(
@@ -155,7 +160,9 @@ class Configuration:
         self.fiducialnuiscancelikeparams = dict()
         for key in cosmopars:
             if key in self.nuiscance_like_params_names:
-                self.fiducialnuiscancelikeparams[key] = self.fiducialcosmoparams.pop(key)
+                self.fiducialnuiscancelikeparams[key] = self.fiducialcosmoparams.pop(
+                    key
+                )
 
         self.fiducialfullcosmoparams = {
             **self.fiducialcosmoparams,
@@ -177,7 +184,7 @@ class Configuration:
         from SSLimPy.cosmology import cosmology
 
         self.fiducialcosmo = cosmology.CosmoFunctions(
-            cfg = self,
+            cfg=self,
             cosmopars=self.fiducialcosmoparams,
             nuiscance_like=self.fiducialnuiscancelikeparams,
             input_type=self.input_type,
@@ -187,23 +194,23 @@ class Configuration:
         from SSLimPy.cosmology import halo_model
 
         self.fiducialhalomodel = halo_model.HaloModel(
-            cosmo= self.fiducialcosmo,
-            halopars= self.fiducialhaloparams,
+            cosmo=self.fiducialcosmo,
+            halopars=self.fiducialhaloparams,
         )
 
     def initialize_fiducialspecs(self):
         from SSLimPy.interface import survey_specs
 
         self.fiducialspecs = survey_specs.LIMSuvey(
-            obspars= self.fiducialspecparams,
-            cosmo= self.fiducialcosmo,
+            obspars=self.fiducialspecparams,
+            cosmo=self.fiducialcosmo,
         )
 
     def initialize_fiducialastro(self):
         from SSLimPy.cosmology import astro
 
         self.fiducialastro = astro.AstroFunctions(
-            halomodel= self.fiducialhalomodel,
-            survey_specs= self.fiducialspecs,
-            astropars= self.fiducialastroparams
+            halomodel=self.fiducialhalomodel,
+            survey_specs=self.fiducialspecs,
+            astropars=self.fiducialastroparams,
         )

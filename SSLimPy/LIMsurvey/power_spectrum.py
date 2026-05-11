@@ -6,7 +6,7 @@ from astropy import units as u
 from numba import njit, prange
 from scipy.integrate import simpson
 from scipy.interpolate import RectBivariateSpline
-from scipy.special import legendre
+from scipy.special import legendre, roots_legendre
 
 from SSLimPy.cosmology.astro import AstroFunctions
 from SSLimPy.utils.utils import *
@@ -19,7 +19,7 @@ class PowerSpectra:
         self.cfg = self.cosmology.cfg
         self.halomodel = astro.halomodel
         # Nu enters into the Mass-Luminosity and Luminosity-Temperature relations
-        self.survey_specs = astro.survey_specs 
+        self.survey_specs = astro.survey_specs
         self.astro = astro
 
         self.BAOpars = copy(BAOpars)
@@ -64,11 +64,14 @@ class PowerSpectra:
         self.dk = np.diff(k_edge)
         self.k_numerics = self.halomodel.k
 
-        nmu = settings.get("nmu", 128)
-
-        mu_edge = np.linspace(-1, 1, nmu + 1)
-        self.mu = (mu_edge[:-1] + mu_edge[1:]) / 2.0
-        self.dmu = np.diff(mu_edge)
+        self.mu_kind = settings.get("mu_kind", "linear")
+        if self.mu_kind == "linear":
+            nmu = settings.get("nmu", 128)
+            mu_edge = np.linspace(-1, 1, nmu + 1)
+            self.mu = (mu_edge[:-1] + mu_edge[1:]) / 2.0
+        elif settings.get("mu_kind", "linear") == "gauss":
+            nmu = settings.get("nmu", 12)
+            self.mu, self.w = roots_legendre(nmu)
 
     ###############
     # De-Wiggling #
@@ -107,7 +110,7 @@ class PowerSpectra:
 
     def dewiggled_pdd(self, k, mu, z, BAOpars=dict()):
         """ "
-        Calculates the normalized dewiggled powerspectrum
+        Calculates the dewiggled powerspectrum
 
         Args:
         z : float
@@ -243,18 +246,15 @@ class PowerSpectra:
             else:
                 Tmean = restore_shape(self.astro.Thalo(z, k, mu, p=1), k, mu, z)
 
-            Biasterm = (
-                bmean[:, None, :]
-                * Tmean
-                * np.atleast_1d(self.halomodel.sigma8_of_z(z, tracer=self.tracer))[
-                    None, None, :
-                ]
-            )
+            Biasterm = bmean[:, None, :] * Tmean
         else:
-            Biasterm = (
-                restore_shape(self.astro.Thalo(z, k, mu, p=1, scale=(1,), beta=1), k, mu, z)
-                * np.reshape(self.halomodel.sigma8_of_z(z, tracer=self.tracer), z.shape)[None, None, :]
+            Biasterm = restore_shape(
+                self.astro.Thalo(z, k, mu, p=1, scale=(1,), beta=1),
+                k,
+                mu,
+                z,
             )
+
         return np.squeeze(Biasterm)
 
     def f_term(self, k, mu, z, BAOpars=dict()):
@@ -273,10 +273,11 @@ class PowerSpectra:
         else:
             Tmean = restore_shape(self.astro.Thalo(z, k, mu, p=1), k, mu, z)
 
-        fs8 = np.reshape(
-            self.halomodel.fsigma8_of_z(k, z, tracer=self.tracer), (*k.shape, *z.shape)
+        f = np.reshape(
+            self.cosmology.growth_rate(k, z, tracer=self.tracer),
+            (*k.shape, *z.shape),
         )
-        Kaiser_RSD = Tmean * fs8[:, None, :] * np.power(mu, 2)[None, :, None]
+        Kaiser_RSD = Tmean * f[:, None, :] * np.power(mu, 2)[None, :, None]
         return np.squeeze(Kaiser_RSD)
 
     def Kaiser_Term(self, k, mu, z, BAOpars=dict()):
@@ -322,6 +323,7 @@ class PowerSpectra:
             sp = sigmap * f_scaleindependent
         else:
             sp = np.atleast_1d(halomodel.sigmaV_of_z(z, moment=2))
+
         FoG_damp = self.cfg.settings["FoG_damp"]
         if FoG_damp == "Lorentzian":
             FoG = np.power(
@@ -410,14 +412,16 @@ class PowerSpectra:
             Ps = Pshot[None, None, :]
         else:
             if self.cfg.settings["halo_model_PS"]:
-                Ps = restore_shape(self.astro.Thalo(z, k, mu,p=1, scale=(2,)), k, mu, z)
+                Ps = restore_shape(
+                    self.astro.Thalo(z, k, mu, p=1, scale=(2,)), k, mu, z
+                )
             else:
                 Ps = self.astro.Tavg(z, p=2)[None, None, :]
-        
+
         if self.halomodel.haloparams["onehalo_damping"]:
             Ps = Ps * np.reshape(
-                self.halomodel.one_halo_dampening(k, z),
-                (*k.shape, 1, *z.shape))
+                self.halomodel.one_halo_dampening(k, z), (*k.shape, 1, *z.shape)
+            )
 
         return np.squeeze(Ps)
 
@@ -466,12 +470,13 @@ class PowerSpectra:
         else:
             rsd = np.power(
                 restore_shape(
-                self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),
-                k,
-                mu,
-                z,
-            ),
-            2)
+                    self.bias_term(z, k=k, mu=mu, BAOpars=self.BAOpars),
+                    k,
+                    mu,
+                    z,
+                ),
+                2,
+            )
 
         if self.cfg.settings["verbosity"] > 1:
             trsd = time()
@@ -492,7 +497,7 @@ class PowerSpectra:
         logPk_ref = np.log(Pk_ref.value)
         logk = np.log(k.to(u.Mpc**-1).value)
 
-        #kompute using survey k's
+        # kompute using survey k's
         k = self.k
         outputshape = (*k.shape, *mu.shape, *z.shape)
         Pk_Obs = np.empty(outputshape)
@@ -571,13 +576,24 @@ class PowerSpectra:
         mu = self.mu
         Pobs = self.Pk_Obs
 
-        def Pk_ell_moments(ell):
-            norm = (2 * ell + 1) / 2
-            L_ell = legendre(ell)
-            return (
-                simpson(y=Pobs * norm * L_ell(mu)[None, :, None], x=mu, axis=1)
-                * Pobs.unit
-            )
+        if self.mu_kind == "linear":
+
+            def Pk_ell_moments(ell):
+                norm = (2 * ell + 1) / 2
+                L_ell = legendre(ell)(mu)
+                return (
+                    simpson(y=Pobs * norm * L_ell[None, :, None], x=mu, axis=1)
+                    * Pobs.unit
+                )
+
+        elif self.mu_kind == "gauss":
+
+            def Pk_ell_moments(ell):
+                norm = (2 * ell + 1) / 2
+                L_ell = legendre(ell)(mu)
+                return np.sum(
+                    Pobs * norm * L_ell[None, :, None] * self.w[None, :, None], axis=1
+                )
 
         self.Pk_0bs = Pk_ell_moments(0)
         self.Pk_2bs = Pk_ell_moments(2)
@@ -669,7 +685,7 @@ def convolve(k, mu, q, muq, deltaphi, P, W):
                         * (np.abs(W[iq, imuq]) ** 2)
                         * np.exp(logPkminusq[iq, imuq, :])
                     )
-                    muq_integrand[imuq] = np.trapz(phi_integrand, deltaphi)
-                q_integrand[iq] = np.trapz(muq_integrand, muq)
-            Pconv[ik, imu] = np.trapz(q_integrand * q, np.log(q))
+                    muq_integrand[imuq] = np.trapezoid(phi_integrand, deltaphi)
+                q_integrand[iq] = np.trapezoid(muq_integrand, muq)
+            Pconv[ik, imu] = np.trapezoid(q_integrand * q, np.log(q))
     return Pconv

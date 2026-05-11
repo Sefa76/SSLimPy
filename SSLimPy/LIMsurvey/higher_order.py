@@ -299,24 +299,51 @@ def _Z3_symetrised_23(
 def vZ3(
     mb1, mb2, mbG2, mb3, mbdG2, mbG3, mbDG2, f, k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3
 ):
-    bias = (mb1, mb2, mbG2, mb3, mbdG2, mbG3, mbDG2, f,)
+    bias = (
+        mb1,
+        mb2,
+        mbG2,
+        mb3,
+        mbdG2,
+        mbG3,
+        mbDG2,
+        f,
+    )
     Z3 = _Z3_symetrised_23(
         *bias,
-        k1, mu1, ph1,
-        k2, mu2, ph2,
-        k3, mu3, ph3,
+        k1,
+        mu1,
+        ph1,
+        k2,
+        mu2,
+        ph2,
+        k3,
+        mu3,
+        ph3,
     )
     Z3 += _Z3_symetrised_23(
         *bias,
-        k3, mu3, ph3,
-        k1, mu1, ph1,
-        k2, mu2, ph2,
+        k3,
+        mu3,
+        ph3,
+        k1,
+        mu1,
+        ph1,
+        k2,
+        mu2,
+        ph2,
     )
     Z3 += _Z3_symetrised_23(
         *bias,
-        k2, mu2, ph2,
-        k3, mu3, ph3,
-        k1, mu1, ph1,
+        k2,
+        mu2,
+        ph2,
+        k3,
+        mu3,
+        ph3,
+        k1,
+        mu1,
+        ph1,
     )
     Z3 *= 1 / 3
     return Z3
@@ -524,7 +551,7 @@ def TrispectrumL0(
             mu4,
             ph4,
         )
-        T2 += 6 * Z31 * vP[1] * vP[2] * vP[3]
+        T2 += 6 * Z31 * Z12 * Z13 * Z14 * vP[1] * vP[2] * vP[3]
 
     if not any_close_to_zero([k3, k4, k1], atol=1e-12):
         Z32 = vZ3(
@@ -546,7 +573,7 @@ def TrispectrumL0(
             mu1,
             ph1,
         )
-        T2 += 6 * Z32 * vP[0] * vP[2] * vP[3]
+        T2 += 6 * Z32 * Z11 * Z13 * Z14 * vP[0] * vP[2] * vP[3]
 
     if not any_close_to_zero([k4, k1, k2], atol=1e-12):
         Z33 = vZ3(
@@ -568,7 +595,7 @@ def TrispectrumL0(
             mu2,
             ph2,
         )
-        T2 += 6 * Z33 * vP[0] * vP[1] * vP[3]
+        T2 += 6 * Z33 * Z11 * Z12 * Z14 * vP[0] * vP[1] * vP[3]
 
     if not any_close_to_zero([k1, k2, k3], atol=1e-12):
         Z34 = vZ3(
@@ -590,7 +617,7 @@ def TrispectrumL0(
             mu3,
             ph3,
         )
-        T2 += 6 * Z34 * vP[0] * vP[1] * vP[2]
+        T2 += 6 * Z34 * Z11 * Z12 * Z13 * vP[0] * vP[1] * vP[2]
 
     if np.isnan(T1) or np.isnan(T2):
         print(k1, mu1, ph1, k2, mu2, ph2, k3, mu3, ph3, k4, mu4, ph4, kgrid, Pgrid)
@@ -606,13 +633,25 @@ def TrispectrumL0(
     + "float64[::1], float64[::1])",
 )
 def collapsed_Trispectrum_LO(
-    Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f,
-    k1, mu1, ph1,
-    k2, mu2, ph2,
-    kgrid, Pgrid,
-    ):
+    Lmb1,
+    Lmb2,
+    LmbG2,
+    Lmb3,
+    LmbdG2,
+    LmbG3,
+    LmbDG2,
+    f,
+    k1,
+    mu1,
+    ph1,
+    k2,
+    mu2,
+    ph2,
+    kgrid,
+    Pgrid,
+):
     k12, mu12, ph12 = addVectors(k1, mu1, ph1, k2, mu2, ph2)
-    
+
     logvk = np.log(np.array([k1, k2, k12]))
     logvPk = linear_interpolate(np.log(kgrid), np.log(Pgrid), logvk)
     vPk = np.exp(logvPk)
@@ -621,31 +660,76 @@ def collapsed_Trispectrum_LO(
     X = 0
     if not np.isclose(k12, 0, atol=1e-12):
         A = (
-            8 * vPk[0]**2 * vZ1(Lmb1, f, k1, mu1, ph1)**2
-            * vPk[2] * vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k12, mu12, ph12)**2
-            + 8 * vPk[1]**2 * vZ1(Lmb1, f, k2, mu2, ph2)**2
-            * vPk[2] * vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k12, mu12, ph12)**2
+            8
+            * vPk[0] ** 2
+            * vZ1(Lmb1, f, k1, mu1, ph1) ** 2
+            * vPk[2]
+            * vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k12, mu12, ph12) ** 2
+            + 8
+            * vPk[1] ** 2
+            * vZ1(Lmb1, f, k2, mu2, ph2) ** 2
+            * vPk[2]
+            * vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k12, mu12, ph12) ** 2
         )
         X = (
-            16 * vPk[0] * vZ1(Lmb1, f, k1, mu1, ph1)
-            * vPk[1] * vZ1(Lmb1, f, k2, mu2, ph2)
-            * vPk[2] * vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k12, mu12, ph12)
+            16
+            * vPk[0]
+            * vZ1(Lmb1, f, k1, mu1, ph1)
+            * vPk[1]
+            * vZ1(Lmb1, f, k2, mu2, ph2)
+            * vPk[2]
+            * vZ2(Lmb1, Lmb2, LmbG2, f, k1, -mu1, ph1 + np.pi, k12, mu12, ph12)
             * vZ2(Lmb1, Lmb2, LmbG2, f, k2, -mu2, ph2 + np.pi, k12, mu12, ph12)
         )
 
-    Star = (
-        12 * vZ1(Lmb1, f, k1, mu1, ph1)**2 * vPk[0]**2
-        * vZ1(Lmb1, f, k2, mu2, ph2) * vPk[1]
-        * vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k1, mu1, ph1, k1, -mu1, ph1 + np.pi, k2, mu2, ph2)
-        + 12 * vZ1(Lmb1, f, k2, mu2, ph2)**2 * vPk[1]**2
-        * vZ1(Lmb1, f, k1, mu1, ph1) * vPk[0]
-        * vZ3(Lmb1, Lmb2, LmbG2, Lmb3, LmbdG2, LmbG3, LmbDG2, f, k2, mu2, ph2, k2, -mu2, ph2 + np.pi, k1, mu1, ph1)
+    Star = 12 * vZ1(Lmb1, f, k1, mu1, ph1) ** 2 * vPk[0] ** 2 * vZ1(
+        Lmb1, f, k2, mu2, ph2
+    ) * vPk[1] * vZ3(
+        Lmb1,
+        Lmb2,
+        LmbG2,
+        Lmb3,
+        LmbdG2,
+        LmbG3,
+        LmbDG2,
+        f,
+        k1,
+        mu1,
+        ph1,
+        k1,
+        -mu1,
+        ph1 + np.pi,
+        k2,
+        mu2,
+        ph2,
+    ) + 12 * vZ1(
+        Lmb1, f, k2, mu2, ph2
+    ) ** 2 * vPk[
+        1
+    ] ** 2 * vZ1(
+        Lmb1, f, k1, mu1, ph1
+    ) * vPk[
+        0
+    ] * vZ3(
+        Lmb1,
+        Lmb2,
+        LmbG2,
+        Lmb3,
+        LmbdG2,
+        LmbG3,
+        LmbDG2,
+        f,
+        k2,
+        mu2,
+        ph2,
+        k2,
+        -mu2,
+        ph2 + np.pi,
+        k1,
+        mu1,
+        ph1,
     )
-    return (
-        A
-        + X
-        + Star
-    )
+    return A + X + Star
 
 
 ########################

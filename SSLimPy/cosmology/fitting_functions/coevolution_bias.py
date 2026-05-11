@@ -7,7 +7,7 @@ The same signatures of the bias functions in ```bias_fitting_functions``` should
 """
 
 import numpy as np
-
+from warnings import warn
 from astropy import units as u
 
 from .bias_fitting_functions import bias_fitting_functions
@@ -17,110 +17,76 @@ class coevolution_bias(bias_fitting_functions):
 
     def __init__(self, halomodel):
         super().__init__(halomodel)
-        self.p = self.bias_par.get("HO_p", 0.3)
-        self.alpha = self.bias_par.get("HO_alpha", 0.707)
-        self.A = self.bias_par.get("HO_A", 0.3222)
-
-    def set_model(self, p, alpha, A=None):
-        self.p = p
-        self.alpha = alpha
-
-        if A is not None:
-            self.A = A
-        else:
-            Xi = np.geomspace(1e-12, 1e3, num=2000)  # Eh... its good enough
-            F = self.unnorm_collapsefunction(Xi)
-            self.A = 1 / np.trapz(F, np.log(Xi))
-
-    ###########################
-    # Base Halo Mass Function #
-    ###########################
-    # Underlying halo mass function to compute b1, b2, b3 from. Assumes spherical collapse
-
-    def unnorm_collapsefunction(self, Xi):
-        """Universal function for the collapsed matter appearing in spherical collapse models
-        This function should used to normalize the actual function (i.E find the value for A)
-        Xi is nu^2 from the rest of this function package.
-        """
-        F = (
-            (1 + 1 / (self.alpha * Xi) ** self.p)
-            * np.sqrt(self.alpha * Xi / (2 * np.pi))
-            * np.exp(-self.alpha * Xi / 2)
-        )
-        return F
-
-    def sc_hmf(self, M, z, dc):
-        M = np.atleast_1d(M)
-        z = np.atleast_1d(z)
-
-        nu = np.reshape(dc / self.sigmaM(M, z), (*M.shape, *z.shape))
-
-        sigmaM = np.reshape(self.sigmaM(M, z), (*M.shape, *z.shape))
-        dsigmaM_dM = np.reshape(
-            self.dsigmaM_dM(M, z).to(self.halomodel.Msunh**-1), (*M.shape, *z.shape)
-        )
-        dlogsigmaM_dM = dsigmaM_dM / sigmaM
-
-        rho_over_M = self.halomodel.rho_tracer / M[:, None]
-
-        dndM = (
-            -2
-            * self.A
-            * rho_over_M
-            * dlogsigmaM_dM
-            * self.unnorm_collapsefunction(nu**2)
-        )
-        return dndM.to(u.Msun**-1 * u.Mpc**-3)
+        self._alpha = self.bias_par.get("SMT_alpha", 0.707)
+        self._b = self.bias_par.get("SMTb", 0.5)
+        self._c = self.bias_par.get("SMTc", 0.6)
 
     ##############
     # Local Bias #
     ##############
-    # Obtained from completeness relations
+    # Obtained from Lazeyras, T. et al. (2016)
 
     def b0(self, M, z, dc):
-        """dummy function
-        """
+        """dummy function"""
         return np.ones_like(M.value)
 
     def b1(self, M, z, dc):
+        """Sheth, Mo, Torman (2001) from collosus"""
         nu = dc / self.sigmaM(M, z)
+        a = self._alpha
+        b = self._b
+        c = self._c
 
-        eps1 = (self.alpha * nu**2 - 1) / dc
-        E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)
-        return 1 + eps1 + E1
+        roota = np.sqrt(a)
+        anu2 = a * nu**2
+        anu2c = anu2**c
+        t1 = b * (1.0 - c) * (1.0 - 0.5 * c)
+        bias = 1.0 +  1.0 / (roota * dc) * (roota * anu2 + roota * b * anu2**(1.0 - c) - anu2c / (anu2c + t1))
+        return bias
 
-    def b2(self, M, z, dc):
+    def b2sph_SMT(self, M, z, dc):
+        """b2 from extended ps model presented in Sheth, Mo, Torman (2001)
+        """
         nu = dc / self.sigmaM(M, z)
+        a = self._alpha
+        b = self._b
+        c = self._c
+        
 
-        eps1 = (self.alpha * nu**2 - 1) / dc
-        E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)
-        eps2 = self.alpha * nu**2 / dc**2 * (self.alpha * nu**2 - 3)
-        E2 = ((1 + 2 * self.p) / dc + 2 * eps1) * E1
-        return 2 * (1 - 17 / 21) * (eps1 + E1) + eps2 + E2
+    def b2_fitted(self, M, z, dc):
+        """b2 from assuming Lazeyras et al fitting + coevolution
+        """
+        return self.b2sph_lazeyras(M, z, dc) + 4 / 3 * self.bG2(M, z, dc)
+
+    def b2sph_lazeyras(self, M, z, dc):
+        """Lazeyras et al. fitting formula for b_2 - 4/3 b_G2"""
+        b1 = getattr(
+            self,
+            self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        b2sph = 0.412 - 2.143 * b1 + 0.929 * b1**2 + 0.008 * b1**3
+        return b2sph
+
+    def b2sph_euclid(self, M, z, dc):
+        """Fitting formula for b_2 - 4/3 b_G2 from Euclid DR1-JC6"""
+        b1 = getattr(
+            self,
+            self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        bias =  -0.015 - 1.58 * b1 + 0.809 * b1**2 + 0.025 * b1**3
+        return bias
 
     def b3(self, M, z, dc):
-        nu = dc / self.sigmaM(M, z)
-
-        eps1 = (self.alpha * nu**2 - 1) / dc
-        E1 = 2 * self.p / dc * 1 / (1 + (self.alpha * nu**2) ** self.p)
-        eps2 = self.alpha * nu**2 / dc**2 * (self.alpha * nu**2 - 3)
-        E2 = ((1 + 2 * self.p) / dc + 2 * eps1) * E1
-        eps3 = (
-            self.alpha
-            * nu**2
-            / dc**3
-            * (self.alpha**2 * nu**4 - 6 * self.alpha * nu**2 + 3)
-        )
-        E3 = (
-            (4 * (self.p**2 - 1) + 6 * self.p * self.alpha * nu**2) / dc**2
-            + 3 * eps1**2
-        ) * E1
-        return (
-            6 * (-17 / 21 + 341 / 567) * (eps1 + E1)
-            + 3 * (1 + 2 * 341 / 567) * (eps2 + E2)
-            + eps3
-            + E3
-        )
+        """Lazeyras et al. fitting formula for b_3"""
+        b1 = getattr(
+            self,
+            self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        b3 = -1.028 + 7.646 * b1 - 6.227 * b1**2 + 0.912 * b1**3
+        return b3
 
     ##################
     # Non-Local Bias #
@@ -128,13 +94,33 @@ class coevolution_bias(bias_fitting_functions):
     # Obtained from co-evolution of the Lagrangian bias expansion
 
     def bG2(self, M, z, dc):
-        return -2 / 7 * (self.b1(M, z, dc) - 1)
+        b1 = getattr(
+            self,
+            self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        return -2 / 7 * (b1 - 1)
 
     def bG3(self, M, z, dc):
-        return -22 / 63 * (self.b1(M, z, dc) - 1)
+        b1 = getattr(
+            self,
+            self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        return -22 / 63 * (b1 - 1)
 
     def bDG2(self, M, z, dc):
-        return 23 / 42 * (self.b1(M, z, dc) - 1)
+        b1 = getattr(
+            self,
+            self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        return 23 / 42 * (b1 - 1)
 
     def bdG2(self, M, z, dc):
-        return -2 / 7 * 2 * (self.b2(M, z, dc) - 4 / 21 * self.b1(M, z, dc))
+        b1 = getattr(
+            self,
+            self.halomodel.haloparams["bias_model"],
+            self.b1,
+        )(M, z, dc)
+        return -2 / 7 * 2 * (self.b2_fitted(M, z, dc) - 4 / 21 * b1)
