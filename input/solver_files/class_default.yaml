@@ -4,7 +4,7 @@ ACCURACY:
 COSMO_SETTINGS:
   'P_k_max_1/Mpc': 50
   'output' : 'mPk,mTk'
-  'z_max_pk' : 4.0
+  'z_max_pk' : 6.0
   'N_ncdm': 1
   'deg_ncdm': 1
   'T_cmb' : 2.7255
