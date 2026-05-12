@@ -5,9 +5,10 @@ import numpy as np
 from astropy import units as u
 from numba import njit, prange
 from scipy.interpolate import UnivariateSpline as _UnivariateSpline
-from scipy.integrate import trapezoid
+from scipy.integrate import trapezoid, simpson
 from scipy.optimize import curve_fit
 from scipy.special import legendre, roots_legendre
+from py3nj import clebsch_gordan
 
 from SSLimPy.LIMsurvey import power_spectrum
 from SSLimPy.LIMsurvey.higher_order import *
@@ -23,6 +24,7 @@ class Covariance:
         self.cosmology = power_spectrum.fiducial_cosmology
         self.survey_specs = power_spectrum.survey_specs
         self.power_spectrum = power_spectrum
+        self.settings = self.cosmology.settings
         self.k = self.power_spectrum.k
         self.dk = self.power_spectrum.dk
         self.mu = self.power_spectrum.mu
@@ -31,71 +33,49 @@ class Covariance:
     def Nmodes(self):
         Vk = 4 * np.pi * self.k**2 * self.dk
         Vw = np.atleast_1d(self.survey_specs.Vfield())
-        return Vk[:, None] * Vw[None, :] / (2 * (2 * np.pi) ** 3)
+        return Vk[:, None] * Vw[None, :] / ((2 * np.pi) ** 3)
 
     def get_detectornoise(self):
         PI = self.survey_specs.detector_noise()
         return PI.to(self.power_spectrum.Pk_Obs.unit)
 
-    def gaussian_cov(self):
-        Pobs = self.power_spectrum.Pk_Obs
-        PI = self.get_detectornoise()
-        sigma = (Pobs + PI) ** 2 / self.Nmodes()[:, None, :]
+    def compute_multipole_cov(self, sigma2):
+        mu = self.mu
+        if self.power_spectrum.mu_kind == "linear":
+            def Pk_ell_moments(ell):
+                L_ell = legendre(ell)(mu)
+                return simpson(y=sigma2.value * L_ell[None, :, None], x=mu, axis=1)
 
-        # compute the C_ell covaraiance
-        cov_00 = (
-            trapezoid(
-                legendre(0)(self.mu)[None, :, None] ** 2 * sigma, x=self.mu, axis=1
-            )
-            * 1
-            / 2
+        elif self.power_spectrum.mu_kind == "gauss":
+            w = self.power_spectrum.w
+            def Pk_ell_moments(ell):
+                L_ell = legendre(ell)(mu)
+                return np.sum(sigma2.value * L_ell[None, :, None] * w[None, :, None], axis=1)
+
+        sigma_0 = Pk_ell_moments(0)
+        sigma_2 = Pk_ell_moments(2)
+        sigma_4 = Pk_ell_moments(4)
+        sigma_6 = Pk_ell_moments(6)
+        sigma_8 = Pk_ell_moments(8)
+
+        cov_00 = 1 / 4 * sigma_0
+        cov_20 = 5 / 4 * sigma_2
+        cov_40 = 9 / 4 * sigma_4
+        cov_22 = 25 / 4 * (
+            clebsch_gordan(4, 4, 8, 0, 0, 0)**2 * sigma_4
+            + clebsch_gordan(4, 4, 4, 0, 0, 0)**2 * sigma_2
+            + clebsch_gordan(4, 4, 0, 0, 0, 0)**2 * sigma_0)
+        cov_42 = 45 / 4 * (
+            clebsch_gordan(8, 4, 12, 0, 0, 0)**2 * sigma_6
+            + clebsch_gordan(8, 4, 8, 0, 0, 0)**2 * sigma_4
+            + clebsch_gordan(8, 4, 4, 0, 0, 0)**2 * sigma_2
         )
-        cov_20 = (
-            trapezoid(
-                legendre(0)(self.mu)[None, :, None]
-                * legendre(2)(self.mu)[None, :, None]
-                * sigma,
-                x=self.mu,
-                axis=1,
-            )
-            * 5
-            / 2
-        )
-        cov_40 = (
-            trapezoid(
-                legendre(0)(self.mu)[None, :, None]
-                * legendre(4)(self.mu)[None, :, None]
-                * sigma,
-                x=self.mu,
-                axis=1,
-            )
-            * 9
-            / 2
-        )
-        cov_22 = (
-            trapezoid(
-                legendre(2)(self.mu)[None, :, None] ** 2 * sigma, x=self.mu, axis=1
-            )
-            * 25
-            / 2
-        )
-        cov_42 = (
-            trapezoid(
-                legendre(2)(self.mu)[None, :, None]
-                * legendre(4)(self.mu)[None, :, None]
-                * sigma,
-                x=self.mu,
-                axis=1,
-            )
-            * 45
-            / 2
-        )
-        cov_44 = (
-            trapezoid(
-                legendre(4)(self.mu)[None, :, None] ** 2 * sigma, x=self.mu, axis=1
-            )
-            * 81
-            / 2
+        cov_44 = 81 / 4 * (
+            clebsch_gordan(8, 8, 16, 0, 0, 0)**2 * sigma_8
+            + clebsch_gordan(8, 8, 12, 0, 0, 0)**2 * sigma_6
+            + clebsch_gordan(8, 8, 8, 0, 0, 0)**2 * sigma_4
+            + clebsch_gordan(8, 8, 4, 0, 0, 0)**2 * sigma_2
+            + clebsch_gordan(8, 8, 0, 0, 0, 0)**2 * sigma_0
         )
 
         # construct the covariance
@@ -104,7 +84,18 @@ class Covariance:
         cov = construct_gaussian_cov(
             nk, nz, cov_00, cov_20, cov_40, cov_22, cov_42, cov_44
         )
-        return cov * (Pobs**2).unit
+        return cov * sigma2.unit
+
+    def gaussian_nonoise_cov(self):
+        Pobs = self.power_spectrum.Pk_Obs
+        sigma2 = 2 * Pobs**2 / self.Nmodes()[:, None, :]
+        return self.compute_multipole_cov(sigma2)
+
+    def gaussian_cov(self):
+        Pobs = self.power_spectrum.Pk_Obs
+        PI = self.get_detectornoise()
+        sigma2 = 2 * (Pobs + PI) ** 2 / self.Nmodes()[:, None, :]
+        return self.compute_multipole_cov(sigma2)
 
 
 class nonGuassianCov:
@@ -526,7 +517,7 @@ class SuperSampleCovariance:
     def logresponse(self, k, z):
         # TODO: Add proper handling of RSD in response functions
         assert self.cosmology.settings["do_RSD"] == False
-        
+
         k = np.atleast_1d(k)
         z = np.atleast_1d(z)
 
