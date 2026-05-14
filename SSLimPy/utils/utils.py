@@ -1,5 +1,8 @@
 import numpy as np
+from scipy.interpolate import CubicSpline, PchipInterpolator
 from numba import njit
+from astropy import units as u
+
 
 ##################
 # Helper Functions
@@ -249,6 +252,176 @@ def bilinear_interpolate(xi, yj, zij, x, y):
             + Q22 * (x[i] - x1[i]) * (y[i] - y1[i])
         ) / ((x2[i] - x1[i]) * (y2[i] - y1[i]))
     return results
+
+
+##########################
+# LogLog 2D interpolator #
+##########################
+
+
+def add_boundary_knots(spline):
+    """
+    Add knots infinitesimally to the left and right.
+
+    Additional intervals are added to have zero 2nd and 3rd derivatives,
+    and to maintain the first derivative from whatever boundary condition
+    was selected. The spline is modified in place.
+    """
+    # determine the slope at the left edge
+    leftx = spline.x[0]
+    lefty = spline(leftx)
+    leftslope = spline(leftx, nu=1)
+
+    # add a new breakpoint just to the left and use the
+    # known slope to construct the PPoly coefficients.
+    leftxnext = np.nextafter(leftx, leftx - 1)
+    leftynext = lefty + leftslope * (leftxnext - leftx)
+    leftcoeffs = np.array([0, 0, leftslope, leftynext])
+    spline.extend(leftcoeffs[..., None], np.r_[leftxnext])
+
+    # repeat with additional knots to the right
+    rightx = spline.x[-1]
+    righty = spline(rightx)
+    rightslope = spline(rightx, nu=1)
+    rightxnext = np.nextafter(rightx, rightx + 1)
+    rightynext = righty + rightslope * (rightxnext - rightx)
+    rightcoeffs = np.array([0, 0, rightslope, rightynext])
+    spline.extend(rightcoeffs[..., None], np.r_[rightxnext])
+
+
+class LogLog2DInterpolator:
+    """
+    2D interpolator with controlled extrapolation of power spectra
+
+    Coordinates:
+        u = log(k)
+        a = 1 / (1 + z)
+        v = log(a)
+        w = log(P)
+
+    Methods:
+        - cubic spline in u
+        - exact linear extrapolation in u
+        - linear interpolation/extrapolation in v
+    """
+
+    K_UNIT = u.Mpc**-1
+    P_UNIT = u.Mpc**3
+
+    def __init__(self, xgrid, ygrid, zgrid, spline_bc="natural"):
+        self.xgrid = xgrid
+        self.ygrid = ygrid
+        self.zgrid = zgrid
+
+        assert np.all(self.xgrid > 0), "k grid needs to be strictly positiv"
+        assert np.all(self.ygrid >= 0), "z grid needs to be positiv"
+        assert np.all(self.zgrid > 0), "P grid needs to be strictly positiv"
+
+        self.u = np.log(self.xgrid.to(self.K_UNIT).value)
+        a = 1 / (1 + self.ygrid)
+        self.v = np.log(a)[::-1]
+        self.w = np.log(self.zgrid.to(self.P_UNIT).value)[:, ::-1]
+
+        # spline in u for each fixed v
+        self.row_splines = []
+        for row in self.w.T:
+            spline = CubicSpline(
+                self.u,
+                row,
+                bc_type=spline_bc,
+                extrapolate=True,
+            )
+            add_boundary_knots(spline)
+            self.row_splines.append(spline)
+
+        self.dv_splines = []
+        for col in self.w:
+            spline = PchipInterpolator(
+                self.v,
+                col,
+                extrapolate=True,
+            ).derivative()
+            self.dv_splines.append(spline)
+
+    def __call__(self, x, y):
+        x = np.atleast_1d(x)
+        y = np.atleast_1d(y)
+        assert np.all(self.xgrid > 0), "k grid needs to be strictly positiv"
+        assert np.all(self.ygrid >= 0), "z grid needs to be positiv"
+
+        # transformed coordinates
+        uq = np.log(x.to(self.K_UNIT).value)
+        vq = np.log(1.0 / (1.0 + y))
+
+        xshape = uq.shape
+        yshape = vq.shape
+
+        uq_flat = uq.ravel()
+        vq_flat = vq.ravel()
+
+        values = np.array([spline(uq_flat) for spline in self.row_splines])
+
+        v = self.v
+        Nv = len(v)
+        idx = np.searchsorted(v, vq_flat) - 1
+        idx = np.clip(idx, 0, Nv - 2)
+
+        v0 = v[idx]
+        v1 = v[idx + 1]
+        val0 = values[idx]
+        val1 = values[idx + 1]
+
+        t = (vq_flat - v0) / (v1 - v0)
+        w = val0 + t[:, None] * (val1 - val0)
+
+        # restore shape
+        w = w.T.reshape((*xshape, *yshape)).squeeze()
+        return np.exp(w) * self.P_UNIT
+
+    def D(self, x, y):
+        x = np.atleast_1d(x)
+        y = np.atleast_1d(y)
+        assert np.all(self.xgrid > 0), "k grid needs to be strictly positiv"
+        assert np.all(self.ygrid >= 0), "z grid needs to be positiv"
+
+        P = self.__call__(x, y).reshape((*x.shape, *y.shape))
+        P0 = self.__call__(x, 0).reshape(x.shape)[..., *(np.ndim(y) * (None,))]
+        return np.sqrt((P / P0).to(1).value).squeeze()
+
+    def f(self, x, y):
+        x = np.atleast_1d(x)
+        y = np.atleast_1d(y)
+        assert np.all(self.xgrid > 0), "k grid needs to be strictly positiv"
+        assert np.all(self.ygrid >= 0), "z grid needs to be positiv"
+
+        # transformed coordinates
+        uq = np.log(x.to(self.K_UNIT).value)
+        vq = np.log(1.0 / (1.0 + y))
+
+        xshape = uq.shape
+        yshape = vq.shape
+
+        uq_flat = uq.ravel()
+        vq_flat = vq.ravel()
+
+        values = np.array([spline(vq_flat) for spline in self.dv_splines])
+
+        u = self.u
+        Nk = len(u)
+        idx = np.searchsorted(u, uq_flat) - 1
+        idx = np.clip(idx, 0, Nk - 2)
+
+        u0 = u[idx]
+        u1 = u[idx + 1]
+        val0 = values[idx]
+        val1 = values[idx + 1]
+
+        t = (uq_flat - u0) / (u1 - u0)
+        out = val0 + t[:, None] * (val1 - val0)
+
+        # restore shape
+        out = out * 0.5
+        return out.reshape((*xshape, *yshape)).squeeze()
 
 
 #####################

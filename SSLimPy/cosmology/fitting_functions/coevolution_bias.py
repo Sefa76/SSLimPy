@@ -41,21 +41,20 @@ class coevolution_bias(bias_fitting_functions):
         anu2 = a * nu**2
         anu2c = anu2**c
         t1 = b * (1.0 - c) * (1.0 - 0.5 * c)
-        bias = 1.0 +  1.0 / (roota * dc) * (roota * anu2 + roota * b * anu2**(1.0 - c) - anu2c / (anu2c + t1))
+        bias = 1.0 + 1.0 / (roota * dc) * (
+            roota * anu2 + roota * b * anu2 ** (1.0 - c) - anu2c / (anu2c + t1)
+        )
         return bias
 
     def b2sph_SMT(self, M, z, dc):
-        """b2 from extended ps model presented in Sheth, Mo, Torman (2001)
-        """
+        """b2 from extended ps model presented in Sheth, Mo, Torman (2001)"""
         nu = dc / self.sigmaM(M, z)
         a = self._alpha
         b = self._b
         c = self._c
-        
 
     def b2_fitted(self, M, z, dc):
-        """b2 from assuming Lazeyras et al fitting + coevolution
-        """
+        """b2 from assuming Lazeyras et al fitting + coevolution"""
         return self.b2sph_lazeyras(M, z, dc) + 4 / 3 * self.bG2(M, z, dc)
 
     def b2sph_lazeyras(self, M, z, dc):
@@ -75,7 +74,7 @@ class coevolution_bias(bias_fitting_functions):
             self.halomodel.haloparams["bias_model"],
             self.b1,
         )(M, z, dc)
-        bias =  -0.015 - 1.58 * b1 + 0.809 * b1**2 + 0.025 * b1**3
+        bias = -0.015 - 1.58 * b1 + 0.809 * b1**2 + 0.025 * b1**3
         return bias
 
     def b3(self, M, z, dc):

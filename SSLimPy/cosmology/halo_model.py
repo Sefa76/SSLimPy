@@ -861,11 +861,8 @@ class HaloModel:
         bavg = np.trapezoid(itgrnd1, np.log(M.value), axis=1)
         if Norm:
             itgrnd2 = M[None, :, None] * M_over_rho**power * dndM
-            bavg = (
-                bavg
-                /  np.trapezoid(itgrnd2, np.log(M.value), axis=1)
-            ).to(1).value
-        
+            bavg = (bavg / np.trapezoid(itgrnd2, np.log(M.value), axis=1)).to(1).value
+
         return np.squeeze(bavg)
 
     def Ihalo(self, z, *args, p=1, scale=(), beta=0, dc=1.6865):

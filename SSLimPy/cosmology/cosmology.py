@@ -288,9 +288,7 @@ class BoltzmannCode:
             **self.boltzmann_cambpars["COSMO_SETTINGS"],
         }.copy()
         if self.cfg.settings["nonlinearMatpow"]:
-            input_cambcosmopars.update(
-                self.boltzmann_cambpars["NON_LINEAR"]
-            )
+            input_cambcosmopars.update(self.boltzmann_cambpars["NON_LINEAR"])
 
         input_cambcosmopars.update(cosmopars)
         self.cambcosmopars = self.basechange_camb(input_cambcosmopars, camb)
@@ -325,9 +323,7 @@ class BoltzmannCode:
             **self.boltzmann_classpars["COSMO_SETTINGS"],
         }.copy()
         if self.cfg.settings["nonlinearMatpow"]:
-            input_classcosmopars.update(
-                self.boltzmann_classpars["NON_LINEAR"]
-            )
+            input_classcosmopars.update(self.boltzmann_classpars["NON_LINEAR"])
 
         input_classcosmopars.update(cosmopars)
         self.classcosmopars = self.basechange_class(input_classcosmopars)
@@ -500,9 +496,7 @@ class BoltzmannCode:
 
         ## interpolating function Pk_nl (k,z)
         if self.cfg.settings["nonlinearMatpow"]:
-            Pk_nl, _, _ = classres.get_pk_and_k_and_z(
-                nonlinear=True
-            )
+            Pk_nl, _, _ = classres.get_pk_and_k_and_z(nonlinear=True)
             self.results.Pk_nl = Pk_nl[:, ::-1]
 
             tk, _, _ = classres.get_transfer_and_k_and_z()
@@ -524,7 +518,9 @@ class BoltzmannCode:
             Pk_nunu_l = T_nu[:, ::-1] * T_nu[:, ::-1] * pk_prim[:, None]
 
             self.results.Pk_cb_nl = (
-                self.results.Pk_nl - 2 * Pk_cross_l * f_nu * f_cb - Pk_nunu_l * f_nu * f_nu
+                self.results.Pk_nl
+                - 2 * Pk_cross_l * f_nu * f_cb
+                - Pk_nunu_l * f_nu * f_nu
             ) / f_cb**2
 
 
@@ -602,7 +598,6 @@ class CosmoFunctions:
             self.cfg.settings["nz"],
         )
         self.create_matter_interp()
-        self.growth_factor, self.growth_rate = self.create_growth()
 
     ##############
     # Background #
@@ -740,31 +735,20 @@ class CosmoFunctions:
 
     def create_matter_interp(self):
         results = self.results
+        kgrid = results.kgrid * u.Mpc**-1
+        zgrid = results.zgrid
 
-        kgrid = results.kgrid.ravel()
-        zgrid = results.zgrid.ravel()
-
-        k_interp = np.repeat(self.k, len(self.z))
-        z_interp = np.tile(self.z, len(self.k))
-
-        def extract(P_array):
-            logP_interp = np.reshape(
-                bilinear_interpolate(
-                    np.log(kgrid),
-                    zgrid,
-                    np.log(P_array),
-                    np.log(k_interp.to(u.Mpc**-1).value),
-                    z_interp,
-                ),
-                (*self.k.shape, *self.z.shape),
-            )
-            return RectBivariateSpline(self.k, self.z, np.exp(logP_interp))
-
-        self.Pk_l = extract(self.results.Pk_l)
-        self.Pk_cb_l = extract(self.results.Pk_cb_l)
+        self.Pk_l = LogLog2DInterpolator(kgrid, zgrid, self.results.Pk_l * u.Mpc**3)
+        self.Pk_cb_l = LogLog2DInterpolator(
+            kgrid, zgrid, self.results.Pk_cb_l * u.Mpc**3
+        )
         if self.cfg.settings["nonlinearMatpow"]:
-            self.Pk_nl = extract(self.results.Pk_nl)
-            self.Pk_cb_nl = extract(self.results.Pk_cb_nl)
+            self.Pk_nl = LogLog2DInterpolator(
+                kgrid, zgrid, self.results.Pk_nl * u.Mpc**3
+            )
+            self.Pk_cb_nl = LogLog2DInterpolator(
+                kgrid, zgrid, self.results.Pk_cb_nl * u.Mpc**3
+            )
 
     def primordial_scalar_pow(self, k):
         lgk = np.log10(k.to(u.Mpc**-1).value)
@@ -810,12 +794,12 @@ class CosmoFunctions:
         kvec = k[:, None]
 
         if tracer == "clustering":
-            Pk = self.Pcb(kvec, zvec, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pcb(kvec, zvec, nonlinear=nonlinear)
         elif tracer == "matter":
-            Pk = self.Pmm(kvec, zvec, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pmm(kvec, zvec, nonlinear=nonlinear)
         else:
             warn("Did not recognize tracer: reverted to matter")
-            Pk = self.Pmm(kvec, zvec, nonlinear=nonlinear) * u.Mpc**3
+            Pk = self.Pmm(kvec, zvec, nonlinear=nonlinear)
 
         ###################################
         # Emulators and Fitting functions #
@@ -848,11 +832,13 @@ class CosmoFunctions:
         """
         if nonlinear:
             if self.cfg.settings["nonlinearMatpow"]:
-                power = self.Pk_nl(k, z, grid=False)
+                power = self.Pk_nl(k, z)
             else:
-                raise AttributeError("Non-linear power spectrum was not asked for from EBS")
+                raise AttributeError(
+                    "Non-linear power spectrum was not asked for from EBS"
+                )
         else:
-            power = self.Pk_l(k, z, grid=False)
+            power = self.Pk_l(k, z)
         return power
 
     def Pcb(self, k, z, nonlinear=False):
@@ -869,12 +855,58 @@ class CosmoFunctions:
         """
         if nonlinear:
             if self.cfg.settings["nonlinearMatpow"]:
-                power = self.Pk_cb_nl(k, z, grid=False)
+                power = self.Pk_cb_nl(k, z)
             else:
-                raise AttributeError("Non-linear power spectrum was not asked for from EBS")
+                raise AttributeError(
+                    "Non-linear power spectrum was not asked for from EBS"
+                )
         else:
-            power = self.Pk_cb_l(k, z, grid=False)
+            power = self.Pk_cb_l(k, z)
         return power
+
+    def growth_factor(self, k, z, tracer="matter", nonlinear=False):
+        """Compute the scale-depended growth factor D.
+
+        Args:
+            k: The wavenumber at which to compute the D.
+            z: The redshift at which to compute the D.
+            tracer: wheather to compute the D of cb filed or matter
+            nonlinear: If True, include nonlinear effects in the computation. Default is False.
+        """
+        if nonlinear:
+            if self.cfg.settings["nonlinearMatpow"]:
+                return (
+                    self.Pk_cb_nl.D(k, z)
+                    if tracer == "clustering"
+                    else self.Pk_nl.D(k, z)
+                )
+            else:
+                raise AttributeError(
+                    "Non-linear power spectrum was not asked for from EBS"
+                )
+        return self.Pk_cb_l.D(k, z) if tracer == "clustering" else self.Pk_l.D(k, z)
+
+    def growth_rate(self, k, z, tracer="matter", nonlinear=False):
+        """Compute the scale-depended growth rate f.
+
+        Args:
+            k: The wavenumber at which to compute the f.
+            z: The redshift at which to compute the f.
+            tracer: wheather to compute the f of cb filed or matter
+            nonlinear: If True, include nonlinear effects in the computation. Default is False.
+        """
+        if nonlinear:
+            if self.cfg.settings["nonlinearMatpow"]:
+                return (
+                    self.Pk_cb_nl.f(k, z)
+                    if tracer == "clustering"
+                    else self.Pk_nl.f(k, z)
+                )
+            else:
+                raise AttributeError(
+                    "Non-linear power spectrum was not asked for from EBS"
+                )
+        return self.Pk_cb_l.f(k, z) if tracer == "clustering" else self.Pk_l.f(k, z)
 
     def P_nw_shape(self, k):
         # Get cosmologyical quantities for the fit
@@ -1011,63 +1043,3 @@ class CosmoFunctions:
             Tk[mask] = (k[mask] / kcut) ** (-slope)
 
         return Tk
-
-    ##########
-    # Growth #
-    ##########
-    def create_growth(self):
-        k = self.results.kgrid * 1 / u.Mpc
-        z = self.results.zgrid
-        a = 1 / (1 + z)
-
-        loga = np.log(a)
-        logk = np.log(k.to(1 / u.Mpc).value)
-
-        Pm = self.results.Pk_l
-        Pm0 = Pm[:, 0][:, None]
-        Pc = self.results.Pk_cb_l
-        Pc0 = Pc[:, 0][:, None]
-
-        logDm = np.log(np.sqrt((Pm / Pm0)))
-        logDc = np.log(np.sqrt((Pc / Pc0)))
-
-        logDm_inter = RectBivariateSpline(logk, loga[::-1], logDm[:, ::-1])
-        logDc_inter = RectBivariateSpline(logk, loga[::-1], logDc[:, ::-1])
-
-        def growth_factor(k, z, tracer="matter"):
-            k = np.atleast_1d(k)
-            z = np.atleast_1d(z)
-
-            logk = np.log(k.to(1 / u.Mpc).value)
-            loga = np.log(1 / (1 + z))
-
-            if tracer == "clustering":
-                logdfunc = logDc_inter
-            elif tracer == "matter":
-                logdfunc = logDm_inter
-            else:
-                warn("Did not recognize tracer: reverted to matter")
-                logdfunc = logDm_inter
-
-            return np.squeeze(np.exp(logdfunc(logk, loga[::-1]))[:, ::-1])
-
-        def growth_rate(k, z, tracer="matter"):
-            k = np.atleast_1d(k)
-            z = np.atleast_1d(z)
-
-            logk = np.log(k.to(1 / u.Mpc).value)
-            loga = np.log(1 / (1 + z))
-
-            if tracer == "clustering":
-                logdfunc = logDc_inter
-            elif tracer == "matter":
-                logdfunc = logDm_inter
-            else:
-                warn("Did not recognize tracer: reverted to matter")
-                logdfunc = logDm_inter
-
-            return np.squeeze(
-                logdfunc.partial_derivative(0, 1)(logk, loga[::-1])[:, ::-1]
-            )
-
-        return growth_factor, growth_rate
