@@ -69,7 +69,7 @@ class PowerSpectra:
             nmu = settings.get("nmu", 128)
             mu_edge = np.linspace(-1, 1, nmu + 1)
             self.mu = (mu_edge[:-1] + mu_edge[1:]) / 2.0
-        elif settings.get("mu_kind", "linear") == "gauss":
+        elif self.mu_kind == "gauss":
             nmu = settings.get("nmu", 12)
             self.mu, self.w = roots_legendre(nmu)
 

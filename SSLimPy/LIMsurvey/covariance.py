@@ -113,18 +113,14 @@ class nonGuassianCov:
         # TODO: For now only works for scale-independent growth
         self.k = power_spectrum.k
         self.Pk = self.cosmo.matpow(self.k, 0, nonlinear=False, tracer=self.tracer)
-        self.kgrid = self.cosmo.k.to(u.Mpc**-1)
-        self.Pgrid = self.cosmo.matpow(
-            self.kgrid, 0.0, nonlinear=False, tracer=self.tracer
-        ).to(u.Mpc**3)
 
         # FFTlog Approximation
-        kmin_fftlog = self.cfg.settings["FFTlog_kmin"].to(u.Mpc**-1).value
-        kmax_fftlog = self.cfg.settings["FFTlog_kmax"].to(u.Mpc**-1).value
+        kmin_fftlog = self.cfg.settings["FFTlog_kmin"]
+        kmax_fftlog = self.cfg.settings["FFTlog_kmax"]
         LogN = self.cfg.settings["FFTlog_LogN"]
 
         self.fftLog_Pofk = FFTLog(
-            self.kgrid.value, self.Pgrid.value, kmin_fftlog, kmax_fftlog, LogN
+            self.cosmo.matpow, kmin_fftlog, kmax_fftlog, LogN, dict(z=0, nonlinear=False, tracer=self.tracer)
         )
 
     def integrate_4h(self, z=None, return_ingredients=False):
@@ -408,24 +404,44 @@ class SuperSampleCovariance:
         self.kgrid = power_spectrum.k_numerics
         self.z = power_spectrum.z
 
-    def sigma_survey(self):
-        k = self.kgrid
-        mu = self.mu
-        z = np.atleast_1d(self.z)
+    def sigma_survey_intg(self, Nt=2000, Nmu=150, alpha=2):
+        #Transform logk integral into compactified t
+        t = np.linspace(0.0, 1.0, Nt)
 
+        scale = np.min([
+            self.survey_specs.Lfield().to(u.Mpc).value,
+            np.sqrt(self.survey_specs.Sfield() / np.pi).to(u.Mpc).value
+        ]) * u.Mpc
+        k = ((1 / t - 1) ** alpha) / scale
+
+        mu, w = roots_legendre(Nmu)
+        z = self.z
+
+        jacobian = alpha / (t * (1.0 - t))
+
+        # mu integration
         V = self.survey_specs.Vfield()
-        W = (self.survey_specs.Wsurvey(self.kgrid, self.mu) / V).to(1).value
-        W = np.reshape(W, (*k.shape, *mu.shape, *z.shape))
+        T2 = (self.survey_specs.Wsurvey(k, mu) / V).to(1).value**2
+        T2 = T2.reshape((*k.shape, *mu.shape, *z.shape))
+        T2_1d =  np.sum(w[None, :, None] * T2, axis=1) / 2
 
+        # obtain logk integral on t grid
         P = np.reshape(
             self.cosmology.matpow(k, z, nonlinear=False, tracer=self.halomodel.tracer),
             (*k.shape, *z.shape),
         )
-        D = (4 * np.pi * (self.kgrid[:, None, None] / (2 * np.pi))**3 * P[:, None, :]).to(1).value
-        sigma2_intgrnd = D * W**2
+        D = (4 * np.pi * (k[:, None] / (2 * np.pi))**3 * P).to(1).value
 
-        sigma2_intgrnd = np.trapezoid(sigma2_intgrnd, x=mu, axis=1) / 2
-        sigma2 = np.trapezoid(sigma2_intgrnd, x=np.log(k.value), axis=0)
+        # t integration
+        sigma2_intgrnd = D * T2_1d * jacobian[:, None]
+        sigma2_intgrnd[~np.logical_and(t>0, t<1), :] = 0.0
+
+        return t, sigma2_intgrnd
+
+    def sigma_survey(self, Nt=2000, Nmu=150, alpha=2):
+        #Transform logk integral into compactified t
+        t, sigma2_intgrnd = self.sigma_survey_intg(Nt, Nmu, alpha)
+        sigma2 = np.trapezoid(sigma2_intgrnd, t, axis=0)
         return sigma2.squeeze()
 
     def halo_sample_variance(self, k, z):

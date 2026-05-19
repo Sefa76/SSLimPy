@@ -10,13 +10,11 @@ from warnings import warn
 import astropy.constants as c
 import astropy.units as u
 import numpy as np
-from scipy.interpolate import RectBivariateSpline as _RectBivariateSpline
 from scipy.interpolate import UnivariateSpline as _UnivariateSpline
 from scipy.signal import find_peaks
 from SSLimPy.interface.config import Configuration
 from SSLimPy.utils.utils import *
 
-RectBivariateSpline = partial(_RectBivariateSpline, s=0)
 UnivariateSpline = partial(_UnivariateSpline, s=0)
 
 
