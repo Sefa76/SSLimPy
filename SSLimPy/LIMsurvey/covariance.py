@@ -91,6 +91,17 @@ class Covariance:
         sigma2 = 2 * Pobs**2 / self.Nmodes()[:, None, :]
         return self.compute_multipole_cov(sigma2)
 
+    def gaussian_noise_cov(self):
+        PI = self.get_detectornoise()
+        sigma2 = 2 * PI**2 / self.Nmodes()[:, None, :]
+        return self.compute_multipole_cov(sigma2)
+
+    def gaussian_signalxnoise_cov(self):
+        Pobs = self.power_spectrum.Pk_Obs
+        PI = self.get_detectornoise()
+        sigma2 = 4 * Pobs * PI / self.Nmodes()[:, None, :]
+        return self.compute_multipole_cov(sigma2)
+
     def gaussian_cov(self):
         Pobs = self.power_spectrum.Pk_Obs
         PI = self.get_detectornoise()
@@ -108,6 +119,8 @@ class nonGuassianCov:
         self.survey_specs = power_spectrum.survey_specs
         self.mu = power_spectrum.mu
         self.z = power_spectrum.z
+
+        self.Iunit = u.Jy / u.sr if self.survey_specs.obsparams["do_Jysr"] else u.K # just a HACK
 
         # Get power spectra on grids for numerical computations
         # TODO: For now only works for scale-independent growth
@@ -133,7 +146,7 @@ class nonGuassianCov:
         )
 
         I11 =   restore_shape(self.astro.Thalo(z, k, p=1, beta=1), k, z)
-        I12 =   restore_shape(self.astro.Thalo(z, k, p=1, beta="b2_fitted"), k, z)
+        I12 =   restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
         I1G2 =  restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
         I13 =   restore_shape(self.astro.Thalo(z, k, p=1, beta="b3"), k, z)
         I1dG2 = restore_shape(self.astro.Thalo(z, k, p=1, beta="bdG2"), k, z)
@@ -159,7 +172,7 @@ class nonGuassianCov:
             ingredients_T0.T3111_s_k2ok1,
             ingredients_T0.T3111_kernel,
         ]
-        kernel_4h_3111 = np.empty((kl, kl, zl)) * u.uK**4
+        kernel_4h_3111 = np.empty((kl, kl, zl)) * self.Iunit**4
 
         for iz, zi in enumerate(z):
             I11_iz = I11[:, iz]
@@ -205,14 +218,14 @@ class nonGuassianCov:
             ingredients_T0.T2211_A_s_k2ok1,
             ingredients_T0.T2211_A_kernel,
         ]
-        kernel_4h_2211_A = np.zeros((kl, kl, zl)) * u.Mpc**3 * u.uK**4
+        kernel_4h_2211_A = np.zeros((kl, kl, zl)) * u.Mpc**3 * self.Iunit**4
 
         T_2211_X_masks = [mask_k2ok1, mask_tril]
         T_2211_X_funcs = [
             ingredients_T0.T2211_X_s_k2ok1,
             ingredients_T0.T2211_X_kernel,
         ]
-        kernel_4h_2211_X = np.zeros((kl, kl, zl)) * u.Mpc**3 * u.uK**4
+        kernel_4h_2211_X = np.zeros((kl, kl, zl)) * u.Mpc**3 * self.Iunit**4
 
         for iz, zi in enumerate(z):
             I11_iz = I11[:, iz]
@@ -220,7 +233,7 @@ class nonGuassianCov:
             I1G2_iz = I1G2[:, iz]
             for gammai, coefi in zip(gamma, coef):
 
-                A_iz = np.empty((kl, kl), dtype=complex) * u.uK**4
+                A_iz = np.empty((kl, kl), dtype=complex) * self.Iunit**4
                 for mask, func in zip(T_2211_A_masks, T_2211_A_funcs):
                     i, j = np.where(mask)
                     A_iz[mask] = func(
@@ -237,7 +250,7 @@ class nonGuassianCov:
                 )
                 kernel_4h_2211_A[:, :, iz] += (coefi * A_iz).real * u.Mpc**3
 
-                X_iz = np.zeros((kl, kl), dtype=complex) * u.uK**4
+                X_iz = np.zeros((kl, kl), dtype=complex) * self.Iunit**4
                 for mask, func in zip(T_2211_X_masks, T_2211_X_funcs):
                     i, j = np.where(mask)
                     X_iz[mask] = func(
@@ -284,10 +297,10 @@ class nonGuassianCov:
         )
 
         I11 =   restore_shape(self.astro.Thalo(z, k, p=1, beta=1), k, z)
-        I12 =   restore_shape(self.astro.Thalo(z, k, p=1, beta="b2_fitted"), k, z)
+        I12 =   restore_shape(self.astro.Thalo(z, k, p=1, beta="b2"), k, z)
         I1G2 =  restore_shape(self.astro.Thalo(z, k, p=1, beta="bG2"), k, z)
         I21 =   restore_shape(self.astro.Thalo(z, k, p=1, scale=(2,), beta=1), k, k, z)
-        I22 =   restore_shape(self.astro.Thalo(z, k, p=1, scale=(2,), beta="b2_fitted"), k, k, z)
+        I22 =   restore_shape(self.astro.Thalo(z, k, p=1, scale=(2,), beta="b2"), k, k, z)
         I2G2 =  restore_shape(self.astro.Thalo(z, k, p=1, scale=(2,), beta="bG2"), k, k, z)
 
         kl = len(k)
@@ -305,7 +318,7 @@ class nonGuassianCov:
 
         gamma, coef = self.fftLog_Pofk.get_power_and_coef()
 
-        kernel_3h_221_X = np.empty((kl, kl, zl)) * u.uK**4 * u.Mpc**6
+        kernel_3h_221_X = np.empty((kl, kl, zl)) * self.Iunit**4 * u.Mpc**6
         for iz, zi in enumerate(z):
             kernel_3h_211_X_iz = 0.0
             squeezed_3h_211_X_iz = 0.0
@@ -381,6 +394,19 @@ class nonGuassianCov:
 
         return T_1h
 
+    def estimate_supression(self):
+        k = self.k
+        mu = self.mu
+
+        Fparr = self.survey_specs.F_parr(k, mu).reshape((*k.shape, *mu.shape, *self.z.shape))**2
+        Fperp = self.survey_specs.F_perp(k, mu).reshape((*k.shape, *mu.shape, *self.z.shape))**2
+        F = Fparr * Fperp
+        if self.powerSpectrum.mu_kind == "Gauss":
+            F1d = np.sum(self.powerSpectrum.w[None, :, None] * F, axis=1)
+        else:
+            F1d = np.trapezoid(F, mu, axis=1)
+        return F1d[:, None, :] * F1d[None, :, :]
+
     def compute_nG_Cov(self):
         T_1h = self.integrate_1h()
         T_2h = self.integrate_2h()
@@ -388,7 +414,8 @@ class nonGuassianCov:
         T_4h = self.integrate_4h()
 
         V = self.survey_specs.Vfield()
-        return (T_1h + T_2h + T_3h + T_4h) / V
+        F = self.estimate_supression()
+        return (T_1h + T_2h + T_3h + T_4h) * F / V
 
 
 class SuperSampleCovariance:
@@ -508,16 +535,9 @@ class SuperSampleCovariance:
         b1_L1 = np.reshape(
             self.astro.Thalo(z, k, p=1, scale=(1,), beta=1), (*k.shape, *z.shape)
         )
-        # b2_L1 = np.reshape(
-        #     self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2"), (*k.shape, *z.shape)
-        # )
-        # bG2_L1 = np.reshape(
-        #     self.astro.Thalo(z, k, p=1, scale=(1,), beta="bG2"), (*k.shape, *z.shape)
-        # )
-        # bsph = b2_L1 - 4 / 3 * bG2_L1
 
         bsph = np.reshape(
-            self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2sph_lazeyras"), (*k.shape, *z.shape)
+            self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2sph"), (*k.shape, *z.shape)
         )
 
         return 2 * b1_L1 * bsph * Pk
@@ -557,7 +577,7 @@ class SuperSampleCovariance:
         logR = self.logresponse(self.k, z).reshape((*k.shape, *z.shape))
         response = P * logR
 
-        sigma = np.atleast_1d(self.sigma_survey())
+        sigma = np.atleast_1d(self.sigma_survey(alpha=self.halomodel.haloparams["alpha_iSigma"]))
 
         SSC = sigma[None, None, :] * response[:, None, :] * response[None, :, :]
         return SSC

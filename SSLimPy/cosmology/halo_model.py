@@ -96,6 +96,7 @@ class HaloModel:
         self.haloparams.setdefault("bloating", False)
         self.haloparams.setdefault("onehalo_damping", True)
         self.haloparams.setdefault("transition_smoothing", False)
+        self.haloparams.setdefault("nonlinear_bias", "fitted")
 
     def _init_halo_mass_function(self):
         """
