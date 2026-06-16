@@ -398,8 +398,8 @@ class nonGuassianCov:
         k = self.k
         mu = self.mu
 
-        Fparr = self.survey_specs.F_parr(k, mu).reshape((*k.shape, *mu.shape, *self.z.shape))**2
-        Fperp = self.survey_specs.F_perp(k, mu).reshape((*k.shape, *mu.shape, *self.z.shape))**2
+        Fparr = self.survey_specs.F_parr(k, mu).reshape((*k.shape, *mu.shape, *self.z.shape))
+        Fperp = self.survey_specs.F_perp(k, mu).reshape((*k.shape, *mu.shape, *self.z.shape))
         F = Fparr * Fperp
         if self.powerSpectrum.mu_kind == "Gauss":
             F1d = np.sum(self.powerSpectrum.w[None, :, None] * F, axis=1)
