@@ -69,6 +69,7 @@ class SSLimPy:
         obspars,
         BAOpars=dict(),
         pobs_settings=dict(),
+        vid_pars=dict(),
         output=None,
     ):
         """Main interface to compute the different SSLimPy outputs
@@ -103,6 +104,18 @@ class SSLimPy:
                 pobs_settings,
                 outputdict,
             )
+
+        if "VID" in output:
+            self._compute_vid(
+                cosmopars,
+                halopars,
+                astropars,
+                obspars,
+                self.cfg,
+                vid_pars,
+                outputdict
+            )
+
         return outputdict
 
     def _compute_ps(
@@ -153,6 +166,23 @@ class SSLimPy:
                 outputdict,
             )
         outputdict["Covariance"] = Covariance(outputdict["Power spectrum"])
+
+    def _compute_vid(
+        self,
+        cosmopars,
+        halopars,
+        astropars,
+        obspars,
+        configuration,
+        vidpars,
+        outputdict,
+        ):
+        from SSLimPy.LIMsurvey.voxel_intensity import VoxelIntensity
+        astro = updater.update_astro(
+            self.current_astro, cosmopars, halopars, astropars, obspars, configuration
+        )
+        self._update_current(astro)
+        outputdict["VID"] = VoxelIntensity(astro, vidpars)  
 
     def _update_current(self, astro):
         self.current_astro = astro

@@ -86,25 +86,6 @@ class Configuration:
         self.settings.setdefault("FFTlog_kmax", 1000 * u.Mpc**-1)
         self.settings.setdefault("FFTlog_LogN", 10)
 
-        # VID numerics
-        self.settings.setdefault("Tmin_VID", 1e-2 * u.uK)
-        self.settings.setdefault("Tmax_VID", 100 * u.uK)
-        self.settings.setdefault("fT0_min", 1e-5 * u.uK**-1)
-        self.settings.setdefault("fT0_max", 1e4 * u.uK**-1)
-        self.settings.setdefault("fT_min", 1e-5 * u.uK**-1)
-        self.settings.setdefault("fT_max", 1e5 * u.uK**-1)
-        self.settings.setdefault("nfT0", 1000)
-        self.settings.setdefault("sigma_PT_stable", 0.0 * u.uK)
-        self.settings.setdefault("nT", int(2**18))
-        self.settings.setdefault("smooth_VID", True)
-        self.settings.setdefault("Nbin_hist", 100)
-        self.settings.setdefault("linear_VID_bin", False)
-        self.settings.setdefault("subtract_VID_mean", False)
-        self.settings.setdefault("Lsmooth_tol", 7)
-        self.settings.setdefault("T0_Nlogsigma", 4)
-        self.settings.setdefault("n_leggauss_nodes_FT", "../nodes1e5.txt")
-        self.settings.setdefault("n_leggauss_nodes_IFT", "../nodes1e4.txt")
-
         # Output settings
         self.settings.setdefault("verbosity", 1)
         self.settings.setdefault("output", [])
