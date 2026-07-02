@@ -370,9 +370,11 @@ class PowerSpectra:
         deltaphi = np.linspace(-np.pi, np.pi, 2 * len(muq))
 
         # Obtain survey Window
-        Wsurvey, Vsurvey = self.survey_specs.Wsurvey(q, muq)
+        Wsurvey = self.survey_specs.Wsurvey(q, muq)
+        Vsurvey = self.survey_specs.Vfield()
 
         Pconv = np.empty(Pobs.shape)
+        Wsurvey = Wsurvey.reshape((*q.shape, *muq.shape, *np.atleast_1d(self.z).shape))
         # Do the convolution for each redshift bin
         for iz in range(nz):
             Pconv[..., iz] = convolve(
