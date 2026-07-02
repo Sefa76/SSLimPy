@@ -385,7 +385,7 @@ class LogLog2DInterpolator:
         assert np.all(self.ygrid >= 0), "z grid needs to be positiv"
 
         P = self.__call__(x, y).reshape((*x.shape, *y.shape))
-        transformer = tuple([slice(xi) for xi in x.shape]) + np.ndim(y) * (None,)
+        transformer = (Ellipsis,) + np.ndim(y) * (None,)
         # P0 = self.__call__(x, 0).reshape(x.shape)[..., *(np.ndim(y) * (None,))]
         P0 = self.__call__(x, 0).reshape(x.shape)[transformer]
         return np.sqrt((P / P0).to(1).value).squeeze()
