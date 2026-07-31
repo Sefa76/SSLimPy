@@ -241,7 +241,7 @@ class AstroFunctions:
             if self.astroparams["meanperserve_scatter"]:
                 Lpbar *= np.exp(0.5 * p * (p - 1) * (self.sigma_scatter * log10) ** 2)
             else:
-                Lpbar *= np.exp(0.5 * p * (self.sigma_scatter * log10) ** 2)
+                Lpbar *= np.exp(0.5 * p * p * (self.sigma_scatter * log10) ** 2)
 
             if "TonyLi" == self.model_name:
 
