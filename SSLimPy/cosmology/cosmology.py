@@ -310,7 +310,7 @@ class BoltzmannCode:
         if self.cfg.settings["verbosity"] > 1:
             self.recap_camb()
         ##################
-
+        self.results.zgrid = camb_zarray[::-1]
         cambres = camb.get_results(cambinstance)
         return cambres, cambinstance
 
