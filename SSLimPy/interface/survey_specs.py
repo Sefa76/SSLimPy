@@ -337,9 +337,10 @@ class LIMSuvey(SurveyWindowMixin, SurveySpecifications):
 
     def Npix(self):
         ang_res = self.obsparams["beam_FWHM"]
+        Omega_pix = self.obsparams["beam_FWHM"]**2 #/ (8 * np.log(2))
         Omega_field = self.obsparams["Omega_field"]
 
-        Npix = (Omega_field / ang_res**2).to(1).value
+        Npix = (Omega_field / Omega_pix).to(1).value
         return np.floor(Npix)
 
     def tpix(self):

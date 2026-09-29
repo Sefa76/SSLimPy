@@ -29,6 +29,7 @@ import numpy as np
 
 interp1d = partial(_interp1d, kind="cubic")
 
+
 class mass_luminosity:
 
     def __init__(self, astro, model_par):
@@ -141,7 +142,11 @@ class mass_luminosity:
         # Compute IR luminosity in Lsun from Kennicutt 1998, arXiv:9807187
         LIR = (SFR / (1 * u.Msun / u.yr) * (1 / 4.5e-44) * u.erg / u.s).to(u.Lsun)
         Lp = np.power(10, ((np.log10(LIR.value) - beta) / alpha))
-        L = (4.9e-5 * u.Lsun) * Lp * (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)) ** 3
+        L = (
+            (4.9e-5 * u.Lsun)
+            * Lp
+            * (np.atleast_1d(self.astro.nu)[None, :] / (115.27 * u.GHz)) ** 3
+        )
 
         return np.squeeze(L)
 
@@ -665,7 +670,17 @@ class mass_luminosity:
         hunit = 100 * u.km * u.s**-1 * u.Mpc**-1
 
         # This number is slightly different than the normal; ~ 6.5 Lsun / Msun
-        CML = (8 * np.pi * cu.k_B * lm**-3 * self.astro.rho_crit**-1 * self.astro.hubble**2 * hunit * 189 * u.mK).to(u.Lsun * u.Msun**-1)
+        CML = (
+            8
+            * np.pi
+            * cu.k_B
+            * lm**-3
+            * self.astro.rho_crit**-1
+            * self.astro.hubble**2
+            * hunit
+            * 189
+            * u.mK
+        ).to(u.Lsun * u.Msun**-1)
         # CLM = 6.25e-9 * u.Lsun / u.Msun  # Conversion factor btw MHI and LHI
 
         z_grid = np.atleast_1d(z)[None, :]

@@ -69,7 +69,7 @@ class PowerSpectra:
             nmu = settings.get("nmu", 128)
             mu_edge = np.linspace(-1, 1, nmu + 1)
             self.mu = (mu_edge[:-1] + mu_edge[1:]) / 2.0
-        elif settings.get("mu_kind", "linear") == "gauss":
+        elif self.mu_kind == "gauss":
             nmu = settings.get("nmu", 12)
             self.mu, self.w = roots_legendre(nmu)
 
@@ -370,9 +370,11 @@ class PowerSpectra:
         deltaphi = np.linspace(-np.pi, np.pi, 2 * len(muq))
 
         # Obtain survey Window
-        Wsurvey, Vsurvey = self.survey_specs.Wsurvey(q, muq)
+        Wsurvey = self.survey_specs.Wsurvey(q, muq)
+        Vsurvey = self.survey_specs.Vfield()
 
         Pconv = np.empty(Pobs.shape)
+        Wsurvey = Wsurvey.reshape((*q.shape, *muq.shape, *np.atleast_1d(self.z).shape))
         # Do the convolution for each redshift bin
         for iz in range(nz):
             Pconv[..., iz] = convolve(

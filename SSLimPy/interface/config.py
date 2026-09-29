@@ -40,7 +40,7 @@ class Configuration:
 
         # Cosmology numerics
         self.settings.setdefault("nonlinearMatpow", True)
-        self.settings.setdefault("share_delta_neff", True)
+        self.settings.setdefault("share_delta_neff", False)
         self.settings.setdefault("LP_rescale_ini_As", 2.1e-9)
         self.settings.setdefault("LP_rescale_boost", 2)
         self.settings.setdefault("cosmo_model", "LCDM")

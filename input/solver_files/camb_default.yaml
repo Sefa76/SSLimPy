@@ -9,7 +9,7 @@ NUMERICS:
   'zsamples': 100
 COSMO_SETTINGS:
   'kmax' : 50
-  'share_delta_neff' : True
+  'share_delta_neff' : False
   'dark_energy_model' : 'ppf'
   'num_nu_massive' : 1
   'num_nu_massless' : 2
