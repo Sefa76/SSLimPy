@@ -431,7 +431,7 @@ class SuperSampleCovariance:
         self.kgrid = power_spectrum.k_numerics
         self.z = power_spectrum.z
 
-    def sigma_survey_intg(self, Nt=2000, Nmu=150, alpha=2):
+    def sigma_survey_intg(self, Nt=2000, Nmu=150, alpha=2, L=(0,0)):
         #Transform logk integral into compactified t
         t = np.linspace(0.0, 1.0, Nt)
 
@@ -448,8 +448,13 @@ class SuperSampleCovariance:
 
         # mu integration
         V = self.survey_specs.Vfield()
+
+        legendre_fac = 1
+        for ell in L:
+            legendre_fac = legendre_fac * legendre(ell)(mu)
+
         T2 = (self.survey_specs.Wsurvey(k, mu) / V).to(1).value**2
-        T2 = T2.reshape((*k.shape, *mu.shape, *z.shape))
+        T2 = T2.reshape((*k.shape, *mu.shape, *z.shape)) * legendre_fac[None, :, None]
         T2_1d =  np.sum(w[None, :, None] * T2, axis=1) / 2
 
         # obtain logk integral on t grid
@@ -465,9 +470,9 @@ class SuperSampleCovariance:
 
         return t, sigma2_intgrnd
 
-    def sigma_survey(self, Nt=2000, Nmu=150, alpha=2):
+    def sigma_survey(self, Nt=2000, Nmu=150, alpha=2, L=(0, 0)):
         #Transform logk integral into compactified t
-        t, sigma2_intgrnd = self.sigma_survey_intg(Nt, Nmu, alpha)
+        t, sigma2_intgrnd = self.sigma_survey_intg(Nt, Nmu, alpha, L=L)
         sigma2 = np.trapezoid(sigma2_intgrnd, t, axis=0)
         return sigma2.squeeze()
 
@@ -483,8 +488,7 @@ class SuperSampleCovariance:
 
         return b1_L2
 
-    def linear_growth_response(self, k, z):
-        """Corresponds to P * C21 in Wadekar et al."""
+    def _gamma(self, k, z):
         k = np.atleast_1d(k).to(self.kgrid.unit)
         z = np.atleast_1d(z)
 
@@ -494,13 +498,6 @@ class SuperSampleCovariance:
             ),
             (*self.kgrid.shape, *z.shape),
         )
-        Pk_response = np.reshape(
-            self.cosmology.matpow(
-                k, z, tracer=self.power_spectrum.tracer, nonlinear=False
-            ),
-            (*k.shape, *z.shape),
-        )
-
         Delta = (4 * np.pi * (self.kgrid[:, None] / 2 / np.pi) ** 3 * Pk).to(1).value
 
         gamma = []
@@ -514,6 +511,20 @@ class SuperSampleCovariance:
                 )
             )
         gamma = np.array(gamma).T
+        return gamma
+
+    def linear_growth_response(self, k, z):
+        """Corresponds to P * C21 in Wadekar et al."""
+        k = np.atleast_1d(k).to(self.kgrid.unit)
+        z = np.atleast_1d(z)
+
+        Pk_response = np.reshape(
+            self.cosmology.matpow(
+                k, z, tracer=self.power_spectrum.tracer, nonlinear=False
+            ),
+            (*k.shape, *z.shape),
+        )
+        gamma = self._gamma(k, z)
 
         b1_L1 = np.reshape(
             self.astro.Thalo(z, k, p=1, scale=(1,), beta=1), (*k.shape, *z.shape)
@@ -551,7 +562,6 @@ class SuperSampleCovariance:
         return np.squeeze(response)
 
     def logresponse(self, k, z):
-        # TODO: Add proper handling of RSD in response functions
         assert self.cosmology.settings["do_RSD"] == False
 
         k = np.atleast_1d(k)
@@ -582,6 +592,70 @@ class SuperSampleCovariance:
         SSC = sigma[None, None, :] * response[:, None, :] * response[None, :, :]
         return SSC
 
+
+    def compute_SSC_rsd(self):
+        assert self.cosmology.settings["do_RSD"] != False
+
+        k = self.k
+        z = self.z
+
+        sigma_00 = np.atleast_1d(self.sigma_survey(alpha=self.halomodel.haloparams["alpha_iSigma"], L=(0, 0)))
+        sigma_20 = np.atleast_1d(self.sigma_survey(alpha=self.halomodel.haloparams["alpha_iSigma"], L=(0, 2)))
+        sigma_22 = np.atleast_1d(self.sigma_survey(alpha=self.halomodel.haloparams["alpha_iSigma"], L=(2, 2)))
+
+        sigma_LL = np.array(
+            [
+                [sigma_00, sigma_20],
+                [sigma_20, sigma_22],
+            ]
+        )
+        P_lk = np.array(
+            [
+                self.power_spectrum.Pk_0bs,
+                self.power_spectrum.Pk_2bs,
+                self.power_spectrum.Pk_4bs,
+            ]
+        )
+
+        T = self.astro.Tavg(z, 1)
+        
+        b1 = (self.astro.Thalo(z, k, p=1, scale=(1,), beta=1) / T).to(1).value.reshape((*k.shape, *z.shape))
+        b2 = (self.astro.Thalo(z, k, p=1, scale=(1,), beta="b2sph") / T).to(1).value.reshape((*k.shape, *z.shape))
+        bs2 = (self.astro.Thalo(z, k, p=1, scale=(1,), beta="bs2") / T).to(1).value.reshape((*k.shape, *z.shape))
+        f = self.cosmology.growth_rate(k, z, "matter", False).reshape((*k.shape, *z.shape))
+        gamma = self._gamma(k, z).reshape((*k.shape, *z.shape))
+
+
+        Pk_lin = self.cosmology.matpow(k, z, False, self.power_spectrum.tracer).reshape((*k.shape, *z.shape))
+        norm0 = (
+            norm_P0(b1, f) * Pk_lin
+            + (self.astro.Thalo(z, k, p=1, scale=(2,), beta=0) / T**2).reshape((*k.shape, *z.shape))
+        )
+        norm2 = norm_P2(b1, f)
+        norm4 = norm_P4(f)
+
+        HSV = (self.astro.Thalo(z, k, p=1, scale=(2,), beta=1) / T**2).reshape((*k.shape, *z.shape))
+
+        R00 = (((G00(b1, b2, f) + gamma * D00(b1, f)) * Pk_lin + HSV) / norm0).to(1).value
+        R02 = (((G02(b1, bs2, f) + gamma * D02(b1, f)) * Pk_lin) / norm0).to(1).value
+
+        R20 = (G20(b1, b2, f) + gamma * D20(b1, f)) / norm2
+        R22 = (G22(b1, bs2, f) + gamma * D22(b1, f)) / norm2
+        R40 = (G40(b1, f) + gamma * D40(b1, f)) / norm4
+        R42 = (G42(b1, bs2, f) + gamma * D42(b1, f)) / norm4
+
+        response_Llk = np.array(
+            [
+                [R00, R20, R40],
+                [R02, R22, R42],
+            ]
+        )
+
+        cov = np.einsum(
+            "l i z, m j z, L M z, L l i z, M m j z -> l m i j z", 
+            P_lk, P_lk, sigma_LL, response_Llk, response_Llk
+        )
+        return cov
 
 ##############
 # Numba part #

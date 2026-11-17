@@ -121,6 +121,11 @@ class coevolution_bias(bias_fitting_functions):
         )(M, z, dc)
         return -2 / 7 * (b1 - 1)
 
+    def bs2(self, M, z, dc):
+        """Follows definition of equation A.11 of Li et al. (2018)
+        """
+        return 2 * self.bG2(M, z, dc)
+
     def bG3(self, M, z, dc):
         b1 = getattr(
             self,
