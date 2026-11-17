@@ -1,9 +1,11 @@
 # This class defines global variables that will not change through
 # the computation of one fisher matrix/ chain/ etc
 import os
+from copy import copy
+from importlib.resources import files
+
 import yaml
 from astropy import units as u
-from copy import copy
 
 
 class Configuration:
@@ -112,43 +114,36 @@ class Configuration:
         # Load Boltzmann solver files
         self.input_type = self.settings["code"]
 
-        file_location = os.path.dirname(__file__)
         if self.input_type == "camb":
             if camb_yaml_file:
                 if os.path.exists(camb_yaml_file):
-                    file_content_camb = yaml.safe_load(open(camb_yaml_file))
+                    with open(camb_yaml_file, encoding="utf-8") as yaml_file:
+                        file_content_camb = yaml.safe_load(yaml_file)
                 else:
                     print(
                         "You asked for CAMB but the yaml path you passed did not exist"
                     )
                     raise ValueError
             else:
-                file_content_camb = yaml.safe_load(
-                    open(
-                        os.path.join(
-                            file_location, "../../input/solver_files/camb_default.yaml"
-                        )
-                    )
-                )
+                camb_default = files("SSLimPy.data").joinpath("camb_default.yaml")
+                with camb_default.open("r", encoding="utf-8") as yaml_file:
+                    file_content_camb = yaml.safe_load(yaml_file)
             self.boltzmann_cambpars = file_content_camb
 
         if self.input_type == "class":
             if class_yaml_file:
                 if os.path.exists(class_yaml_file):
-                    file_content_class = yaml.safe_load(open(class_yaml_file))
+                    with open(class_yaml_file, encoding="utf-8") as yaml_file:
+                        file_content_class = yaml.safe_load(yaml_file)
                 else:
                     print(
                         "You asked for CLASS but the yaml path you passed did not exist"
                     )
                     raise ValueError
             else:
-                file_content_class = yaml.safe_load(
-                    open(
-                        os.path.join(
-                            file_location, "../../input/solver_files/class_default.yaml"
-                        )
-                    )
-                )
+                class_default = files("SSLimPy.data").joinpath("class_default.yaml")
+                with class_default.open("r", encoding="utf-8") as yaml_file:
+                    file_content_class = yaml.safe_load(yaml_file)
             self.boltzmann_classpars = file_content_class
 
         self.fiducialcosmoparams = copy(cosmopars)

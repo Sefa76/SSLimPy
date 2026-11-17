@@ -14,9 +14,9 @@ TODO:
 Add in models from Matlab code
 """
 
-import os
 from copy import deepcopy
 from functools import partial
+from importlib.resources import files
 
 import astropy.constants as cu
 import astropy.units as u
@@ -36,14 +36,18 @@ class mass_luminosity:
         self.astro = astro
         self.model_par = model_par
 
-        self.SFR_folder = (
-            "".join(os.path.dirname(os.path.realpath(__file__)).split("SSLimPy")[:-2])
-            + "SSLimPy/SFR_tables/"
-        )
+        self.SFR_folder = files("SSLimPy.data").joinpath("SFR_tables")
 
         # Units and Redshifts
         self.Mpch = astro.Mpch
         self.Msunh = astro.Msunh
+
+    def _load_sfr_table(self, SFR_file):
+        try:
+            with (self.SFR_folder / SFR_file).open("r") as table_file:
+                return np.loadtxt(table_file)
+        except Exception:
+            return np.loadtxt(SFR_file)
 
     def MassPow(self, Mvec, z):
         """
@@ -819,10 +823,7 @@ class mass_luminosity:
         z_grid = np.atleast_1d(z)[None, :]
         M_grid = np.atleast_1d(M)[:, None]
 
-        try:
-            x = np.loadtxt(self.SFR_folder + SFR_file)
-        except:
-            x = np.loadtxt(SFR_file)
+        x = self._load_sfr_table(SFR_file)
         zb = np.unique(x[:, 0]) - 1.0
         logMb = np.unique(x[:, 1])
         logSFRb = x[:, 2].reshape(len(zb), len(logMb), order="F")
@@ -843,10 +844,7 @@ class mass_luminosity:
         z_grid = np.atleast_1d(z)[None, :]
         M_grid = np.atleast_1d(M)[:, None]
 
-        try:
-            x = np.loadtxt(self.SFR_folder + SFR_file)
-        except:
-            x = np.loadtxt(SFR_file)
+        x = self._load_sfr_table(SFR_file)
         z0 = x[0, :]
         M0 = (
             10
@@ -886,10 +884,7 @@ class mass_luminosity:
         Mlim_mid = 1e12 * u.Msun
         Mlim_low = 1e13 * u.Msun
 
-        try:
-            x = np.loadtxt(self.SFR_folder + SFR_file)
-        except:
-            x = np.loadtxt(SFR_file)
+        x = self._load_sfr_table(SFR_file)
         z0 = x[:, 0]
         a = interp1d(z0, x[:, 1], bounds_error=False, fill_value="extrapolate")(z_grid)
         b = interp1d(z0, x[:, 2], bounds_error=False, fill_value="extrapolate")(z_grid)
@@ -924,10 +919,7 @@ class mass_luminosity:
         M_grid = np.atleast_1d(M)[:, None]
         z_grid = np.atleast_1d(z)[None, :]
 
-        try:
-            x = np.loadtxt(self.SFR_folder + SFR_file)
-        except:
-            x = np.loadtxt(SFR_file)
+        x = self._load_sfr_table(SFR_file)
         z0 = x[:, 0]
         M0 = interp1d(z0, x[:, 1], bounds_error=False, fill_value="extrapolate")(z_grid)
         Mb = (
@@ -960,12 +952,13 @@ class mass_luminosity:
         Returns a 2D intepolated fQ from tables of Universe Machine. The table is 1+z, log10(Mhalo/Msun) and fQ
         """
 
-        files = os.listdir(self.SFR_folder + "qf/")
+        qf_folder = self.SFR_folder / "qf"
+        qf_files = sorted(item.name for item in qf_folder.iterdir() if item.is_file())
         a = []
-        mat = np.zeros((32, len(files)))
+        mat = np.zeros((32, len(qf_files)))
 
         counter = 0
-        for name in files:
+        for name in qf_files:
             a.append(float((name.split("qf_hm_a")[1]).split(".dat")[0]))
 
         inds = np.argsort(np.array(a))
@@ -973,10 +966,11 @@ class mass_luminosity:
 
         names = []
         for i in range(len(inds)):
-            names.append(files[inds[i]])
+            names.append(qf_files[inds[i]])
 
         for ia in range(len(a)):
-            data = np.genfromtxt(self.SFR_folder + "qf/" + names[ia])
+            with (qf_folder / names[ia]).open("r") as table_file:
+                data = np.genfromtxt(table_file)
             mat[:, ia] = data[:, 1]
 
         logMh = data[:, 0]
